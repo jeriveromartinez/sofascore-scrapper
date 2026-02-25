@@ -9,6 +9,7 @@ import (
 // SportEvent represents a sports event scraped from Sofascore.
 type SportEvent struct {
 	gorm.Model
+	DataID        string    `gorm:"type:varchar(100);index" json:"data_id"`
 	Sport         string    `gorm:"type:varchar(100)" json:"sport"`
 	Tournament    string    `gorm:"type:varchar(255)" json:"tournament"`
 	HomeTeam      string    `gorm:"type:varchar(255)" json:"home_team"`
