@@ -1,0 +1,10 @@
+# Binaries
+sofascore-scrapper
+*.exe
+*.out
+
+# Go build cache
+vendor/
+
+# Environment files
+.env
