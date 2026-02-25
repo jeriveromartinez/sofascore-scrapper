@@ -153,55 +153,75 @@ func parseEvents(pageHTML string) ([]models.SportEvent, error) {
 func extractEvent(s *goquery.Selection) models.SportEvent {
 	event := models.SportEvent{ScrapedAt: time.Now(), RawText: strings.TrimSpace(s.Text())}
 
-	begins := s.Find(`bdi[class*="c_neutrals.nLv3"]`).Map(func(_ int, sel *goquery.Selection) string {
-		return strings.TrimSpace(sel.Text())
-	})
-	if len(begins) > 0 {
-		event.StartTime = begins[0]
+	// Read the data-id from the direct child <a data-id> anchor.
+	anchor := s.Children().Filter("a[data-id]").First()
+	if dataID, exists := anchor.Attr("data-id"); exists {
+		event.DataID = dataID
 	}
 
-	minutes := s.Find(`bdi[class*="c_neutrals.nLv1"]`).Map(func(_ int, sel *goquery.Selection) string {
-		return strings.TrimSpace(sel.Text())
-	})
-	if len(minutes) > 0 {
-		event.Status = minutes[0]
-	}
+	// Team names come from the alt attribute of <img> tags inside the event.
+	// Image URLs are the src attribute with the trailing "/small" segment removed.
+	anchor.Find("img[alt]").Each(func(i int, img *goquery.Selection) {
+		alt := strings.TrimSpace(img.AttrOr("alt", ""))
+		src := strings.TrimSpace(img.AttrOr("src", ""))
+		// Strip the "/small" suffix from the image URL.
+		imgURL := strings.TrimSuffix(src, "/small")
 
-	// Try to find team names: look for typical child elements that hold team names.
-	teams := s.Find(`[class*="participant"], [class*="team"], bdi`).Map(func(_ int, sel *goquery.Selection) string {
-		return strings.TrimSpace(sel.Text())
-	})
-
-	if len(teams) >= 2 {
-		event.HomeTeam = teams[0]
-		event.AwayTeam = teams[1]
-	} else if len(teams) == 1 {
-		event.HomeTeam = teams[0]
-	}
-
-	// Try to extract score information.
-	scores := s.Find(`[class*="score"], [class*="Score"]`).Map(func(_ int, sel *goquery.Selection) string {
-		return strings.TrimSpace(sel.Text())
-	})
-
-	if len(scores) >= 2 {
-		event.HomeScore = scores[0]
-		event.AwayScore = scores[1]
-	} else if len(scores) == 1 {
-		parts := strings.Split(scores[0], "-")
-		if len(parts) == 2 {
-			event.HomeScore = strings.TrimSpace(parts[0])
-			event.AwayScore = strings.TrimSpace(parts[1])
+		switch i {
+		case 0:
+			event.HomeTeam = alt
+			event.HomeTeamImage = imgURL
+		case 1:
+			event.AwayTeam = alt
+			event.AwayTeamImage = imgURL
 		}
+	})
+
+	// Extract scores: Sofascore renders each score value in its own element.
+	// We look for bdi elements that contain only digit characters.
+	var scoreValues []string
+	anchor.Find("bdi").Each(func(_ int, bdi *goquery.Selection) {
+		txt := strings.TrimSpace(bdi.Text())
+		if isScore(txt) {
+			scoreValues = append(scoreValues, txt)
+		}
+	})
+	if len(scoreValues) >= 2 {
+		event.HomeScore = scoreValues[0]
+		event.AwayScore = scoreValues[1]
 	}
 
-	// Try to extract tournament/sport via aria-label or closest section header.
-	event.Tournament = strings.TrimSpace(s.Find(`[class*="tournament"], [class*="league"], [class*="category"]`).First().Text())
+	// Extract start time (pre-match) and in-play status from bdi text colour classes.
+	s.Find(`bdi[class*="c_neutrals.nLv3"]`).Each(func(_ int, bdi *goquery.Selection) {
+		if txt := strings.TrimSpace(bdi.Text()); txt != "" && event.StartTime == "" {
+			event.StartTime = txt
+		}
+	})
+	s.Find(`bdi[class*="c_neutrals.nLv1"]`).Each(func(_ int, bdi *goquery.Selection) {
+		if txt := strings.TrimSpace(bdi.Text()); txt != "" && event.Status == "" {
+			event.Status = txt
+		}
+	})
 
-	// Attempt to read sport from data-* attribute or aria attributes.
+	// Try to extract tournament / sport from the enclosing section if present.
+	event.Tournament = strings.TrimSpace(s.Find(`[class*="tournament"], [class*="league"], [class*="category"]`).First().Text())
 	if sport, exists := s.Attr("data-sport"); exists {
 		event.Sport = sport
 	}
 
 	return event
+}
+
+// isScore reports whether s looks like a numeric score value (digits only, optionally
+// representing extra time or penalty scores such as "0", "2", "10").
+func isScore(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

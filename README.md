@@ -60,17 +60,19 @@ go run .
 
 La tabla `sport_events` almacena:
 
-| Campo        | Tipo         | Descripción                              |
-|--------------|--------------|------------------------------------------|
-| `id`         | uint         | ID autoincremental (GORM)                |
-| `data_id`    | varchar(100) | Valor del atributo `data-id` del enlace  |
-| `sport`      | varchar(100) | Deporte                                  |
-| `tournament` | varchar(255) | Torneo o liga                            |
-| `home_team`  | varchar(255) | Equipo local                             |
-| `away_team`  | varchar(255) | Equipo visitante                         |
-| `home_score` | varchar(20)  | Marcador del equipo local                |
-| `away_score` | varchar(20)  | Marcador del equipo visitante            |
-| `status`     | varchar(100) | Estado del partido (e.g. "En juego")     |
-| `start_time` | varchar(50)  | Hora de inicio                           |
-| `raw_text`   | text         | Texto completo del elemento scrapeado    |
-| `scraped_at` | datetime     | Marca de tiempo del scraping             |
+| Campo             | Tipo         | Descripción                              |
+|-------------------|--------------|------------------------------------------|
+| `id`              | uint         | ID autoincremental (GORM)                |
+| `data_id`         | varchar(100) | Valor del atributo `data-id` del enlace  |
+| `sport`           | varchar(100) | Deporte                                  |
+| `tournament`      | varchar(255) | Torneo o liga                            |
+| `home_team`       | varchar(255) | Equipo local (del atributo `alt` del img)|
+| `home_team_image` | varchar(500) | URL del escudo del equipo local          |
+| `away_team`       | varchar(255) | Equipo visitante (del atributo `alt`)    |
+| `away_team_image` | varchar(500) | URL del escudo del equipo visitante      |
+| `home_score`      | varchar(20)  | Marcador del equipo local                |
+| `away_score`      | varchar(20)  | Marcador del equipo visitante            |
+| `status`          | varchar(100) | Estado del partido (e.g. "En juego")     |
+| `start_time`      | varchar(50)  | Hora de inicio                           |
+| `raw_text`        | text         | Texto completo del elemento scrapeado    |
+| `scraped_at`      | datetime     | Marca de tiempo del scraping             |
