@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -30,6 +33,10 @@ func Scrape() ([]models.SportEvent, error) {
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	)
+
+	if browserPath := resolveBrowserExecPath(); browserPath != "" {
+		opts = append(opts, chromedp.ExecPath(browserPath))
+	}
 
 	// --no-sandbox is required in some container environments (e.g. Docker without
 	// a user namespace). Enable it by setting CHROMIUM_NO_SANDBOX=true.
@@ -65,6 +72,55 @@ func Scrape() ([]models.SportEvent, error) {
 	return parseEvents(pageHTML)
 }
 
+func resolveBrowserExecPath() string {
+	if envPath := strings.TrimSpace(os.Getenv("CHROMEDP_EXEC_PATH")); envPath != "" {
+		return envPath
+	}
+
+	candidates := []string{
+		"google-chrome",
+		"chrome",
+		"chromium",
+		"chromium-browser",
+		"brave-browser",
+		"brave-browser-stable",
+		"brave",
+	}
+
+	if runtime.GOOS == "windows" {
+		programFiles := []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")}
+		for _, base := range programFiles {
+			if base == "" {
+				continue
+			}
+
+			candidates = append(candidates,
+				filepath.Join(base, "Google", "Chrome", "Application", "chrome.exe"),
+				filepath.Join(base, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+			)
+		}
+	}
+
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+
+		if filepath.IsAbs(candidate) {
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate
+			}
+			continue
+		}
+
+		if resolved, err := exec.LookPath(candidate); err == nil {
+			return resolved
+		}
+	}
+
+	return ""
+}
+
 // parseEvents parses the raw HTML and extracts sports events.
 // Only "debpTI" elements that have a direct child <a> with a "data-id" attribute are processed.
 func parseEvents(pageHTML string) ([]models.SportEvent, error) {
@@ -80,9 +136,7 @@ func parseEvents(pageHTML string) ([]models.SportEvent, error) {
 		// Inside each parent, find child elements with class "debpTI" that also
 		// have a direct child <a> with a "data-id" attribute.
 		parent.Find(fmt.Sprintf(`[class*="%s"]`, eventClass)).
-			FilterFunction(func(_ int, s *goquery.Selection) bool {
-				return s.Children().Filter("a[data-id]").Length() > 0
-			}).
+			FilterFunction(func(_ int, s *goquery.Selection) bool { return s.Children().Filter("a[data-id]").Length() > 0 }).
 			Each(func(j int, s *goquery.Selection) {
 				event := extractEvent(s)
 				if event.RawText != "" {
@@ -97,16 +151,20 @@ func parseEvents(pageHTML string) ([]models.SportEvent, error) {
 
 // extractEvent extracts sport event data from a single event element.
 func extractEvent(s *goquery.Selection) models.SportEvent {
-	rawText := strings.TrimSpace(s.Text())
+	event := models.SportEvent{ScrapedAt: time.Now(), RawText: strings.TrimSpace(s.Text())}
 
-	event := models.SportEvent{
-		RawText:   rawText,
-		ScrapedAt: time.Now(),
+	begins := s.Find(`bdi[class*="c_neutrals.nLv3"]`).Map(func(_ int, sel *goquery.Selection) string {
+		return strings.TrimSpace(sel.Text())
+	})
+	if len(begins) > 0 {
+		event.StartTime = begins[0]
 	}
 
-	// Read the data-id from the direct child <a data-id> anchor.
-	if dataID, exists := s.Children().Filter("a[data-id]").First().Attr("data-id"); exists {
-		event.DataID = dataID
+	minutes := s.Find(`bdi[class*="c_neutrals.nLv1"]`).Map(func(_ int, sel *goquery.Selection) string {
+		return strings.TrimSpace(sel.Text())
+	})
+	if len(minutes) > 0 {
+		event.Status = minutes[0]
 	}
 
 	// Try to find team names: look for typical child elements that hold team names.
@@ -136,12 +194,6 @@ func extractEvent(s *goquery.Selection) models.SportEvent {
 			event.AwayScore = strings.TrimSpace(parts[1])
 		}
 	}
-
-	// Try to extract status / time.
-	event.Status = strings.TrimSpace(s.Find(`[class*="status"], [class*="Status"], time`).First().Text())
-
-	// Try to extract start time.
-	event.StartTime = strings.TrimSpace(s.Find(`time, [class*="time"], [class*="Time"]`).First().Text())
 
 	// Try to extract tournament/sport via aria-label or closest section header.
 	event.Tournament = strings.TrimSpace(s.Find(`[class*="tournament"], [class*="league"], [class*="category"]`).First().Text())
