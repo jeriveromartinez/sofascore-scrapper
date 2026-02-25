@@ -8,3 +8,4 @@ vendor/
 
 # Environment files
 .env
+.vscode/

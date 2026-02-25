@@ -1,27 +1,11 @@
 version: "3.8"
 
 services:
-  db:
-    image: mariadb:11
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: sofascore
-    ports:
-      - "3306:3306"
-    volumes:
-      - mariadb_data:/var/lib/mysql
-
   scraper:
     build: .
-    depends_on:
-      - db
     environment:
-      DB_HOST: db
+      DB_HOST: 192.168.0.15
       DB_PORT: 3306
       DB_USER: root
-      DB_PASSWORD: root
+      DB_PASSWORD: ju1io
       DB_NAME: sofascore
-
-volumes:
-  mariadb_data:
