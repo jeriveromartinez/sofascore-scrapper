@@ -4,33 +4,38 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
-	"golang.org/x/net/html"
 )
 
 const (
-	sofascoreURL   = "https://www.sofascore.com/es/"
-	waitTimeout    = 30 * time.Second
-	parentClass    = "mdDown:pt_sm"
-	eventClass     = "debpTI"
+	sofascoreURL = "https://www.sofascore.com/es/"
+	waitTimeout  = 30 * time.Second
+	parentClass  = "mdDown:pt_sm"
+	eventClass   = "debpTI"
 )
 
 // Scrape fetches sports events from Sofascore using a headless browser,
-// parses elements with class "debpTI" inside elements with class "mdDown:pt_sm",
-// and returns a slice of SportEvent.
+// parses elements with class "debpTI" (that have a direct child <a data-id>)
+// inside elements with class "mdDown:pt_sm", and returns a slice of SportEvent.
 func Scrape() ([]models.SportEvent, error) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
-		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	)
+
+	// --no-sandbox is required in some container environments (e.g. Docker without
+	// a user namespace). Enable it by setting CHROMIUM_NO_SANDBOX=true.
+	if os.Getenv("CHROMIUM_NO_SANDBOX") == "true" {
+		opts = append(opts, chromedp.Flag("no-sandbox", true))
+	}
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancelAlloc()
@@ -43,12 +48,14 @@ func Scrape() ([]models.SportEvent, error) {
 
 	var pageHTML string
 
+	// CSS selector that waits for an event element to actually appear in the DOM,
+	// avoiding a fixed sleep and still handling slow page loads gracefully.
+	eventSelector := fmt.Sprintf(`[class*="%s"] [class*="%s"]`, parentClass, eventClass)
+
 	err := chromedp.Run(ctx,
 		chromedp.Navigate(sofascoreURL),
-		// Wait for the main content to be available.
-		chromedp.WaitVisible(`body`, chromedp.ByQuery),
-		// Give JS a moment to render dynamic content.
-		chromedp.Sleep(5*time.Second),
+		// Wait until at least one event element is visible.
+		chromedp.WaitVisible(eventSelector, chromedp.ByQuery),
 		chromedp.OuterHTML("html", &pageHTML),
 	)
 	if err != nil {
@@ -59,6 +66,7 @@ func Scrape() ([]models.SportEvent, error) {
 }
 
 // parseEvents parses the raw HTML and extracts sports events.
+// Only "debpTI" elements that have a direct child <a> with a "data-id" attribute are processed.
 func parseEvents(pageHTML string) ([]models.SportEvent, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(pageHTML))
 	if err != nil {
@@ -69,13 +77,18 @@ func parseEvents(pageHTML string) ([]models.SportEvent, error) {
 
 	// Find all parent elements that have the class "mdDown:pt_sm".
 	doc.Find(fmt.Sprintf(`[class*="%s"]`, parentClass)).Each(func(i int, parent *goquery.Selection) {
-		// Inside each parent, find child elements with class "debpTI".
-		parent.Find(fmt.Sprintf(`[class*="%s"]`, eventClass)).Each(func(j int, s *goquery.Selection) {
-			event := extractEvent(s)
-			if event.RawText != "" {
-				events = append(events, event)
-			}
-		})
+		// Inside each parent, find child elements with class "debpTI" that also
+		// have a direct child <a> with a "data-id" attribute.
+		parent.Find(fmt.Sprintf(`[class*="%s"]`, eventClass)).
+			FilterFunction(func(_ int, s *goquery.Selection) bool {
+				return s.Children().Filter("a[data-id]").Length() > 0
+			}).
+			Each(func(j int, s *goquery.Selection) {
+				event := extractEvent(s)
+				if event.RawText != "" {
+					events = append(events, event)
+				}
+			})
 	})
 
 	log.Printf("Parsed %d events from page.", len(events))
@@ -89,6 +102,11 @@ func extractEvent(s *goquery.Selection) models.SportEvent {
 	event := models.SportEvent{
 		RawText:   rawText,
 		ScrapedAt: time.Now(),
+	}
+
+	// Read the data-id from the direct child <a data-id> anchor.
+	if dataID, exists := s.Children().Filter("a[data-id]").First().Attr("data-id"); exists {
+		event.DataID = dataID
 	}
 
 	// Try to find team names: look for typical child elements that hold team names.
@@ -134,16 +152,4 @@ func extractEvent(s *goquery.Selection) models.SportEvent {
 	}
 
 	return event
-}
-
-// nodeToText is a helper that recursively extracts text from an html.Node.
-func nodeToText(n *html.Node) string {
-	if n.Type == html.TextNode {
-		return n.Data
-	}
-	var sb strings.Builder
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		sb.WriteString(nodeToText(c))
-	}
-	return sb.String()
 }

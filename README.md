@@ -29,13 +29,14 @@ El scraper:
 
 ## Variables de entorno
 
-| Variable      | Valor por defecto | Descripción                  |
-|---------------|-------------------|------------------------------|
-| `DB_HOST`     | `localhost`       | Host de la base de datos     |
-| `DB_PORT`     | `3306`            | Puerto de la base de datos   |
-| `DB_USER`     | `root`            | Usuario de la base de datos  |
-| `DB_PASSWORD` | *(vacío)*         | Contraseña de la base de datos |
-| `DB_NAME`     | `sofascore`       | Nombre de la base de datos   |
+| Variable               | Valor por defecto | Descripción                                          |
+|------------------------|-------------------|------------------------------------------------------|
+| `DB_HOST`              | `localhost`       | Host de la base de datos                             |
+| `DB_PORT`              | `3306`            | Puerto de la base de datos                           |
+| `DB_USER`              | `root`            | Usuario de la base de datos                          |
+| `DB_PASSWORD`          | *(vacío)*         | Contraseña de la base de datos                       |
+| `DB_NAME`              | `sofascore`       | Nombre de la base de datos                           |
+| `CHROMIUM_NO_SANDBOX`  | *(no definido)*   | Poner `true` para habilitar `--no-sandbox` en Docker |
 
 ## Ejecución con Docker Compose
 
@@ -47,7 +48,7 @@ Esto levanta un contenedor de MariaDB y ejecuta el scraper.
 
 ## Ejecución local
 
-Requisitos: Go 1.21+, Chromium instalado, MariaDB disponible.
+Requisitos: Go 1.24+, Chromium instalado, MariaDB disponible.
 
 ```bash
 export DB_HOST=localhost
@@ -62,6 +63,7 @@ La tabla `sport_events` almacena:
 | Campo        | Tipo         | Descripción                              |
 |--------------|--------------|------------------------------------------|
 | `id`         | uint         | ID autoincremental (GORM)                |
+| `data_id`    | varchar(100) | Valor del atributo `data-id` del enlace  |
 | `sport`      | varchar(100) | Deporte                                  |
 | `tournament` | varchar(255) | Torneo o liga                            |
 | `home_team`  | varchar(255) | Equipo local                             |
