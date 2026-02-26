@@ -8,6 +8,8 @@ import (
 
 type SofaScoreEvent struct {
 	gorm.Model
+	SofaScoreEventId            int64  `gorm:"uniqueIndex"`
+	Sport                       string
 	HomeTeam                    string
 	HomeScore                   int
 	HomeTeamId                  int64
