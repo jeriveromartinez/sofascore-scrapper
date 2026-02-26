@@ -74,8 +74,10 @@ func (e APIEvent) ToSofaScoreEvent() SofaScoreEvent {
 	return SofaScoreEvent{
 		HomeTeam:                    e.HomeTeam.Name,
 		HomeScore:                   e.HomeScore.Current,
+		HomeTeamId:                  e.HomeTeam.ID,
 		AwayTeam:                    e.AwayTeam.Name,
 		AwayScore:                   e.AwayScore.Current,
+		AwayTeamId:                  e.AwayTeam.ID,
 		StartTimestamp:              e.StartTimestamp,
 		CurrentPeriodStartTimestamp: e.Time.CurrentPeriodStartTimestamp,
 		Slug:                        e.Slug,
