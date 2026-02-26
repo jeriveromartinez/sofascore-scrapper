@@ -43,14 +43,18 @@ func Start() {
 	go func() {
 		for {
 			now := time.Now().UTC()
-			h := now.Hour()
+			h, m, s := now.Clock()
 			var next time.Time
-			if h < 6 {
+			if h < 6 || (h == 6 && m == 0 && s == 0) {
 				next = time.Date(now.Year(), now.Month(), now.Day(), 6, 0, 0, 0, time.UTC)
-			} else if h < 18 {
+			} else if h < 18 || (h == 18 && m == 0 && s == 0) {
 				next = time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, time.UTC)
 			} else {
 				next = time.Date(now.Year(), now.Month(), now.Day()+1, 6, 0, 0, 0, time.UTC)
+			}
+			// Ensure next is always in the future to avoid tight loops
+			if !next.After(now) {
+				next = next.Add(time.Second)
 			}
 			time.Sleep(time.Until(next))
 			scrapeNext7Days()
