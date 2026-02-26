@@ -1,23 +1,21 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"time"
+	"log"
+	"os"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/httpcli"
+	"github.com/jeriveromartinez/sofascore-scrapper/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
-	"github.com/jeriveromartinez/sofascore-scrapper/repository"
+	"github.com/jeriveromartinez/sofascore-scrapper/scheduler"
 )
 
 func main() {
 	models.Migrate()
-	var list models.EventsListResponse
-	body := httpcli.LoadData(httpcli.FOOTBALL, time.Now().Add(time.Hour*24))
-	if json.Unmarshal(body, &list) != nil {
-		panic("Error parsing JSON")
+	scheduler.Start()
+	addr := os.Getenv("API_ADDR")
+	if addr == "" {
+		addr = ":8080"
 	}
-
-	repository.SaveSofaScoreEvent(list.Events)
-	fmt.Println("Import ready")
+	log.Println("Starting API server and scheduler...")
+	api.Start(addr)
 }

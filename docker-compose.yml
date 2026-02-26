@@ -3,9 +3,13 @@ version: "3.8"
 services:
   scraper:
     build: .
+    ports:
+      - "8080:8080"
     environment:
       DB_HOST: 192.168.0.15
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ju1io
       DB_NAME: sofascore
+      API_ADDR: ":8080"
+      JWT_SECRET: "change-this-to-a-secure-random-secret"

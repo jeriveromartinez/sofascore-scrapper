@@ -72,6 +72,7 @@ type APIEvent struct {
 
 func (e APIEvent) ToSofaScoreEvent() SofaScoreEvent {
 	return SofaScoreEvent{
+		SofaScoreEventId:            e.ID,
 		HomeTeam:                    e.HomeTeam.Name,
 		HomeScore:                   e.HomeScore.Current,
 		HomeTeamId:                  e.HomeTeam.ID,
