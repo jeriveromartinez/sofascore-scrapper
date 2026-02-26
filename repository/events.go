@@ -13,10 +13,15 @@ func SaveSofaScoreEvent(Events []*models.APIEvent) {
 		return
 	}
 
-	now:= time.Now().Unix()
+	now := time.Now().Unix()
 	for _, event := range Events {
 		model := event.ToSofaScoreEvent()
 		model.ScrapedAt = now
 		db.Create(&model)
+
+		team := models.Team{TeamId: model.HomeTeamId, LogoUrl: model.GetHomeTeamLogo()}
+		db.FirstOrCreate(&team, models.Team{TeamId: model.HomeTeamId})
+		team = models.Team{TeamId: model.AwayTeamId, LogoUrl: model.GetAwayTeamLogo()}
+		db.FirstOrCreate(&team, models.Team{TeamId: model.AwayTeamId})
 	}
 }
