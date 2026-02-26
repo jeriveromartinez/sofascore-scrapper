@@ -1,37 +1,23 @@
 package main
 
 import (
-	"log"
+	"encoding/json"
+	"fmt"
+	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/scraper"
+	"github.com/jeriveromartinez/sofascore-scrapper/httpcli"
+	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
 func main() {
-	// Connect to the MariaDB database.
-	db, err := database.Connect()
-	if err != nil {
-		log.Fatalf("Could not connect to the database: %v", err)
+	models.Migrate()
+	var list models.EventsListResponse
+	body := httpcli.LoadData(httpcli.FOOTBALL, time.Now().Add(time.Hour*24))
+	if json.Unmarshal(body, &list) != nil {
+		panic("Error parsing JSON")
 	}
 
-	log.Println("Starting Sofascore scraper...")
-
-	// Scrape sports events from Sofascore.
-	events, err := scraper.Scrape()
-	if err != nil {
-		log.Fatalf("Scraping failed: %v", err)
-	}
-
-	if len(events) == 0 {
-		log.Println("No events found.")
-		return
-	}
-
-	// Save all scraped events to the database.
-	result := db.Create(&events)
-	if result.Error != nil {
-		log.Fatalf("Error saving events to database: %v", result.Error)
-	}
-
-	log.Printf("Successfully saved %d events to the database.", result.RowsAffected)
+	repository.SaveSofaScoreEvent(list.Events)
+	fmt.Println("Import ready")
 }
