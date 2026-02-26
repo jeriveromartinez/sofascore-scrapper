@@ -78,10 +78,13 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func getUserIDFromToken(r *http.Request) uint {
 	authHeader := r.Header.Get("Authorization")
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	token, _ := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
 		return getJWTSecret(), nil
 	})
-	if token == nil {
+	if err != nil || token == nil || !token.Valid {
 		return 0
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
@@ -140,7 +143,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := repository.CreateUser(req.Username, req.Email, req.Password)
 	if err != nil {
-		writeCBOR(w, http.StatusConflict, map[string]string{"error": "user already exists"})
+		writeCBOR(w, http.StatusConflict, map[string]string{"error": "could not create user"})
 		return
 	}
 	token, err := generateToken(user.ID, user.Username)
@@ -232,6 +235,10 @@ func handleLogPlayback(w http.ResponseWriter, r *http.Request) {
 
 func handleUpdatePlayback(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/playback/")
+	if strings.Contains(idStr, "/") || idStr == "" {
+		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
+		return
+	}
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
 		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
