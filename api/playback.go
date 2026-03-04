@@ -3,54 +3,44 @@ package api
 import (
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
-type PlaybackController struct{
-	Mux *http.ServeMux
+type PlaybackController struct {
+	Group *gin.RouterGroup
 }
 
 func (c *PlaybackController) LoadRoutes() {
-	c.Mux.HandleFunc("/api/v1/playback", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handleLogPlayback(w, r)
-		} else {
-			writeCBOR(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		}
-	}))
-	c.Mux.HandleFunc("/api/v1/playback/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut || r.Method == http.MethodPatch {
-			handleUpdatePlayback(w, r)
-		} else {
-			writeCBOR(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		}
-	}))
+	auth := authMiddleware()
+	c.Group.POST("/playback", auth, handleLogPlayback)
+	c.Group.PUT("/playback/:id", auth, handleUpdatePlayback)
+	c.Group.PATCH("/playback/:id", auth, handleUpdatePlayback)
 }
 
-func handleLogPlayback(w http.ResponseWriter, r *http.Request) {
+func handleLogPlayback(c *gin.Context) {
 	var req struct {
 		DeviceToken      string `json:"device_token" cbor:"device_token"`
 		SofaScoreEventId int64  `json:"sofa_score_event_id" cbor:"sofa_score_event_id"`
 		StartedAt        int64  `json:"started_at" cbor:"started_at"`
 	}
-	if err := decodeBody(r, &req); err != nil || req.SofaScoreEventId == 0 {
-		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "sofa_score_event_id is required"})
+	if err := bindBody(c, &req); err != nil || req.SofaScoreEventId == 0 {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "sofa_score_event_id is required"})
 		return
 	}
 
 	db, err := database.GetDB()
 	if err != nil {
-		writeCBOR(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	var device models.Device
 	if err := db.Where("token = ?", req.DeviceToken).First(&device).Error; err != nil {
-		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "device not found"})
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "device not found"})
 		return
 	}
 
@@ -60,28 +50,23 @@ func handleLogPlayback(w http.ResponseWriter, r *http.Request) {
 	}
 	playbackLog, err := repository.LogPlayback(device.ID, req.SofaScoreEventId, startedAt)
 	if err != nil {
-		writeCBOR(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeCBOR(w, http.StatusCreated, playbackLog)
+	respondCBOR(c, http.StatusCreated, playbackLog)
 }
 
-func handleUpdatePlayback(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/playback/")
-	if strings.Contains(idStr, "/") || idStr == "" {
-		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
-		return
-	}
-	id, err := strconv.ParseUint(idStr, 10, 64)
+func handleUpdatePlayback(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
 	var req struct {
 		EndedAt int64 `json:"ended_at" cbor:"ended_at"`
 	}
-	if err := decodeBody(r, &req); err != nil {
-		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+	if err := bindBody(c, &req); err != nil {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
 	endedAt := req.EndedAt
@@ -89,8 +74,8 @@ func handleUpdatePlayback(w http.ResponseWriter, r *http.Request) {
 		endedAt = time.Now().Unix()
 	}
 	if err := repository.UpdatePlaybackEnd(uint(id), endedAt); err != nil {
-		writeCBOR(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeCBOR(w, http.StatusOK, map[string]string{"status": "updated"})
+	respondCBOR(c, http.StatusOK, map[string]string{"status": "updated"})
 }

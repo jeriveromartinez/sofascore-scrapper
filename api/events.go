@@ -4,26 +4,27 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 
-type EventController struct{
-	Mux *http.ServeMux
+type EventController struct {
+	Group *gin.RouterGroup
 }
 
 func (c *EventController) LoadRoutes() {
-	c.Mux.HandleFunc("/api/v1/events", authMiddleware(handleGetEvents))
+	c.Group.GET("/events", authMiddleware(), handleGetEvents)
 }
 
-func handleGetEvents(w http.ResponseWriter, r *http.Request) {
+func handleGetEvents(c *gin.Context) {
 	db, err := database.GetDB()
 	if err != nil {
-		writeCBOR(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	date := r.URL.Query().Get("date")
-	sport := r.URL.Query().Get("sport")
+	date := c.Query("date")
+	sport := c.Query("sport")
 
 	query := db.Model(&models.SofaScoreEvent{})
 	if date != "" {
@@ -40,5 +41,5 @@ func handleGetEvents(w http.ResponseWriter, r *http.Request) {
 
 	var events []models.SofaScoreEvent
 	query.Find(&events)
-	writeCBOR(w, http.StatusOK, events)
+	respondCBOR(c, http.StatusOK, events)
 }
