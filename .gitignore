@@ -9,3 +9,4 @@ vendor/
 # Environment files
 .env
 .vscode/
+apk_storage/
