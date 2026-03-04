@@ -100,7 +100,7 @@ func handleUploadApk(c *gin.Context) {
 		return
 	}
 
-	fileName := fmt.Sprintf("app-%s.apk", version)
+	fileName := fmt.Sprintf("%s-%s.apk", apkInfo.PackageName, version)
 	destPath := filepath.Join(storagePath, fileName)
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		_ = os.Remove(tmpPath)
