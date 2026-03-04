@@ -3,32 +3,33 @@ package api
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
-type DeviceController struct{
-	Mux *http.ServeMux
+type DeviceController struct {
+	Group *gin.RouterGroup
 }
 
 func (c *DeviceController) LoadRoutes() {
-	c.Mux.HandleFunc("/api/v1/devices", authMiddleware(handleRegisterDevice))
+	c.Group.POST("/devices", authMiddleware(), handleRegisterDevice)
 }
 
-func handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
-	userID := getUserIDFromToken(r)
+func handleRegisterDevice(c *gin.Context) {
+	userID := getUserID(c)
 	var req struct {
 		Token    string `json:"token" cbor:"token"`
 		Platform string `json:"platform" cbor:"platform"`
 		Name     string `json:"name" cbor:"name"`
 	}
-	if err := decodeBody(r, &req); err != nil || req.Token == "" {
-		writeCBOR(w, http.StatusBadRequest, map[string]string{"error": "token is required"})
+	if err := bindBody(c, &req); err != nil || req.Token == "" {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "token is required"})
 		return
 	}
 	device, err := repository.RegisterDevice(userID, req.Token, req.Platform, req.Name)
 	if err != nil {
-		writeCBOR(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeCBOR(w, http.StatusOK, device)
+	respondCBOR(c, http.StatusOK, device)
 }

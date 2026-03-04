@@ -9,12 +9,11 @@ import (
 	"time"
 
 	cbor "github.com/fxamacker/cbor/v2"
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type Server interface {
-	LoadRoutes()
-}
+const userIDKey = "userID"
 
 func getJWTSecret() []byte {
 	if s := os.Getenv("JWT_SECRET"); s != "" {
@@ -24,23 +23,21 @@ func getJWTSecret() []byte {
 	return []byte("changeme-please-set-JWT_SECRET-env")
 }
 
-func writeCBOR(w http.ResponseWriter, status int, v any) {
+func respondCBOR(c *gin.Context, status int, v any) {
 	data, err := cbor.Marshal(v)
 	if err != nil {
-		http.Error(w, "encoding error", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "encoding error")
 		return
 	}
-	w.Header().Set("Content-Type", "application/cbor")
-	w.WriteHeader(status)
-	_, _ = w.Write(data)
+	c.Data(status, "application/cbor", data)
 }
 
-func decodeBody(r *http.Request, v any) error {
-	ct := r.Header.Get("Content-Type")
+func bindBody(c *gin.Context, v any) error {
+	ct := c.GetHeader("Content-Type")
 	if strings.Contains(ct, "application/cbor") {
-		return cbor.NewDecoder(r.Body).Decode(v)
+		return cbor.NewDecoder(c.Request.Body).Decode(v)
 	}
-	return json.NewDecoder(r.Body).Decode(v)
+	return json.NewDecoder(c.Request.Body).Decode(v)
 }
 
 func generateToken(userID uint, username string) (string, error) {
@@ -53,11 +50,12 @@ func generateToken(userID uint, username string) (string, error) {
 	return token.SignedString(getJWTSecret())
 }
 
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
+func authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			writeCBOR(w, http.StatusUnauthorized, map[string]string{"error": "missing token"})
+			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "missing token"})
+			c.Abort()
 			return
 		}
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
@@ -68,59 +66,49 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return getJWTSecret(), nil
 		})
 		if err != nil || !token.Valid {
-			writeCBOR(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			c.Abort()
 			return
 		}
-		next(w, r)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			c.Abort()
+			return
+		}
+		var userID uint
+		switch v := claims["sub"].(type) {
+		case float64:
+			userID = uint(v)
+		case uint:
+			userID = v
+		}
+		c.Set(userIDKey, userID)
+		c.Next()
 	}
 }
 
-func getUserIDFromToken(r *http.Request) uint {
-	authHeader := r.Header.Get("Authorization")
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, jwt.ErrSignatureInvalid
-		}
-		return getJWTSecret(), nil
-	})
-	if err != nil || token == nil || !token.Valid {
-		return 0
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return 0
-	}
-	switch v := claims["sub"].(type) {
-	case float64:
-		return uint(v)
-	case uint:
-		return v
-	}
-	return 0
+func getUserID(c *gin.Context) uint {
+	v, _ := c.Get(userIDKey)
+	id, _ := v.(uint)
+	return id
 }
 
 // Start starts the HTTP API server.
 func Start(addr string) {
-	mux := http.NewServeMux()
+	router := gin.New()
+	router.Use(gin.Logger(), gin.Recovery())
 
-	// Events
-	(&EventController{Mux: mux}).LoadRoutes()
+	v1 := router.Group("/api/v1")
 
-	// Users
-	(&UserController{Mux: mux}).LoadRoutes()
-
-	// Devices (requires auth)
-	(&DeviceController{Mux: mux}).LoadRoutes()
-
-	// Playback (requires auth)
-	(&PlaybackController{Mux: mux}).LoadRoutes()
-
-	// Stats
-	(&StatsController{Mux: mux}).LoadRoutes()
+	(&EventController{Group: v1}).LoadRoutes()
+	(&UserController{Group: v1}).LoadRoutes()
+	(&DeviceController{Group: v1}).LoadRoutes()
+	(&PlaybackController{Group: v1}).LoadRoutes()
+	(&StatsController{Group: v1}).LoadRoutes()
 
 	log.Printf("API server listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := router.Run(addr); err != nil {
 		log.Fatalf("API server error: %v", err)
 	}
 }
