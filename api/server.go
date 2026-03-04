@@ -12,6 +12,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type Server interface {
+	LoadRoutes()
+}
+
 func getJWTSecret() []byte {
 	if s := os.Getenv("JWT_SECRET"); s != "" {
 		return []byte(s)
@@ -28,7 +32,7 @@ func writeCBOR(w http.ResponseWriter, status int, v any) {
 	}
 	w.Header().Set("Content-Type", "application/cbor")
 	w.WriteHeader(status)
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 func decodeBody(r *http.Request, v any) error {
@@ -101,33 +105,19 @@ func Start(addr string) {
 	mux := http.NewServeMux()
 
 	// Events
-	mux.HandleFunc("/api/v1/events", handleGetEvents)
+	(&EventController{Mux: mux}).LoadRoutes()
 
 	// Users
-	mux.HandleFunc("/api/v1/users/register", handleRegister)
-	mux.HandleFunc("/api/v1/users/login", handleLogin)
+	(&UserController{Mux: mux}).LoadRoutes()
 
 	// Devices (requires auth)
-	mux.HandleFunc("/api/v1/devices", authMiddleware(handleRegisterDevice))
+	(&DeviceController{Mux: mux}).LoadRoutes()
 
 	// Playback (requires auth)
-	mux.HandleFunc("/api/v1/playback", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handleLogPlayback(w, r)
-		} else {
-			writeCBOR(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		}
-	}))
-	mux.HandleFunc("/api/v1/playback/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut || r.Method == http.MethodPatch {
-			handleUpdatePlayback(w, r)
-		} else {
-			writeCBOR(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-		}
-	}))
+	(&PlaybackController{Mux: mux}).LoadRoutes()
 
 	// Stats
-	mux.HandleFunc("/api/v1/stats/top-events", handleTopEvents)
+	(&StatsController{Mux: mux}).LoadRoutes()
 
 	log.Printf("API server listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {

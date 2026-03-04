@@ -6,6 +6,14 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
+type DeviceController struct{
+	Mux *http.ServeMux
+}
+
+func (c *DeviceController) LoadRoutes() {
+	c.Mux.HandleFunc("/api/v1/devices", authMiddleware(handleRegisterDevice))
+}
+
 func handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromToken(r)
 	var req struct {

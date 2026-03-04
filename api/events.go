@@ -8,6 +8,14 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 
+type EventController struct{
+	Mux *http.ServeMux
+}
+
+func (c *EventController) LoadRoutes() {
+	c.Mux.HandleFunc("/api/v1/events", authMiddleware(handleGetEvents))
+}
+
 func handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	db, err := database.GetDB()
 	if err != nil {

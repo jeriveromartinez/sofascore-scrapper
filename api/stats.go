@@ -7,6 +7,14 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
+type StatsController struct{
+	Mux *http.ServeMux
+}
+
+func (c *StatsController) LoadRoutes() {
+	c.Mux.HandleFunc("/api/v1/stats/top-events", authMiddleware(handleTopEvents))
+}
+
 func handleTopEvents(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	limit := 10

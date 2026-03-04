@@ -11,6 +11,27 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
+type PlaybackController struct{
+	Mux *http.ServeMux
+}
+
+func (c *PlaybackController) LoadRoutes() {
+	c.Mux.HandleFunc("/api/v1/playback", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			handleLogPlayback(w, r)
+		} else {
+			writeCBOR(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		}
+	}))
+	c.Mux.HandleFunc("/api/v1/playback/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut || r.Method == http.MethodPatch {
+			handleUpdatePlayback(w, r)
+		} else {
+			writeCBOR(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		}
+	}))
+}
+
 func handleLogPlayback(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DeviceToken      string `json:"device_token" cbor:"device_token"`
