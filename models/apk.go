@@ -15,4 +15,7 @@ type ApkVersion struct {
 	VersionCode      int32
 	MinSDKVersion    int32
 	TargetSDKVersion int32
+	// DownloadToken is a UUID used as the public download identifier,
+	// preventing sequential enumeration of the download endpoint.
+	DownloadToken string `gorm:"uniqueIndex;not null"`
 }

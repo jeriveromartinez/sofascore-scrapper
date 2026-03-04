@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
@@ -27,6 +28,7 @@ func CreateApkVersion(version, fileName, filePath, description, packageName stri
 		VersionCode:      versionCode,
 		MinSDKVersion:    minSDK,
 		TargetSDKVersion: targetSDK,
+		DownloadToken:    uuid.New().String(),
 	}
 	if err := db.Create(apk).Error; err != nil {
 		return nil, err
@@ -69,6 +71,20 @@ func GetApkVersionByID(id uint) (*models.ApkVersion, error) {
 	}
 	var apk models.ApkVersion
 	if err := db.First(&apk, id).Error; err != nil {
+		return nil, err
+	}
+	return &apk, nil
+}
+
+// GetApkVersionByToken returns the APK version associated with the given UUID
+// download token. Returns an error if no matching record is found.
+func GetApkVersionByToken(token string) (*models.ApkVersion, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+	var apk models.ApkVersion
+	if err := db.Where("download_token = ?", token).First(&apk).Error; err != nil {
 		return nil, err
 	}
 	return &apk, nil

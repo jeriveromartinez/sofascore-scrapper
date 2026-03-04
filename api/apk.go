@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/apkutil"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
@@ -37,8 +37,8 @@ func (c *ApkController) LoadRoutes() {
 	c.Group.GET("/apk/versions", authMiddleware(), handleListApkVersions)
 	// Public: check whether a newer APK is available
 	c.Group.GET("/apk/check", handleCheckApkUpdate)
-	// Public: download a specific APK by ID
-	c.Group.GET("/apk/download/:id", handleDownloadApk)
+	// Public: download a specific APK by UUID token (prevents sequential enumeration)
+	c.Group.GET("/apk/download/:token", handleDownloadApk)
 }
 
 func apkStoragePath() string {
@@ -120,16 +120,18 @@ func handleUploadApk(c *gin.Context) {
 	}
 
 	respondCBOR(c, http.StatusCreated, map[string]any{
-		"id":                apk.ID,
-		"version":           apk.Version,
-		"file_name":         apk.FileName,
-		"file_size":         apk.FileSize,
-		"description":       apk.Description,
-		"package_name":      apk.PackageName,
-		"version_code":      apk.VersionCode,
-		"min_sdk_version":   apk.MinSDKVersion,
+		"id":                 apk.ID,
+		"version":            apk.Version,
+		"file_name":          apk.FileName,
+		"file_size":          apk.FileSize,
+		"description":        apk.Description,
+		"package_name":       apk.PackageName,
+		"version_code":       apk.VersionCode,
+		"min_sdk_version":    apk.MinSDKVersion,
 		"target_sdk_version": apk.TargetSDKVersion,
-		"created_at":        apk.CreatedAt,
+		"download_token":     apk.DownloadToken,
+		"download_url":       fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
+		"created_at":         apk.CreatedAt,
 	})
 }
 
@@ -156,14 +158,13 @@ func handleCheckApkUpdate(c *gin.Context) {
 	}
 
 	resp := map[string]any{
-		"update_available":   newer,
-		"latest_version":     latest.Version,
-		"package_name":       latest.PackageName,
-		"version_code":       latest.VersionCode,
+		"update_available": newer,
+		"latest_version":   latest.Version,
+		"package_name":     latest.PackageName,
+		"version_code":     latest.VersionCode,
 	}
 	if newer {
-		resp["apk_id"] = latest.ID
-		resp["download_url"] = fmt.Sprintf("/api/v1/apk/download/%d", latest.ID)
+		resp["download_url"] = fmt.Sprintf("/api/v1/apk/download/%s", latest.DownloadToken)
 		resp["description"] = latest.Description
 		resp["file_size"] = latest.FileSize
 		resp["min_sdk_version"] = latest.MinSDKVersion
@@ -173,16 +174,15 @@ func handleCheckApkUpdate(c *gin.Context) {
 	respondCBOR(c, http.StatusOK, resp)
 }
 
-// handleDownloadApk streams the APK file identified by :id.
+// handleDownloadApk streams the APK file identified by its UUID download token.
 func handleDownloadApk(c *gin.Context) {
-	idStr := c.Param("id")
-	id64, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	token := c.Param("token")
+	if _, err := uuid.Parse(token); err != nil {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid download token"})
 		return
 	}
 
-	apk, err := repository.GetApkVersionByID(uint(id64))
+	apk, err := repository.GetApkVersionByToken(token)
 	if err != nil {
 		respondCBOR(c, http.StatusNotFound, map[string]string{"error": "APK version not found"})
 		return
@@ -218,6 +218,8 @@ func handleListApkVersions(c *gin.Context) {
 		VersionCode      int32  `json:"version_code" cbor:"version_code"`
 		MinSDKVersion    int32  `json:"min_sdk_version" cbor:"min_sdk_version"`
 		TargetSDKVersion int32  `json:"target_sdk_version" cbor:"target_sdk_version"`
+		DownloadToken    string `json:"download_token" cbor:"download_token"`
+		DownloadURL      string `json:"download_url" cbor:"download_url"`
 		CreatedAt        any    `json:"created_at" cbor:"created_at"`
 	}
 
@@ -234,6 +236,8 @@ func handleListApkVersions(c *gin.Context) {
 			VersionCode:      v.VersionCode,
 			MinSDKVersion:    v.MinSDKVersion,
 			TargetSDKVersion: v.TargetSDKVersion,
+			DownloadToken:    v.DownloadToken,
+			DownloadURL:      fmt.Sprintf("/api/v1/apk/download/%s", v.DownloadToken),
 			CreatedAt:        v.CreatedAt,
 		})
 	}
