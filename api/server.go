@@ -106,6 +106,7 @@ func Start(addr string) {
 	(&DeviceController{Group: v1}).LoadRoutes()
 	(&PlaybackController{Group: v1}).LoadRoutes()
 	(&StatsController{Group: v1}).LoadRoutes()
+	(&ApkController{Group: v1}).LoadRoutes()
 
 	log.Printf("API server listening on %s", addr)
 	if err := router.Run(addr); err != nil {
