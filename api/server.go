@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -94,10 +95,26 @@ func getUserID(c *gin.Context) uint {
 	return id
 }
 
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "*")
+
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // Start starts the HTTP API server.
 func Start(addr string) {
 	router := gin.New()
-	router.Use(gin.Logger(), gin.Recovery())
+	router.Use(corsMiddleware(), gin.Logger(), gin.Recovery())
 
 	v1 := router.Group("/api/v1")
 
@@ -108,8 +125,41 @@ func Start(addr string) {
 	(&StatsController{Group: v1}).LoadRoutes()
 	(&ApkController{Group: v1}).LoadRoutes()
 
+	registerDashboardRoutes(router)
+
 	log.Printf("API server listening on %s", addr)
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("API server error: %v", err)
 	}
+}
+
+func registerDashboardRoutes(router *gin.Engine) {
+	frontendRoot := filepath.Clean("web/dist")
+	indexPath := filepath.Join(frontendRoot, "index.html")
+
+	if _, err := os.Stat(indexPath); err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("warning: could not stat dashboard index file: %v", err)
+		}
+		log.Printf("dashboard build not found at %s; serving API only", indexPath)
+		return
+	}
+
+	log.Printf("serving dashboard from %s", frontendRoot)
+
+	router.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			respondCBOR(c, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+
+		relPath := strings.TrimLeft(filepath.Clean(c.Request.URL.Path), "/\\")
+		requestedPath := filepath.Join(frontendRoot, relPath)
+		if info, err := os.Stat(requestedPath); err == nil && !info.IsDir() {
+			c.File(requestedPath)
+			return
+		}
+
+		c.File(indexPath)
+	})
 }

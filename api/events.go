@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,29 @@ func handleGetEvents(c *gin.Context) {
 	}
 	date := c.Query("date")
 	sport := c.Query("sport")
+	page := 1
+	limit := 10
+
+	if pageParam := c.Query("page"); pageParam != "" {
+		parsedPage, parseErr := strconv.Atoi(pageParam)
+		if parseErr != nil || parsedPage < 1 {
+			respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "page must be a positive integer"})
+			return
+		}
+		page = parsedPage
+	}
+
+	if limitParam := c.Query("limit"); limitParam != "" {
+		parsedLimit, parseErr := strconv.Atoi(limitParam)
+		if parseErr != nil || parsedLimit < 1 {
+			respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			return
+		}
+		if parsedLimit > 100 {
+			parsedLimit = 100
+		}
+		limit = parsedLimit
+	}
 
 	query := db.Model(&models.SofaScoreEvent{})
 	if date != "" {
@@ -39,7 +63,24 @@ func handleGetEvents(c *gin.Context) {
 		query = query.Where("sport = ?", sport)
 	}
 
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
 	var events []models.SofaScoreEvent
-	query.Find(&events)
-	respondCBOR(c, http.StatusOK, events)
+	if err := query.Offset((page - 1) * limit).Limit(limit).Find(&events).Error; err != nil {
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	totalPages := int((total + int64(limit) - 1) / int64(limit))
+	respondCBOR(c, http.StatusOK, map[string]any{
+		"events":      events,
+		"page":        page,
+		"limit":       limit,
+		"total":       total,
+		"total_pages": totalPages,
+	})
 }
