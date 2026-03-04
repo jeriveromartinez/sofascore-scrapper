@@ -11,18 +11,22 @@ import (
 )
 
 // CreateApkVersion persists a new APK version record.
-func CreateApkVersion(version, fileName, filePath, description string, fileSize int64) (*models.ApkVersion, error) {
+func CreateApkVersion(version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*models.ApkVersion, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
 	apk := &models.ApkVersion{
-		Version:     version,
-		FileName:    fileName,
-		FilePath:    filePath,
-		FileSize:    fileSize,
-		Description: description,
-		IsActive:    true,
+		Version:          version,
+		FileName:         fileName,
+		FilePath:         filePath,
+		FileSize:         fileSize,
+		Description:      description,
+		IsActive:         true,
+		PackageName:      packageName,
+		VersionCode:      versionCode,
+		MinSDKVersion:    minSDK,
+		TargetSDKVersion: targetSDK,
 	}
 	if err := db.Create(apk).Error; err != nil {
 		return nil, err
