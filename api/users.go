@@ -6,6 +6,15 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
+type UserController struct{
+	Mux *http.ServeMux
+}
+
+func (c *UserController) LoadRoutes() {
+	c.Mux.HandleFunc("/api/v1/users/register", handleRegister)
+	c.Mux.HandleFunc("/api/v1/users/login", handleLogin)
+}
+
 func handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username" cbor:"username"`
