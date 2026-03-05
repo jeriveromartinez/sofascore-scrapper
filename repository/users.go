@@ -6,7 +6,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func CreateUser(username, email, password string) (*models.User, error) {
+func CreateUser(email, password string) (*models.User, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
@@ -15,18 +15,18 @@ func CreateUser(username, email, password string) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	user := &models.User{Username: username, Email: email, Password: string(hash)}
+	user := &models.User{Email: email, Password: string(hash)}
 	result := db.Create(user)
 	return user, result.Error
 }
 
-func GetUserByUsername(username string) (*models.User, error) {
+func GetUserByEmail(email string) (*models.User, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
 	var user models.User
-	result := db.Where("username = ?", username).First(&user)
+	result := db.Where("email = ?", email).First(&user)
 	return &user, result.Error
 }
 
