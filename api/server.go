@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -33,12 +32,8 @@ func respondCBOR(c *gin.Context, status int, v any) {
 	c.Data(status, "application/cbor", data)
 }
 
-func bindBody(c *gin.Context, v any) error {
-	ct := c.GetHeader("Content-Type")
-	if strings.Contains(ct, "application/cbor") {
-		return cbor.NewDecoder(c.Request.Body).Decode(v)
-	}
-	return json.NewDecoder(c.Request.Body).Decode(v)
+func parseCBORBody(c *gin.Context, v any) error {
+	return cbor.NewDecoder(c.Request.Body).Decode(v)
 }
 
 func generateToken(userID uint, username string) (string, error) {

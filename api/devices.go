@@ -22,7 +22,7 @@ func handleRegisterDevice(c *gin.Context) {
 		Platform string `json:"platform" cbor:"platform"`
 		Name     string `json:"name" cbor:"name"`
 	}
-	if err := bindBody(c, &req); err != nil || req.Token == "" {
+	if err := parseCBORBody(c, &req); err != nil || req.Token == "" {
 		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "token is required"})
 		return
 	}

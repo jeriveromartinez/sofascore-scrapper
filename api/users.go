@@ -21,7 +21,7 @@ func handleRegister(c *gin.Context) {
 		Email    string `json:"email" cbor:"email"`
 		Password string `json:"password" cbor:"password"`
 	}
-	if err := bindBody(c, &req); err != nil || req.Email == "" || req.Password == "" {
+	if err := parseCBORBody(c, &req); err != nil || req.Email == "" || req.Password == "" {
 		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "email and password are required"})
 		return
 	}
@@ -43,7 +43,7 @@ func handleLogin(c *gin.Context) {
 		Email    string `json:"email" cbor:"email"`
 		Password string `json:"password" cbor:"password"`
 	}
-	if err := bindBody(c, &req); err != nil || req.Email == "" || req.Password == "" {
+	if err := parseCBORBody(c, &req); err != nil || req.Email == "" || req.Password == "" {
 		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "email and password are required"})
 		return
 	}

@@ -28,7 +28,7 @@ func handleLogPlayback(c *gin.Context) {
 		SofaScoreEventId int64  `json:"sofa_score_event_id" cbor:"sofa_score_event_id"`
 		StartedAt        int64  `json:"started_at" cbor:"started_at"`
 	}
-	if err := bindBody(c, &req); err != nil || req.SofaScoreEventId == 0 {
+	if err := parseCBORBody(c, &req); err != nil || req.SofaScoreEventId == 0 {
 		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "sofa_score_event_id is required"})
 		return
 	}
@@ -65,7 +65,7 @@ func handleUpdatePlayback(c *gin.Context) {
 	var req struct {
 		EndedAt int64 `json:"ended_at" cbor:"ended_at"`
 	}
-	if err := bindBody(c, &req); err != nil {
+	if err := parseCBORBody(c, &req); err != nil {
 		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
