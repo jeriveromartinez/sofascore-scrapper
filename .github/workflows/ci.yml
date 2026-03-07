@@ -63,16 +63,16 @@ jobs:
 
       - name: Install backend and frontend artifacts on runner
         run: |
-          sudo mkdir -p /opt/iptv/web
-          sudo cp ./iptv /opt/iptv/iptv
-          sudo rm -rf /opt/iptv/web/dist
-          sudo cp -R ./web/dist /opt/iptv/web/dist
-          sudo chmod +x /opt/iptv/iptv
+          mkdir -p /opt/iptv/web
+          cp ./iptv /opt/iptv/iptv
+          rm -rf /opt/iptv/web/dist
+          cp -R ./web/dist /opt/iptv/web/dist
+          chmod +x /opt/iptv/iptv
 
       - name: Write service environment file
         run: |
-          sudo mkdir -p /etc/iptv
-          sudo tee /etc/iptv/iptv.env >/dev/null <<EOF
+          mkdir -p /etc/iptv
+          tee /etc/iptv/iptv.env >/dev/null <<EOF
           DB_HOST=${DB_HOST}
           DB_PORT=${DB_PORT}
           DB_USER=${DB_USER}
@@ -80,15 +80,16 @@ jobs:
           DB_NAME=${DB_NAME}
           API_ADDR=${API_ADDR}
           EOF
-          sudo chmod 600 /etc/iptv/iptv.env
+          chmod 600 /etc/iptv/iptv.env
 
-      - name: Create or update systemd service
+      - name: Create or update user systemd service
         run: |
-          RUNNER_USER="$(id -un)"
-          sudo tee /etc/systemd/system/iptv.service >/dev/null <<EOF
+          mkdir -p "$HOME/.config/systemd/user"
+          tee "$HOME/.config/systemd/user/iptv.service" >/dev/null <<EOF
           [Unit]
           Description=IPTV Go API Service
-          After=network.target
+          After=network-online.target
+          Wants=network-online.target
 
           [Service]
           Type=simple
@@ -97,15 +98,15 @@ jobs:
           EnvironmentFile=/etc/iptv/iptv.env
           Restart=always
           RestartSec=5
-          User=${RUNNER_USER}
 
           [Install]
-          WantedBy=multi-user.target
+          WantedBy=default.target
           EOF
 
-      - name: Restart and enable systemd service
+      - name: Restart and enable user systemd service
         run: |
-          sudo systemctl daemon-reload
-          sudo systemctl enable iptv
-          sudo systemctl restart iptv
-          sudo systemctl --no-pager --full status iptv
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          systemctl --user daemon-reload
+          systemctl --user enable iptv.service
+          systemctl --user restart iptv.service
+          systemctl --user --no-pager --full status iptv.service
