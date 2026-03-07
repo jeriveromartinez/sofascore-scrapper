@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ju1io
+      DB_NAME: iptv
+      API_ADDR: 0.0.0.0:9065
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Build Go binary
+        run: |
+          mkdir -p bin
+          go build -v -o iptv .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build Vue app
+        working-directory: web
+        run: npm run build
+
+      - name: Start Go binary (smoke test)
+        run: |
+          ./iptv > app.log 2>&1 &
+          APP_PID=$!
+          sleep 15
+
+          if ! kill -0 "$APP_PID"; then
+            echo "Go binary terminated unexpectedly."
+            cat app.log
+            exit 1
+          fi
+
+          echo "Go binary started successfully."
+          kill "$APP_PID"
+          wait "$APP_PID" || true
