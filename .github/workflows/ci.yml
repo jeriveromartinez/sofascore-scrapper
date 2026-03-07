@@ -18,7 +18,7 @@ jobs:
       DB_PASSWORD: ju1io
       DB_NAME: iptv
       API_ADDR: 0.0.0.0:9065
-      VITE_API_BASE_URL: http://192.168.0.15:9065/api/v1
+      VITE_API_BASE_URL: /api/v1
 
     steps:
       - name: Checkout repository
