@@ -159,7 +159,7 @@ const currentYear = new Date().getFullYear();
                   {{ currentYear }}, made with ❤️
                 </div>
                 <div class="d-none d-lg-inline-block">
-                  <a
+                  <!-- <a
                     href="https://themeselection.com/item/category/admin-templates/"
                     target="_blank"
                     class="footer-link me-4"
@@ -191,7 +191,7 @@ const currentYear = new Date().getFullYear();
                     target="_blank"
                     class="footer-link"
                     >Support</a
-                  >
+                  > -->
                 </div>
               </div>
             </div>
