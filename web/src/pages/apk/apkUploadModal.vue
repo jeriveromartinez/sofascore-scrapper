@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, reactive, watch } from "vue";
-import { apkApiService } from "../store/services";
+import { apkApiService } from "../../store/services";
 
 const emit = defineEmits<{
   uploaded: [version: string];

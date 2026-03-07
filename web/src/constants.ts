@@ -3,3 +3,4 @@ export const API_BASE_URL =
 
 export const API_ORIGIN = new URL(API_BASE_URL).origin;
 export const KEY_USER_LOGIN = "user_info";
+export const KEY_THEME = "local_theme";

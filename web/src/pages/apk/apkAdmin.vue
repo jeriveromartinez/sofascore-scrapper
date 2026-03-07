@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive } from "vue";
-import apkUploadModal from "../../components/apkUploadModal.vue";
+import apkUploadModal from "./apkUploadModal.vue";
 import { apkApiService } from "../../store/services";
 import type { ApkVersionInfo } from "../../store/services/models";
 
