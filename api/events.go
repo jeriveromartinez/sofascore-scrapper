@@ -70,7 +70,7 @@ func handleGetEvents(c *gin.Context) {
 	}
 
 	var events []models.SofaScoreEvent
-	if err := query.Offset((page - 1) * limit).Limit(limit).Find(&events).Error; err != nil {
+	if err := query.Offset((page - 1) * limit).Limit(limit).Preload("HomeTeamModel").Preload("AwayTeamModel").Find(&events).Error; err != nil {
 		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

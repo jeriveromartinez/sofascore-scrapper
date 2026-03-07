@@ -22,6 +22,9 @@ type SofaScoreEvent struct {
 	CurrentPeriodStartTimestamp int64
 	Slug                        string
 	LeagueName                  string
+
+	HomeTeamModel *Team `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
+	AwayTeamModel *Team `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
 }
 
 func (s SofaScoreEvent) GetHomeTeamLogo() string {
