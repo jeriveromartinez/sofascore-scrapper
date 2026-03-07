@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive } from "vue";
-import { apkApiService } from "../store/services";
-import type { ApkCheckResponse } from "../store/services/models";
+import { apkApiService } from "../../store/services";
+import type { ApkCheckResponse } from "../../store/services/models";
 
 const state = reactive({
   version: "1.0.0",

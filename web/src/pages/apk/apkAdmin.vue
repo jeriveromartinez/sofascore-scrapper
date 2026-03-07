@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive } from "vue";
-import { apkApiService } from "../store/services";
-import type { ApkVersionInfo } from "../store/services/models";
+import { apkApiService } from "../../store/services";
+import type { ApkVersionInfo } from "../../store/services/models";
 
 const upload = reactive({
   file: null as File | null,

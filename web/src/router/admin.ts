@@ -10,7 +10,7 @@ export const adminRoutes: CustomRouteRecordRaw[] = [
   {
     name: "ApkAdmin",
     path: "apk-admin",
-    component: () => import("../pages/apkAdmin.vue"),
+    component: () => import("../pages/apk/apkAdmin.vue"),
     icon: "bx-joystick",
   },
 ];
