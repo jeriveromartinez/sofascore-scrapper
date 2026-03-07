@@ -30,14 +30,14 @@ const doLogin = async () => {
     if (!user.token) throw new Error("Invalid credentials");
 
     authStore.setUser(user, states.rememberMe);
-    router.replace({ name: "Dashboard" });
+    router.replace({ name: "Events" });
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "Login failed");
   }
 };
 
 const checkAuth = () => {
-  if (authStore.isAuthenticated) router.replace({ name: "Dashboard" });
+  if (authStore.isAuthenticated) router.replace({ name: "Events" });
 };
 
 onMounted(() => checkAuth());

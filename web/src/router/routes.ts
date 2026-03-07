@@ -17,6 +17,7 @@ export const routes: RouteRecordRaw[] = [
     name: "Dashboard",
     path: "/",
     component: () => import("../components/layout.vue"),
+    redirect: { name: "Events" },
     children: [...adminRoutes, ...managerRoutes],
   },
 ];

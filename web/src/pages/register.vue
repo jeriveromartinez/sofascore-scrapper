@@ -37,7 +37,7 @@ const doRegister = async () => {
 };
 
 const checkAuth = () => {
-  if (authStore.isAuthenticated) router.replace({ name: "Dashboard" });
+  if (authStore.isAuthenticated) router.replace({ name: "Events" });
 };
 
 onMounted(() => checkAuth());
