@@ -52,18 +52,27 @@ jobs:
         working-directory: web
         run: yarn build
 
+      - name: Ensure database exists
+        run: |
+          mysql \
+            -h "$DB_HOST" \
+            -P "$DB_PORT" \
+            -u"$DB_USER" \
+            -p"$DB_PASSWORD" \
+            -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
       - name: Start Go binary (smoke test)
         run: |
           ./iptv > app.log 2>&1 &
           APP_PID=$!
           sleep 15
 
-          if ! kill -0 "$APP_PID"; then
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
             echo "Go binary terminated unexpectedly."
             cat app.log
             exit 1
           fi
 
           echo "Go binary started successfully."
-          kill "$APP_PID"
+          kill "$APP_PID" 2>/dev/null || true
           wait "$APP_PID" || true
