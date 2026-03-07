@@ -1,5 +1,5 @@
 import { BaseApiService } from "./BaseApiService";
-import { UserAuthModel } from "./models";
+import { type UserAuthModel, type UserAuthPayload } from "./models";
 
 export class AuthApiService extends BaseApiService {
   constructor() {
@@ -7,8 +7,7 @@ export class AuthApiService extends BaseApiService {
   }
 
   async login(email: string, password: string): Promise<UserAuthModel> {
-    console.log("Attempting login with", email, password);
-    const data = await this.post<UserAuthModel, UserAuthModel>("/login", {
+    const data = await this.post<UserAuthModel, UserAuthPayload>("/login", {
       email,
       password,
     });
@@ -16,7 +15,7 @@ export class AuthApiService extends BaseApiService {
   }
 
   async register(email: string, password: string): Promise<UserAuthModel> {
-    const data = await this.post<UserAuthModel, UserAuthModel>("/register", {
+    const data = await this.post<UserAuthModel, UserAuthPayload>("/register", {
       email,
       password,
     });

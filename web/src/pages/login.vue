@@ -15,8 +15,6 @@ import "../assets/css/inputs.css";
 const router = useRouter();
 const authStore = useAuthStore();
 
-console.debug("Login page mounted, checking authentication");
-
 const states = reactive({
   email: "",
   password: "",
@@ -28,14 +26,13 @@ const goToRegister = () => router.resolve({ name: "Register" }).href;
 
 const doLogin = async () => {
   try {
-    console.log("Logging in with", states.email, states.password);
     const user = await authApiService.login(states.email, states.password);
     if (!user.token) throw new Error("Invalid credentials");
 
     authStore.setUser(user, states.rememberMe);
     router.replace({ name: "Dashboard" });
-  } catch (_) {
-    toast.error("Login failed");
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Login failed");
   }
 };
 

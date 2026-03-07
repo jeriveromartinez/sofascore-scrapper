@@ -1,7 +1,10 @@
-export class UserAuthModel {
-  email: string = "";
-  password: string = "";
-  readonly token?: string;
+export interface UserAuthModel {
+  id: number;
+  email: string;
+  token: string;
 }
 
-export default UserAuthModel;
+export interface UserAuthPayload {
+  email: string;
+  password: string;
+}

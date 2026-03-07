@@ -12,7 +12,13 @@ router.beforeEach((to, _) => {
     sessionStorage.getItem(KEY_USER_LOGIN) ??
     localStorage.getItem(KEY_USER_LOGIN) ??
     "{}";
-  const data = JSON.parse(userLogin);
+  let data: { token?: string } = {};
+
+  try {
+    data = JSON.parse(userLogin) as { token?: string };
+  } catch {
+    data = {};
+  }
 
   if (!data?.token && to.name !== "Login" && to.name !== "Register")
     return { name: "Login" };

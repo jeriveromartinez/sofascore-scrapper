@@ -1,7 +1,7 @@
 import { API_BASE_URL, KEY_USER_LOGIN } from "../../constants";
 import axios, { type AxiosInstance } from "axios";
 import { decode, encode } from "cbor-x";
-import { UserAuthModel } from "./models";
+import { type ApiErrorResponse, type UserAuthModel } from "./models";
 
 const CBOR_CONTENT_TYPE = "application/cbor";
 
@@ -31,7 +31,7 @@ export abstract class BaseApiService {
 
   private getHeaders(withBody = false): Record<string, string> {
     const token = this.getToken();
-    const headers: Record<string, string> = {Accept: CBOR_CONTENT_TYPE};
+    const headers: Record<string, string> = { Accept: CBOR_CONTENT_TYPE };
     if (token) headers.Authorization = `Bearer ${token}`;
     if (withBody) headers["Content-Type"] = CBOR_CONTENT_TYPE;
 
@@ -46,12 +46,34 @@ export abstract class BaseApiService {
     return decode(bytes) as T;
   }
 
+  private parseErrorMessage(status: number, data: ArrayBuffer): string {
+    const payload = this.decodeResponse<ApiErrorResponse | undefined>(data);
+
+    if (payload && typeof payload === "object" && "error" in payload) {
+      return payload.error;
+    }
+
+    return `HTTP ${status}`;
+  }
+
+  private assertSuccess(status: number, data: ArrayBuffer): void {
+    if (status < 400) return;
+
+    throw new Error(this.parseErrorMessage(status, data));
+  }
+
   protected async get<T>(url: string): Promise<T> {
     const headers = this.getHeaders();
-    const { data } = await this.http.get<ArrayBuffer>(`${this.pathApi}${url}`, {
-      headers,
-      responseType: "arraybuffer",
-    });
+    const { data, status } = await this.http.get<ArrayBuffer>(
+      `${this.pathApi}${url}`,
+      {
+        headers,
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
+    );
+
+    this.assertSuccess(status, data);
 
     return this.decodeResponse<T>(data);
   }
@@ -59,14 +81,17 @@ export abstract class BaseApiService {
   protected async post<T, B = unknown>(url: string, body?: B): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = body === undefined ? undefined : encode(body);
-    const { data } = await this.http.post<ArrayBuffer>(
+    const { data, status } = await this.http.post<ArrayBuffer>(
       `${this.pathApi}${url}`,
       payload,
       {
         headers,
         responseType: "arraybuffer",
+        validateStatus: () => true,
       },
     );
+
+    this.assertSuccess(status, data);
 
     return this.decodeResponse<T>(data);
   }
@@ -74,27 +99,94 @@ export abstract class BaseApiService {
   protected async put<T, B = unknown>(url: string, body?: B): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = body === undefined ? undefined : encode(body);
-    const { data } = await this.http.put<ArrayBuffer>(
+    const { data, status } = await this.http.put<ArrayBuffer>(
       `${this.pathApi}${url}`,
       payload,
       {
         headers,
         responseType: "arraybuffer",
+        validateStatus: () => true,
       },
     );
+
+    this.assertSuccess(status, data);
 
     return this.decodeResponse<T>(data);
   }
 
+  protected async patch<T, B = unknown>(url: string, body?: B): Promise<T> {
+    const headers = this.getHeaders(true);
+    const payload = body === undefined ? undefined : encode(body);
+    const { data, status } = await this.http.patch<ArrayBuffer>(
+      `${this.pathApi}${url}`,
+      payload,
+      {
+        headers,
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
+    );
+
+    this.assertSuccess(status, data);
+
+    return this.decodeResponse<T>(data);
+  }
+
+  protected async postMultipart<T>(
+    url: string,
+    formData: FormData,
+  ): Promise<T> {
+    const token = this.getToken();
+    const headers: Record<string, string> = { Accept: CBOR_CONTENT_TYPE };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const { data, status } = await this.http.post<ArrayBuffer>(
+      `${this.pathApi}${url}`,
+      formData,
+      {
+        headers,
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
+    );
+
+    this.assertSuccess(status, data);
+
+    return this.decodeResponse<T>(data);
+  }
+
+  protected async getBinary(url: string): Promise<Blob> {
+    const headers = this.getHeaders();
+    const response = await this.http.get<ArrayBuffer>(`${this.pathApi}${url}`, {
+      headers,
+      responseType: "arraybuffer",
+      validateStatus: () => true,
+    });
+
+    const contentType = response.headers["content-type"] ?? "";
+    if (contentType.includes(CBOR_CONTENT_TYPE)) {
+      this.assertSuccess(response.status, response.data);
+    } else if (response.status >= 400) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return new Blob([response.data], {
+      type: contentType || "application/octet-stream",
+    });
+  }
+
   protected async delete<T>(url: string): Promise<T> {
     const headers = this.getHeaders();
-    const { data } = await this.http.delete<ArrayBuffer>(
+    const { data, status } = await this.http.delete<ArrayBuffer>(
       `${this.pathApi}${url}`,
       {
         headers,
         responseType: "arraybuffer",
+        validateStatus: () => true,
       },
     );
+
+    this.assertSuccess(status, data);
 
     return this.decodeResponse<T>(data);
   }

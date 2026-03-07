@@ -1,4 +1,13 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { adminRoutes } from "../router/admin";
+import { managerRoutes } from "../router/manager";
+import { useRouter } from "vue-router";
+
+const router = useRouter();
+
+const goToRoute = (routeName: string) =>
+  router.resolve({ name: routeName }).href;
+</script>
 
 <template>
   <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
@@ -85,10 +94,7 @@
         <span class="app-brand-text demo menu-text fw-bold ms-2">Sneat</span>
       </a>
 
-      <a
-        href="#!"
-        class="layout-menu-toggle menu-link text-large ms-auto"
-      >
+      <a href="#!" class="layout-menu-toggle menu-link text-large ms-auto">
         <i class="bx bx-chevron-left d-block d-xl-none align-middle"></i>
       </a>
     </div>
@@ -274,16 +280,14 @@
 
       <!-- Apps & Pages -->
       <li class="menu-header small text-uppercase">
-        <span class="menu-header-text">Devices</span>
+        <span class="menu-header-text">Administracion</span>
       </li>
-      <li class="menu-item">
-        <a
-          href="#!"
-          target="_blank"
-          class="menu-link"
-        >
-          <i class="menu-icon tf-icons bx bx-devices"></i>
-          <div class="text-truncate" data-i18n="Email">Dispositivos activados</div>
+      <li class="menu-item" v-for="route in adminRoutes" :key="route.name">
+        <a :href="goToRoute(route.name as string)" class="menu-link">
+          <i :class="`menu-icon tf-icons bx ${route.icon}`"></i>
+          <div class="text-truncate">
+            {{ route.name }}
+          </div>
         </a>
       </li>
       <!-- <li class="menu-item">
@@ -422,10 +426,12 @@
         <span class="menu-header-text">Usuarios</span>
       </li>
       <!-- Cards -->
-      <li class="menu-item">
-        <a href="#!" class="menu-link">
-          <i class="menu-icon tf-icons bx bx-user"></i>
-          <div class="text-truncate" data-i18n="Basic">Listado de Usuarios</div>
+      <li class="menu-item" v-for="route in managerRoutes" :key="route.name">
+        <a :href="goToRoute(route.name as string)" class="menu-link">
+          <i :class="`menu-icon tf-icons bx ${route.icon}`"></i>
+          <div class="text-truncate">
+            {{ route.name }}
+          </div>
         </a>
       </li>
       <!-- User interface -->

@@ -1,4 +1,6 @@
 import type { RouteRecordRaw } from "vue-router";
+import { adminRoutes } from "./admin";
+import { managerRoutes } from "./manager";
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -15,5 +17,6 @@ export const routes: RouteRecordRaw[] = [
     name: "Dashboard",
     path: "/",
     component: () => import("../components/layout.vue"),
+    children: [...adminRoutes, ...managerRoutes],
   },
 ];

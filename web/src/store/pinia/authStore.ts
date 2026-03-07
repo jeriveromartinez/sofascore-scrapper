@@ -1,5 +1,5 @@
 import { KEY_USER_LOGIN } from "../../constants";
-import { UserAuthModel } from "../services/models";
+import type { UserAuthModel } from "../services/models";
 import { defineStore } from "pinia";
 
 export const useAuthStore = defineStore("auth", {
@@ -8,7 +8,7 @@ export const useAuthStore = defineStore("auth", {
       sessionStorage.getItem(KEY_USER_LOGIN) ??
         localStorage.getItem(KEY_USER_LOGIN) ??
         "{}",
-    ) as UserAuthModel,
+    ) as Partial<UserAuthModel>,
   }),
   actions: {
     setUser(userData: UserAuthModel, rememberMe: boolean) {
@@ -18,13 +18,13 @@ export const useAuthStore = defineStore("auth", {
       else sessionStorage.setItem(KEY_USER_LOGIN, JSON.stringify(userData));
     },
     clearUser() {
-      this.userData = {} as UserAuthModel;
+      this.userData = {};
       sessionStorage.removeItem(KEY_USER_LOGIN);
       localStorage.removeItem(KEY_USER_LOGIN);
     },
   },
   getters: {
     isAuthenticated: (state) => !!state.userData.token,
-    getToken: (state) => state.userData.token,
+    getToken: (state) => state.userData.token ?? "",
   },
 });

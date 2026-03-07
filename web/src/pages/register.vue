@@ -30,9 +30,9 @@ const doRegister = async () => {
     if (!user.token) throw new Error("Invalid credentials");
 
     authStore.setUser(user, false);
-    router.replace({ name: "Login" });
-  } catch (_) {
-    toast.error("Registration failed");
+    router.replace({ name: "Dashboard" });
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Registration failed");
   }
 };
 
