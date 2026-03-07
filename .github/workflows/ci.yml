@@ -12,7 +12,7 @@ jobs:
       - iptv
 
     env:
-      DB_HOST: 127.0.0.1
+      DB_HOST: 192.168.0.15
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ju1io
@@ -41,16 +41,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
 
       - name: Install web dependencies
         working-directory: web
-        run: npm ci
+        run: yarn
 
       - name: Build Vue app
         working-directory: web
-        run: npm run build
+        run: yarn build
 
       - name: Start Go binary (smoke test)
         run: |
