@@ -64,6 +64,8 @@ jobs:
 
       - name: Install backend and frontend artifacts on runner
         run: |
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          systemctl --user stop iptv.service
           mkdir -p /opt/iptv/web
           cp ./iptv /opt/iptv/iptv
           rm -rf /opt/iptv/web/dist
