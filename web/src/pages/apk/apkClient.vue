@@ -20,8 +20,8 @@ function extractToken(downloadUrl: string): string | null {
   return lastPart ?? null;
 }
 
-function downloadWithAnchor(path: string): void {
-  const href = apkApiService.getDownloadUrl(path);
+function downloadWithAnchor(appKey: string): void {
+  const href = apkApiService.getDownloadUrl(appKey);
   const anchor = document.createElement("a");
   anchor.href = href;
   anchor.target = "_blank";
@@ -31,14 +31,12 @@ function downloadWithAnchor(path: string): void {
   anchor.remove();
 }
 
-async function downloadWithApiBlob(path: string): Promise<void> {
+async function downloadWithApiBlob(appKey: string): Promise<void> {
   state.downloadError = "";
 
   try {
-    const token = extractToken(path);
-    if (!token) {
-      throw new Error("Download token invalido");
-    }
+    const token = extractToken(appKey);
+    if (!token) throw new Error("Download token invalido");
 
     const blob = await apkApiService.downloadByToken(token);
     const url = URL.createObjectURL(blob);

@@ -24,8 +24,8 @@ async function loadVersions(): Promise<void> {
   }
 }
 
-function getDownloadUrl(path: string): string {
-  return apkApiService.getDownloadUrl(path);
+function getDownloadUrl(appKey: string): string {
+  return apkApiService.getDownloadUrl(appKey);
 }
 
 onMounted(() => loadVersions());

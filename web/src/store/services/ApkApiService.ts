@@ -1,4 +1,3 @@
-import { API_ORIGIN } from "../../constants";
 import { BaseApiService } from "./BaseApiService";
 import type {
   ApkCheckResponse,
@@ -34,12 +33,9 @@ export class ApkApiService extends BaseApiService {
     );
   }
 
-  getDownloadUrl(path: string): string {
-    if (path.startsWith("http://") || path.startsWith("https://")) {
-      return path;
-    }
-
-    return `${API_ORIGIN}${path}`;
+  getDownloadUrl(appKey: string): string {
+    const normalizedPath = appKey.startsWith("/") ? appKey : `/${appKey}`;
+    return `${window.location.origin}${normalizedPath}`;
   }
 
   async downloadByToken(token: string): Promise<Blob> {
