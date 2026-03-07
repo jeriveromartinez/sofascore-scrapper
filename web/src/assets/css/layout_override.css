@@ -1,0 +1,5 @@
+.layout-container aside.layout-menu.menu-vertical.menu .menu-fixed {
+    max-height: 93vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}

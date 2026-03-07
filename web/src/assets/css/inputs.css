@@ -1,0 +1,24 @@
+/* Chrome, Edge, Safari */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+    -webkit-text-fill-color: #1f2937 !important;
+    /* color del texto */
+    caret-color: #1f2937;
+    /* color del cursor */
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+    /* fondo del input */
+    box-shadow: 0 0 0 1000px #ffffff inset !important;
+    transition: background-color 9999s ease-out 0s;
+    /* evita flash amarillo */
+}
+
+/* Firefox */
+input:-moz-autofill,
+textarea:-moz-autofill,
+select:-moz-autofill {
+    color: #1f2937 !important;
+    box-shadow: 0 0 0 1000px #ffffff inset !important;
+}

@@ -10,3 +10,5 @@ vendor/
 .env
 .vscode/
 apk_storage/
+web/node_modules/
+web/dist/
