@@ -119,6 +119,7 @@ func Start(addr string) {
 	(&PlaybackController{Group: v1}).LoadRoutes()
 	(&StatsController{Group: v1}).LoadRoutes()
 	(&ApkController{Group: v1}).LoadRoutes()
+	(&TeamController{Group: v1}).LoadRoutes()
 
 	registerDashboardRoutes(router)
 
