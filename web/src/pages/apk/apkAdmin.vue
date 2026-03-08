@@ -41,7 +41,10 @@ onMounted(() => loadVersions());
           <h5 class="mb-0">Versiones APK</h5>
         </div>
         <div>
-          <apk-upload-modal @uploaded="loadVersions" />
+          <apk-upload-modal
+            @uploaded="loadVersions"
+            :auto-close-modal="false"
+          />
           <button
             class="btn btn-outline-primary btn-sm ms-2"
             :disabled="listState.loading"

@@ -2,6 +2,10 @@
 import { onBeforeUnmount, reactive, watch } from "vue";
 import { apkApiService } from "../../store/services";
 
+const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
+  autoCloseModal: true,
+});
+
 const emit = defineEmits<{
   uploaded: [version: string];
 }>();
@@ -37,6 +41,10 @@ function closeUploadModal(): void {
   resetUploadForm();
 }
 
+function autoCloseModal(): void {
+  if (props.autoCloseModal) closeUploadModal();
+}
+
 function onFileChange(event: Event): void {
   const target = event.target as HTMLInputElement;
   upload.file = target.files?.[0] ?? null;
@@ -64,8 +72,7 @@ async function submitUpload(): Promise<void> {
     closeUploadModal();
     emit("uploaded", response.version);
   } catch (error) {
-    upload.error =
-      error instanceof Error ? error.message : "No se pudo subir el APK";
+    upload.error = error instanceof Error ? error.message : "No se pudo subir el APK";
   } finally {
     upload.loading = false;
   }
@@ -97,7 +104,7 @@ onBeforeUnmount(() => {
     style="display: block"
     aria-modal="true"
     role="dialog"
-    @click.self="closeUploadModal"
+    @click.self="autoCloseModal"
   >
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -152,9 +159,7 @@ onBeforeUnmount(() => {
                   :aria-valuenow="upload.progress"
                   aria-valuemin="0"
                   aria-valuemax="100"
-                >
-                  {{ upload.progress }}%
-                </div>
+                ></div>
               </div>
             </div>
             <div v-if="upload.error" class="col-12">
