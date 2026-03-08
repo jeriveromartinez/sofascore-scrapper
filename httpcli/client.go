@@ -37,7 +37,7 @@ func LoadData(sport string, date time.Time) []byte {
 	}
 
 	defer homeResp.Body.Close()
-	if homeResp.StatusCode < 200 || homeResp.StatusCode >= 300 {
+	if homeResp.StatusCode < 200 || homeResp.StatusCode >= 305 {
 		panic(fmt.Errorf("sofascore home request failed with status %d", homeResp.StatusCode))
 	}
 	_, _ = io.Copy(io.Discard, homeResp.Body)
@@ -56,7 +56,7 @@ func LoadData(sport string, date time.Time) []byte {
 	}
 
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 305 {
 		panic(fmt.Errorf("sofascore api request failed with status %d", resp.StatusCode))
 	}
 
