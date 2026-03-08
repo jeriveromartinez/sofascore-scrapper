@@ -67,6 +67,8 @@ jobs:
           export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           systemctl --user stop iptv.service
           mkdir -p /opt/iptv/web
+          mkdir -p /opt/iptv/apk_storage
+          mkdir -p /opt/iptv/image_storage
           cp ./iptv /opt/iptv/iptv
           rm -rf /opt/iptv/web/dist
           cp -R ./web/dist /opt/iptv/web/dist
