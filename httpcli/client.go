@@ -1,7 +1,6 @@
 package httpcli
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -23,22 +22,22 @@ func setBrowserHeaders(req *http.Request, accept string, referer string) {
 
 func LoadData(sport string, date time.Time) []byte {
 	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, Timeout: 20 * time.Second}
+	client := &http.Client{Jar: jar, Timeout: 5 * time.Second}
 
 	homeReq, err := http.NewRequest(http.MethodGet, "https://www.sofascore.com/es/", nil)
 	if err != nil {
-		panic(err)
+		return nil
 	}
 	setBrowserHeaders(homeReq, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", "")
 
 	homeResp, err := client.Do(homeReq)
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
 	defer homeResp.Body.Close()
 	if homeResp.StatusCode < 200 || homeResp.StatusCode >= 305 {
-		panic(fmt.Errorf("sofascore home request failed with status %d", homeResp.StatusCode))
+		return nil
 	}
 	_, _ = io.Copy(io.Discard, homeResp.Body)
 
@@ -46,23 +45,23 @@ func LoadData(sport string, date time.Time) []byte {
 	apiURL := "https://www.sofascore.com/api/v1/sport/" + sport + "/scheduled-events/" + now
 	apiReq, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
 	setBrowserHeaders(apiReq, "application/json, text/plain, */*", "https://www.sofascore.com/es/")
 	resp, err := client.Do(apiReq)
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 305 {
-		panic(fmt.Errorf("sofascore api request failed with status %d", resp.StatusCode))
+		return nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
 	return body
