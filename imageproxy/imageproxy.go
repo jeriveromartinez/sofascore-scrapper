@@ -59,13 +59,15 @@ func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
 		return "", fmt.Errorf("unexpected HTTP status %d when downloading image", resp.StatusCode)
 	}
 
-	// Write to a temporary file first so a partial download never leaves a
-	// corrupt file at the final path.
-	tmpPath := localPath + ".tmp"
-	f, err := os.Create(tmpPath)
+	// Write to a uniquely-named temp file in the same directory first so that:
+	//  a) a partial download never leaves a corrupt file at the final path, and
+	//  b) concurrent downloads of the same team never share a temp-file handle
+	//     (which causes "file in use" errors on Windows).
+	f, err := os.CreateTemp(dir, "logo-*.tmp")
 	if err != nil {
 		return "", fmt.Errorf("could not create temp file: %w", err)
 	}
+	tmpPath := f.Name()
 
 	if _, copyErr := io.Copy(f, resp.Body); copyErr != nil {
 		f.Close()
@@ -80,6 +82,10 @@ func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
 
 	if err := os.Rename(tmpPath, localPath); err != nil {
 		os.Remove(tmpPath)
+		// Another goroutine may have already placed the file; treat that as success.
+		if _, statErr := os.Stat(localPath); statErr == nil {
+			return localPath, nil
+		}
 		return "", fmt.Errorf("could not finalize image file: %w", err)
 	}
 
