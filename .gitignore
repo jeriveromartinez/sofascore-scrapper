@@ -7,5 +7,6 @@ sofascore-scrapper
 .env
 .vscode/
 apk_storage/
+image_storage/
 web/node_modules/
 web/dist/
