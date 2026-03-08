@@ -11,6 +11,7 @@ const upload = reactive({
   version: "",
   description: "",
   loading: false,
+  progress: 0,
   error: "",
 });
 
@@ -23,6 +24,7 @@ function resetUploadForm(): void {
   upload.version = "";
   upload.description = "";
   upload.error = "";
+  upload.progress = 0;
 }
 
 function openUploadModal(): void {
@@ -47,6 +49,7 @@ async function submitUpload(): Promise<void> {
   }
 
   upload.loading = true;
+  upload.progress = 0;
   upload.error = "";
 
   try {
@@ -54,6 +57,9 @@ async function submitUpload(): Promise<void> {
       upload.file,
       upload.version || undefined,
       upload.description || undefined,
+      (percent) => {
+        upload.progress = percent;
+      },
     );
     closeUploadModal();
     emit("uploaded", response.version);
@@ -137,6 +143,20 @@ onBeforeUnmount(() => {
                 rows="3"
               ></textarea>
             </div>
+            <div v-if="upload.loading" class="col-12">
+              <div class="progress">
+                <div
+                  class="progress-bar progress-bar-striped progress-bar-animated"
+                  role="progressbar"
+                  :style="{ width: upload.progress + '%' }"
+                  :aria-valuenow="upload.progress"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                >
+                  {{ upload.progress }}%
+                </div>
+              </div>
+            </div>
             <div v-if="upload.error" class="col-12">
               <div class="alert alert-danger mb-0">{{ upload.error }}</div>
             </div>
@@ -157,7 +177,7 @@ onBeforeUnmount(() => {
             form="upload-apk-form"
             :disabled="upload.loading"
           >
-            {{ upload.loading ? "Subiendo..." : "Subir" }}
+            {{ upload.loading ? `Subiendo... ${upload.progress}%` : "Subir" }}
           </button>
         </div>
       </div>

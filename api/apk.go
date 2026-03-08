@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +17,12 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/apkutil"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
+
+// maxChunkSize is the maximum allowed size of a single uploaded chunk (20 MB).
+const maxChunkSize = 20 * 1024 * 1024
+
+// maxTotalChunks is the maximum number of chunks allowed per upload session.
+const maxTotalChunks = 1000
 
 // semverPattern accepts only digits and dots, e.g. "1.2.3".
 var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
@@ -33,6 +41,10 @@ type ApkController struct {
 func (c *ApkController) LoadRoutes() {
 	// Admin: upload a new APK (requires authentication)
 	c.Group.POST("/apk/upload", authMiddleware(), handleUploadApk)
+	// Admin: chunked upload – send one chunk at a time (requires authentication)
+	c.Group.POST("/apk/upload/chunk", authMiddleware(), handleUploadChunk)
+	// Admin: assemble previously uploaded chunks into a final APK (requires authentication)
+	c.Group.POST("/apk/upload/assemble", authMiddleware(), handleAssembleChunks)
 	// Admin: list all APK versions (requires authentication)
 	c.Group.GET("/apk/versions", authMiddleware(), handleListApkVersions)
 	// Public: check whether a newer APK is available
@@ -112,6 +124,218 @@ func handleUploadApk(c *gin.Context) {
 	apk, err := repository.CreateApkVersion(
 		version, fileName, destPath, description, apkInfo.PackageName,
 		fileHeader.Size, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
+	)
+	if err != nil {
+		_ = os.Remove(destPath)
+		respondCBOR(c, http.StatusConflict, map[string]string{"error": "could not save APK version: " + err.Error()})
+		return
+	}
+
+	respondCBOR(c, http.StatusCreated, map[string]any{
+		"id":                 apk.ID,
+		"version":            apk.Version,
+		"file_name":          apk.FileName,
+		"file_size":          apk.FileSize,
+		"description":        apk.Description,
+		"package_name":       apk.PackageName,
+		"version_code":       apk.VersionCode,
+		"min_sdk_version":    apk.MinSDKVersion,
+		"target_sdk_version": apk.TargetSDKVersion,
+		"download_token":     apk.DownloadToken,
+		"download_url":       fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
+		"created_at":         apk.CreatedAt,
+	})
+}
+
+// handleUploadChunk receives a single file chunk and stores it in a temporary directory.
+// This endpoint is part of the chunked upload flow: the frontend splits large files into
+// 10 MB pieces so that each POST stays below Cloudflare's 50 MB body-size limit.
+//
+// Form fields:
+//   - upload_id    (required) – UUID identifying the upload session
+//   - chunk_index  (required) – 0-based index of this chunk
+//   - total_chunks (required) – total number of chunks for this upload
+//   - file         (required) – the chunk binary data
+func handleUploadChunk(c *gin.Context) {
+	uploadID := c.PostForm("upload_id")
+	if _, err := uuid.Parse(uploadID); err != nil {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		return
+	}
+
+	chunkIndex, err := strconv.Atoi(c.PostForm("chunk_index"))
+	if err != nil || chunkIndex < 0 {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid chunk_index"})
+		return
+	}
+
+	totalChunks, err := strconv.Atoi(c.PostForm("total_chunks"))
+	if err != nil || totalChunks <= 0 || totalChunks > maxTotalChunks {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
+		return
+	}
+
+	if chunkIndex >= totalChunks {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "chunk_index must be less than total_chunks"})
+		return
+	}
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "chunk data is required"})
+		return
+	}
+
+	if fileHeader.Size > maxChunkSize {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "chunk size exceeds maximum allowed size"})
+		return
+	}
+
+	// Build the chunk directory path and verify it stays within the storage root.
+	chunkDir := filepath.Join(apkStoragePath(), "chunks", uploadID)
+	absStoragePath, _ := filepath.Abs(apkStoragePath())
+	absChunkDir, err := filepath.Abs(chunkDir)
+	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		return
+	}
+
+	if err := os.MkdirAll(chunkDir, 0o755); err != nil {
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not create chunk directory"})
+		return
+	}
+
+	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", chunkIndex))
+	if err := c.SaveUploadedFile(fileHeader, chunkPath); err != nil {
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not save chunk"})
+		return
+	}
+
+	respondCBOR(c, http.StatusOK, map[string]any{
+		"upload_id":    uploadID,
+		"chunk_index":  chunkIndex,
+		"total_chunks": totalChunks,
+	})
+}
+
+// handleAssembleChunks joins all previously uploaded chunks into a single APK file,
+// parses its metadata, and creates the APK version record – exactly as handleUploadApk does.
+//
+// Form fields:
+//   - upload_id    (required) – UUID identifying the upload session
+//   - total_chunks (required) – total number of chunks expected
+//   - version      (optional) – override version extracted from APK (MAJOR.MINOR.PATCH)
+//   - description  (optional)
+func handleAssembleChunks(c *gin.Context) {
+	uploadID := c.PostForm("upload_id")
+	if _, err := uuid.Parse(uploadID); err != nil {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		return
+	}
+
+	totalChunks, err := strconv.Atoi(c.PostForm("total_chunks"))
+	if err != nil || totalChunks <= 0 || totalChunks > maxTotalChunks {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
+		return
+	}
+
+	// Validate the chunk directory stays within the storage root.
+	chunkDir := filepath.Join(apkStoragePath(), "chunks", uploadID)
+	absStoragePath, _ := filepath.Abs(apkStoragePath())
+	absChunkDir, err := filepath.Abs(chunkDir)
+	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		return
+	}
+
+	// Verify that every expected chunk is present before starting assembly.
+	for i := 0; i < totalChunks; i++ {
+		chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", i))
+		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
+			respondCBOR(c, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("chunk %d is missing", i)})
+			return
+		}
+	}
+
+	storagePath := apkStoragePath()
+	if err := os.MkdirAll(storagePath, 0o755); err != nil {
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not create storage directory"})
+		return
+	}
+
+	// Create a temporary file to stream the assembled content into.
+	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", randomSuffix()))
+	outFile, err := os.Create(tmpPath)
+	if err != nil {
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not create temporary file"})
+		return
+	}
+
+	for i := 0; i < totalChunks; i++ {
+		chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", i))
+		chunkFile, err := os.Open(chunkPath)
+		if err != nil {
+			outFile.Close()
+			_ = os.Remove(tmpPath)
+			respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("could not read chunk %d", i)})
+			return
+		}
+		_, copyErr := io.Copy(outFile, chunkFile)
+		chunkFile.Close()
+		if copyErr != nil {
+			outFile.Close()
+			_ = os.Remove(tmpPath)
+			respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not write assembled file"})
+			return
+		}
+	}
+
+	// Capture total file size before closing.
+	totalSize := int64(0)
+	if info, err := outFile.Stat(); err == nil {
+		totalSize = info.Size()
+	}
+	outFile.Close()
+
+	// Clean up chunk directory now that assembly is complete.
+	_ = os.RemoveAll(chunkDir)
+
+	// Parse APK metadata from the assembled file.
+	apkInfo, parseErr := apkutil.ParseAPKInfo(tmpPath)
+	if parseErr != nil {
+		_ = os.Remove(tmpPath)
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "could not parse APK metadata: " + parseErr.Error()})
+		return
+	}
+
+	version := c.PostForm("version")
+	if version == "" {
+		version = apkInfo.VersionName
+	}
+	if version == "" || !semverPattern.MatchString(version) {
+		_ = os.Remove(tmpPath)
+		errResp := map[string]string{
+			"error": "version must be in MAJOR.MINOR.PATCH format; provide it via the 'version' field or ensure the APK versionName uses that format",
+		}
+		if apkInfo.VersionName != "" {
+			errResp["apk_version_name"] = apkInfo.VersionName
+		}
+		respondCBOR(c, http.StatusBadRequest, errResp)
+		return
+	}
+
+	fileName := fmt.Sprintf("%s-%s.apk", apkInfo.PackageName, version)
+	destPath := filepath.Join(storagePath, fileName)
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		_ = os.Remove(tmpPath)
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not finalize file"})
+		return
+	}
+
+	description := c.PostForm("description")
+	apk, err := repository.CreateApkVersion(
+		version, fileName, destPath, description, apkInfo.PackageName,
+		totalSize, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
