@@ -36,7 +36,7 @@ jobs:
       - name: Build Go binary
         run: |
           mkdir -p bin
-          go build -v -o iptv .
+          GOTOOLCHAIN=go1.25.0 CGO_ENABLED=0 go build -trimpath -o iptv .
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
