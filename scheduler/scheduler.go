@@ -29,8 +29,8 @@ func scrapeNext7Days() {
 }
 
 func Start() {
-	scrapeDate(httpcli.FOOTBALL, time.Now())
-	scrapeNext7Days()
+	go scrapeDate(httpcli.FOOTBALL, time.Now())
+	go scrapeNext7Days()
 
 	// Every minute: scrape today
 	go func() {

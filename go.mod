@@ -1,6 +1,6 @@
 module github.com/jeriveromartinez/sofascore-scrapper
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/avast/apkparser v0.0.0-20251022140151-7294e274bf65
