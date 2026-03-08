@@ -155,6 +155,40 @@ export abstract class BaseApiService {
     return this.decodeResponse<T>(data);
   }
 
+  /**
+   * Send a multipart/form-data request and parse the response as plain JSON.
+   * Use this instead of postMultipart when CBOR encoding overhead is undesirable
+   * (e.g. chunked file uploads where throughput matters more than payload size).
+   */
+  protected async postMultipartJSON<T>(
+    url: string,
+    formData: FormData,
+  ): Promise<T> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const { data, status } = await this.http.post<T>(
+      `${this.pathApi}${url}`,
+      formData,
+      {
+        headers,
+        validateStatus: () => true,
+      },
+    );
+
+    if (status >= 400) {
+      const errData = data as Record<string, unknown> | undefined;
+      const message =
+        errData && typeof errData === "object" && typeof errData.error === "string"
+          ? errData.error
+          : `HTTP ${status}`;
+      throw new Error(message);
+    }
+
+    return data;
+  }
+
   protected async getBinary(url: string): Promise<Blob> {
     const headers = this.getHeaders();
     const response = await this.http.get<ArrayBuffer>(`${this.pathApi}${url}`, {

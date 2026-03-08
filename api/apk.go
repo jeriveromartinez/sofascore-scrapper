@@ -150,6 +150,7 @@ func handleUploadApk(c *gin.Context) {
 // handleUploadChunk receives a single file chunk and stores it in a temporary directory.
 // This endpoint is part of the chunked upload flow: the frontend splits large files into
 // 10 MB pieces so that each POST stays below Cloudflare's 50 MB body-size limit.
+// Responses are plain JSON (not CBOR) for maximum throughput.
 //
 // Form fields:
 //   - upload_id    (required) – UUID identifying the upload session
@@ -159,35 +160,35 @@ func handleUploadApk(c *gin.Context) {
 func handleUploadChunk(c *gin.Context) {
 	uploadID := c.PostForm("upload_id")
 	if _, err := uuid.Parse(uploadID); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
 
 	chunkIndex, err := strconv.Atoi(c.PostForm("chunk_index"))
 	if err != nil || chunkIndex < 0 {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid chunk_index"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid chunk_index"})
 		return
 	}
 
 	totalChunks, err := strconv.Atoi(c.PostForm("total_chunks"))
 	if err != nil || totalChunks <= 0 || totalChunks > maxTotalChunks {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
 		return
 	}
 
 	if chunkIndex >= totalChunks {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "chunk_index must be less than total_chunks"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "chunk_index must be less than total_chunks"})
 		return
 	}
 
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "chunk data is required"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "chunk data is required"})
 		return
 	}
 
 	if fileHeader.Size > maxChunkSize {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "chunk size exceeds maximum allowed size"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "chunk size exceeds maximum allowed size"})
 		return
 	}
 
@@ -196,22 +197,22 @@ func handleUploadChunk(c *gin.Context) {
 	absStoragePath, _ := filepath.Abs(apkStoragePath())
 	absChunkDir, err := filepath.Abs(chunkDir)
 	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
 
 	if err := os.MkdirAll(chunkDir, 0o755); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not create chunk directory"})
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not create chunk directory"})
 		return
 	}
 
 	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", chunkIndex))
 	if err := c.SaveUploadedFile(fileHeader, chunkPath); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not save chunk"})
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not save chunk"})
 		return
 	}
 
-	respondCBOR(c, http.StatusOK, map[string]any{
+	c.JSON(http.StatusOK, map[string]any{
 		"upload_id":    uploadID,
 		"chunk_index":  chunkIndex,
 		"total_chunks": totalChunks,
@@ -220,6 +221,7 @@ func handleUploadChunk(c *gin.Context) {
 
 // handleAssembleChunks joins all previously uploaded chunks into a single APK file,
 // parses its metadata, and creates the APK version record – exactly as handleUploadApk does.
+// Responses are plain JSON (not CBOR) to match the chunk upload endpoint.
 //
 // Form fields:
 //   - upload_id    (required) – UUID identifying the upload session
@@ -229,13 +231,13 @@ func handleUploadChunk(c *gin.Context) {
 func handleAssembleChunks(c *gin.Context) {
 	uploadID := c.PostForm("upload_id")
 	if _, err := uuid.Parse(uploadID); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
 
 	totalChunks, err := strconv.Atoi(c.PostForm("total_chunks"))
 	if err != nil || totalChunks <= 0 || totalChunks > maxTotalChunks {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
 		return
 	}
 
@@ -244,7 +246,7 @@ func handleAssembleChunks(c *gin.Context) {
 	absStoragePath, _ := filepath.Abs(apkStoragePath())
 	absChunkDir, err := filepath.Abs(chunkDir)
 	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
 
@@ -252,14 +254,14 @@ func handleAssembleChunks(c *gin.Context) {
 	for i := 0; i < totalChunks; i++ {
 		chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", i))
 		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
-			respondCBOR(c, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("chunk %d is missing", i)})
+			c.JSON(http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("chunk %d is missing", i)})
 			return
 		}
 	}
 
 	storagePath := apkStoragePath()
 	if err := os.MkdirAll(storagePath, 0o755); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not create storage directory"})
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not create storage directory"})
 		return
 	}
 
@@ -267,7 +269,7 @@ func handleAssembleChunks(c *gin.Context) {
 	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", randomSuffix()))
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not create temporary file"})
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not create temporary file"})
 		return
 	}
 
@@ -277,7 +279,7 @@ func handleAssembleChunks(c *gin.Context) {
 		if err != nil {
 			outFile.Close()
 			_ = os.Remove(tmpPath)
-			respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("could not read chunk %d", i)})
+			c.JSON(http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("could not read chunk %d", i)})
 			return
 		}
 		_, copyErr := io.Copy(outFile, chunkFile)
@@ -285,7 +287,7 @@ func handleAssembleChunks(c *gin.Context) {
 		if copyErr != nil {
 			outFile.Close()
 			_ = os.Remove(tmpPath)
-			respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not write assembled file"})
+			c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not write assembled file"})
 			return
 		}
 	}
@@ -304,7 +306,7 @@ func handleAssembleChunks(c *gin.Context) {
 	apkInfo, parseErr := apkutil.ParseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "could not parse APK metadata: " + parseErr.Error()})
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "could not parse APK metadata: " + parseErr.Error()})
 		return
 	}
 
@@ -320,7 +322,7 @@ func handleAssembleChunks(c *gin.Context) {
 		if apkInfo.VersionName != "" {
 			errResp["apk_version_name"] = apkInfo.VersionName
 		}
-		respondCBOR(c, http.StatusBadRequest, errResp)
+		c.JSON(http.StatusBadRequest, errResp)
 		return
 	}
 
@@ -328,7 +330,7 @@ func handleAssembleChunks(c *gin.Context) {
 	destPath := filepath.Join(storagePath, fileName)
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		_ = os.Remove(tmpPath)
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not finalize file"})
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not finalize file"})
 		return
 	}
 
@@ -339,11 +341,11 @@ func handleAssembleChunks(c *gin.Context) {
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		respondCBOR(c, http.StatusConflict, map[string]string{"error": "could not save APK version: " + err.Error()})
+		c.JSON(http.StatusConflict, map[string]string{"error": "could not save APK version: " + err.Error()})
 		return
 	}
 
-	respondCBOR(c, http.StatusCreated, map[string]any{
+	c.JSON(http.StatusCreated, map[string]any{
 		"id":                 apk.ID,
 		"version":            apk.Version,
 		"file_name":          apk.FileName,

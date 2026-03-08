@@ -15,6 +15,7 @@ export class ApkApiService extends BaseApiService {
 
   /**
    * Upload a single chunk of a file as part of a chunked upload session.
+   * Uses plain JSON (not CBOR) for maximum throughput.
    * @param uploadId  - UUID identifying the upload session.
    * @param chunkIndex - 0-based index of this chunk.
    * @param totalChunks - Total number of chunks for this upload.
@@ -31,11 +32,12 @@ export class ApkApiService extends BaseApiService {
     form.append("chunk_index", String(chunkIndex));
     form.append("total_chunks", String(totalChunks));
     form.append("file", chunk, `chunk-${chunkIndex}`);
-    await this.postMultipart<unknown>("/upload/chunk", form);
+    await this.postMultipartJSON<unknown>("/upload/chunk", form);
   }
 
   /**
    * Assemble all previously uploaded chunks into a final APK version.
+   * Uses plain JSON (not CBOR) to match the chunk upload endpoint.
    * @param uploadId    - UUID identifying the upload session.
    * @param totalChunks - Total number of chunks that were uploaded.
    * @param version     - Optional version override (MAJOR.MINOR.PATCH).
@@ -52,7 +54,7 @@ export class ApkApiService extends BaseApiService {
     form.append("total_chunks", String(totalChunks));
     if (version) form.append("version", version);
     if (description) form.append("description", description);
-    return this.postMultipart<UploadApkResponse>("/upload/assemble", form);
+    return this.postMultipartJSON<UploadApkResponse>("/upload/assemble", form);
   }
 
   /**
