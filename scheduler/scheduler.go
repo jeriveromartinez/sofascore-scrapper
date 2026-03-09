@@ -10,7 +10,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
-func scrapeDate(sport string, date time.Time) {
+func scrape(sport string, date time.Time) {
 	body := httpcli.LoadData(sport, date)
 	var list models.EventsListResponse
 	if err := json.Unmarshal(body, &list); err != nil {
@@ -21,15 +21,24 @@ func scrapeDate(sport string, date time.Time) {
 	log.Printf("scheduler: scraped %d events for %s on %s", len(list.Events), sport, date.Format("2006-01-02"))
 }
 
-func scrapeNext7Days() {
-	now := time.Now()
-	for i := 1; i <= 7; i++ {
-		scrapeDate(httpcli.FOOTBALL, now.Add(time.Duration(i)*24*time.Hour))
+func scrapeToday(date time.Time) {
+	for _, sport := range httpcli.GET_SPORTS() {
+		scrape(sport, date)
 	}
 }
 
+func scrapeNext7Days() {
+	now := time.Now()
+	for _, sport := range httpcli.GET_SPORTS() {
+		for i := 1; i <= 7; i++ {
+			scrape(sport, now.Add(time.Duration(i)*24*time.Hour))
+		}
+	}
+
+}
+
 func Start() {
-	go scrapeDate(httpcli.FOOTBALL, time.Now())
+	go scrapeToday(time.Now())
 	go scrapeNext7Days()
 
 	// Every minute: scrape today
@@ -38,7 +47,7 @@ func Start() {
 		defer ticker.Stop()
 		for {
 			<-ticker.C
-			scrapeDate(httpcli.FOOTBALL, time.Now())
+			scrape(httpcli.FOOTBALL, time.Now())
 		}
 	}()
 
