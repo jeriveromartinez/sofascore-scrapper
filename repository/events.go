@@ -56,11 +56,15 @@ func isProxiedLogoURL(url string) bool {
 // goroutine that downloads the logo and updates the database.  Each goroutine
 // uses its own GORM session to avoid sharing state across goroutines.
 func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
-	downloadSem <- struct{}{}
-	go func() {
-		defer func() { <-downloadSem }()
-		downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
-	}()
+	select {
+	case downloadSem <- struct{}{}:
+		go func() {
+			defer func() { <-downloadSem }()
+			downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
+		}()
+	default:
+		// Skip this round if downloader is saturated; next scrape will retry.
+	}
 }
 
 // downloadAndUpdateTeamLogo downloads the logo for the given team and, on
