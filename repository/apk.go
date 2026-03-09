@@ -37,13 +37,13 @@ func CreateApkVersion(version, fileName, filePath, description, packageName stri
 }
 
 // GetLatestApkVersion returns the active APK with the highest semantic version.
-func GetLatestApkVersion() (*models.ApkVersion, error) {
+func GetLatestApkVersion(packageName string) (*models.ApkVersion, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
 	var versions []models.ApkVersion
-	if err := db.Where("is_active = ?", true).Find(&versions).Error; err != nil {
+	if err := db.Where("is_active = ? AND package_name = ?", true, packageName).Find(&versions).Error; err != nil {
 		return nil, err
 	}
 	if len(versions) == 0 {

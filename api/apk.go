@@ -366,12 +366,18 @@ func handleAssembleChunks(c *gin.Context) {
 // Returns update_available=true with metadata when the server has a newer version.
 func handleCheckApkUpdate(c *gin.Context) {
 	clientVersion := c.Query("version")
+	clientPackage := c.Query("package")
 	if clientVersion == "" {
 		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "version query parameter is required"})
 		return
 	}
 
-	latest, err := repository.GetLatestApkVersion()
+	if clientPackage == "" {
+		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "package query parameter is required"})
+		return
+	}
+
+	latest, err := repository.GetLatestApkVersion(clientPackage)
 	if err != nil {
 		respondCBOR(c, http.StatusNotFound, map[string]string{"error": "no APK version available"})
 		return
@@ -470,4 +476,3 @@ func handleListApkVersions(c *gin.Context) {
 
 	respondCBOR(c, http.StatusOK, result)
 }
-
