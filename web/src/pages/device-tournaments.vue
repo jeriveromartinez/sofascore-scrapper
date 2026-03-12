@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { reactive, onMounted, computed } from "vue";
-import { deviceTournamentsApiService, tournamentsApiService } from "../store/services";
-import type { DeviceTournament, Tournament, Device } from "../store/services/models";
+import {
+  devicesApiService,
+  deviceTournamentsApiService,
+  tournamentsApiService,
+} from "../store/services";
+import type {
+  DeviceTournament,
+  Tournament,
+  Device,
+  DeviceResponse,
+} from "../store/services/models";
 
 const state = reactive({
   deviceTournaments: [] as DeviceTournament[],
   tournaments: [] as Tournament[],
-  devices: [] as Device[],
+  devices: {} as DeviceResponse,
   loading: false,
   error: "",
   success: "",
@@ -18,21 +27,26 @@ async function loadData(): Promise<void> {
   state.loading = true;
   state.error = "";
   try {
-    const [deviceTournaments, tournaments] = await Promise.all([
+    const [deviceTournaments, tournaments, devices] = await Promise.all([
       deviceTournamentsApiService.getAllDeviceTournaments(),
       tournamentsApiService.getAllTournaments(),
+      devicesApiService.getDevices({
+        page: state.devices.page || 1,
+        limit: state.devices.limit || 10,
+      }),
     ]);
     state.deviceTournaments = deviceTournaments;
+    state.devices = devices;
     state.tournaments = tournaments;
 
     // Extract unique devices from device tournaments
     const deviceMap = new Map<number, Device>();
-    deviceTournaments.forEach(dt => {
+    deviceTournaments.forEach((dt) => {
       if (dt.Device && !deviceMap.has(dt.Device.ID)) {
         deviceMap.set(dt.Device.ID, dt.Device);
       }
     });
-    state.devices = Array.from(deviceMap.values());
+    // state.devices = Array.from(deviceMap.values());
   } catch (error) {
     state.error =
       error instanceof Error
@@ -45,7 +59,7 @@ async function loadData(): Promise<void> {
 
 const deviceTournamentsByDevice = computed(() => {
   const grouped = new Map<number, DeviceTournament[]>();
-  state.deviceTournaments.forEach(dt => {
+  state.deviceTournaments.forEach((dt) => {
     const list = grouped.get(dt.DeviceID) || [];
     list.push(dt);
     grouped.set(dt.DeviceID, list);
@@ -53,12 +67,19 @@ const deviceTournamentsByDevice = computed(() => {
   return grouped;
 });
 
-function selectDevice(deviceId: number): void {
+async function selectDevice(deviceId: number): Promise<void> {
+  state.loading = true;
   state.selectedDeviceId = deviceId;
-  const deviceTournaments = deviceTournamentsByDevice.value.get(deviceId) || [];
-  state.selectedTournamentIds = deviceTournaments.map(dt => dt.tournament_id);
+  const deviceTournaments =
+    await deviceTournamentsApiService.getDeviceTournaments(
+      state.selectedDeviceId,
+    );
+  console.log(deviceTournaments);
+  //   const deviceTournaments = deviceTournamentsByDevice.value.get(deviceId) || [];
+  //   state.selectedTournamentIds = deviceTournaments.map((dt) => dt.tournament_id);
   state.success = "";
   state.error = "";
+  state.loading = false;
 }
 
 async function saveDeviceTournaments(): Promise<void> {
@@ -68,9 +89,12 @@ async function saveDeviceTournaments(): Promise<void> {
   state.error = "";
   state.success = "";
   try {
-    await deviceTournamentsApiService.setDeviceTournaments(state.selectedDeviceId, {
-      tournament_ids: state.selectedTournamentIds,
-    });
+    await deviceTournamentsApiService.setDeviceTournaments(
+      state.selectedDeviceId,
+      {
+        tournament_ids: state.selectedTournamentIds,
+      },
+    );
     state.success = "Torneos del dispositivo actualizados correctamente";
     await loadData();
   } catch (error) {
@@ -101,7 +125,6 @@ onMounted(() => {
   <div class="card">
     <div class="card-header">
       <h5 class="mb-0">Gestión de Torneos por Dispositivo</h5>
-      <small class="text-body-secondary">M2M /api/v1/device-tournaments</small>
     </div>
 
     <div class="card-body">
@@ -123,7 +146,7 @@ onMounted(() => {
           <h6>Dispositivos</h6>
           <div class="list-group">
             <button
-              v-for="device in state.devices"
+              v-for="device in state.devices.data"
               :key="device.ID"
               type="button"
               class="list-group-item list-group-item-action"
@@ -137,7 +160,7 @@ onMounted(() => {
               <small>{{ device.Platform }}</small>
             </button>
           </div>
-          <p v-if="state.devices.length === 0" class="text-muted mt-3">
+          <p v-if="state.devices.total === 0" class="text-muted mt-3">
             No hay dispositivos con torneos asignados
           </p>
         </div>
@@ -158,8 +181,12 @@ onMounted(() => {
                   :checked="state.selectedTournamentIds.includes(tournament.ID)"
                   @change="toggleTournament(tournament.ID)"
                 />
-                <label class="form-check-label" :for="`tournament-${tournament.ID}`">
-                  {{ tournament.name }} <small class="text-muted">({{ tournament.slug }})</small>
+                <label
+                  class="form-check-label"
+                  :for="`tournament-${tournament.ID}`"
+                >
+                  {{ tournament.name }}
+                  <small class="text-muted">({{ tournament.slug }})</small>
                 </label>
               </div>
             </div>
@@ -189,8 +216,15 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="dt in state.deviceTournaments" :key="`${dt.DeviceID}-${dt.tournament_id}`">
-              <td>{{ dt.Device?.Name || dt.Device?.Token || `ID: ${dt.DeviceID}` }}</td>
+            <tr
+              v-for="dt in state.deviceTournaments"
+              :key="`${dt.DeviceID}-${dt.tournament_id}`"
+            >
+              <td>
+                {{
+                  dt.Device?.Name || dt.Device?.Token || `ID: ${dt.DeviceID}`
+                }}
+              </td>
               <td>{{ dt.Tournament?.name || `ID: ${dt.tournament_id}` }}</td>
             </tr>
           </tbody>
