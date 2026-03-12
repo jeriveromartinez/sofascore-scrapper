@@ -8,27 +8,27 @@ import type {
 
 export class DeviceTournamentsApiService extends BaseApiService {
   constructor() {
-    super("/api/v1");
+    super("device-tournaments");
   }
 
   async getAllDeviceTournaments(): Promise<DeviceTournament[]> {
-    return this.get<DeviceTournament[]>("/device-tournaments");
+    return this.get<DeviceTournament[]>("");
   }
 
   async getDeviceTournaments(deviceId: number): Promise<DeviceTournament[]> {
-    return this.get<DeviceTournament[]>(`/device-tournaments/${deviceId}`);
+    return this.get<DeviceTournament[]>(`/${deviceId}`);
   }
 
   async assignTournamentToDevice(payload: AssignTournamentPayload): Promise<DeviceTournament> {
-    return this.post<DeviceTournament, AssignTournamentPayload>("/device-tournaments", payload);
+    return this.post<DeviceTournament, AssignTournamentPayload>("", payload);
   }
 
   async removeTournamentFromDevice(payload: AssignTournamentPayload): Promise<StatusResponse> {
-    return this.deleteWithBody<StatusResponse, AssignTournamentPayload>("/device-tournaments", payload);
+    return this.deleteWithBody<StatusResponse, AssignTournamentPayload>("", payload);
   }
 
   async setDeviceTournaments(deviceId: number, payload: SetDeviceTournamentsPayload): Promise<StatusResponse> {
-    return this.put<StatusResponse, SetDeviceTournamentsPayload>(`/device-tournaments/${deviceId}`, payload);
+    return this.put<StatusResponse, SetDeviceTournamentsPayload>(`/${deviceId}`, payload);
   }
 }
 
