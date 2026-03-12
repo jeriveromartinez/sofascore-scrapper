@@ -57,8 +57,8 @@ async function createTournament(): Promise<void> {
 
 function startEdit(tournament: Tournament): void {
   state.editingId = tournament.ID;
-  state.form.name = tournament.Name;
-  state.form.slug = tournament.Slug;
+  state.form.name = tournament.name;
+  state.form.slug = tournament.slug;
 }
 
 function cancelEdit(): void {
@@ -116,7 +116,6 @@ onMounted(() => {
   <div class="card">
     <div class="card-header">
       <h5 class="mb-0">Gestión de Torneos</h5>
-      <small class="text-body-secondary">CRUD /api/v1/tournaments</small>
     </div>
 
     <div class="card-body">
@@ -183,8 +182,8 @@ onMounted(() => {
           <tbody>
             <tr v-for="tournament in state.tournaments" :key="tournament.ID">
               <td>{{ tournament.ID }}</td>
-              <td>{{ tournament.Name }}</td>
-              <td>{{ tournament.Slug }}</td>
+              <td>{{ tournament.name }}</td>
+              <td>{{ tournament.slug }}</td>
               <td>
                 <button
                   class="btn btn-sm btn-warning me-2"
