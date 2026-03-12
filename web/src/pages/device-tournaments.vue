@@ -56,7 +56,7 @@ const deviceTournamentsByDevice = computed(() => {
 function selectDevice(deviceId: number): void {
   state.selectedDeviceId = deviceId;
   const deviceTournaments = deviceTournamentsByDevice.value.get(deviceId) || [];
-  state.selectedTournamentIds = deviceTournaments.map(dt => dt.TournamentID);
+  state.selectedTournamentIds = deviceTournaments.map(dt => dt.tournament_id);
   state.success = "";
   state.error = "";
 }
@@ -159,7 +159,7 @@ onMounted(() => {
                   @change="toggleTournament(tournament.ID)"
                 />
                 <label class="form-check-label" :for="`tournament-${tournament.ID}`">
-                  {{ tournament.Name }} <small class="text-muted">({{ tournament.Slug }})</small>
+                  {{ tournament.name }} <small class="text-muted">({{ tournament.slug }})</small>
                 </label>
               </div>
             </div>
@@ -189,9 +189,9 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="dt in state.deviceTournaments" :key="`${dt.DeviceID}-${dt.TournamentID}`">
+            <tr v-for="dt in state.deviceTournaments" :key="`${dt.DeviceID}-${dt.tournament_id}`">
               <td>{{ dt.Device?.Name || dt.Device?.Token || `ID: ${dt.DeviceID}` }}</td>
-              <td>{{ dt.Tournament?.Name || `ID: ${dt.TournamentID}` }}</td>
+              <td>{{ dt.Tournament?.name || `ID: ${dt.tournament_id}` }}</td>
             </tr>
           </tbody>
         </table>
