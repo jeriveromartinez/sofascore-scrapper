@@ -24,7 +24,7 @@ export class DeviceTournamentsApiService extends BaseApiService {
   }
 
   async removeTournamentFromDevice(payload: AssignTournamentPayload): Promise<StatusResponse> {
-    return this.delete<StatusResponse>(`/device-tournaments?device_id=${payload.device_id}&tournament_id=${payload.tournament_id}`);
+    return this.deleteWithBody<StatusResponse, AssignTournamentPayload>("/device-tournaments", payload);
   }
 
   async setDeviceTournaments(deviceId: number, payload: SetDeviceTournamentsPayload): Promise<StatusResponse> {
