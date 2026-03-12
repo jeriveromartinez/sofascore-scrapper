@@ -83,6 +83,6 @@ func (e APIEvent) ToSofaScoreEvent() SofaScoreEvent {
 		StartTimestamp:              e.StartTimestamp,
 		CurrentPeriodStartTimestamp: e.Time.CurrentPeriodStartTimestamp,
 		Slug:                        e.Slug,
-		LeagueName:                  e.Tournament.Name,
+		LeagueId:                    uint(e.Tournament.UniqueTournament.ID),
 	}
 }
