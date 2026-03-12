@@ -224,4 +224,22 @@ export abstract class BaseApiService {
 
     return this.decodeResponse<T>(data);
   }
+
+  protected async deleteWithBody<T, B = unknown>(url: string, body?: B): Promise<T> {
+    const headers = this.getHeaders(true);
+    const payload = body === undefined ? undefined : encode(body);
+    const { data, status } = await this.http.delete<ArrayBuffer>(
+      `${this.pathApi}${url}`,
+      {
+        headers,
+        data: payload,
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
+    );
+
+    this.assertSuccess(status, data);
+
+    return this.decodeResponse<T>(data);
+  }
 }
