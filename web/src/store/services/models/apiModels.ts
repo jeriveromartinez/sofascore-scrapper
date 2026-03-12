@@ -10,6 +10,14 @@ export interface GormEntity {
   DeletedAt: GormDeletedAt | null;
 }
 
+export interface ApiResponse<T> {
+  data: T;
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
 export interface Team extends GormEntity {
   LogoUrl: string;
 }
@@ -34,13 +42,9 @@ export interface SofaScoreEvent extends GormEntity {
   league: Tournament;
 }
 
-export interface EventsResponse {
-  events: SofaScoreEvent[];
-  page: number;
-  limit: number;
-  total: number;
-  total_pages: number;
-}
+export interface EventsResponse extends ApiResponse<SofaScoreEvent[]> {}
+
+export interface DeviceResponse extends ApiResponse<Device[]> {}
 
 export interface EventsQuery {
   date?: string;

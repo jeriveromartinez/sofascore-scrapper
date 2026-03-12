@@ -148,7 +148,7 @@ onMounted(() => fetchEvents());
             </tr>
           </thead>
           <tbody>
-            <tr v-for="event in state.data.events" :key="event.ID">
+            <tr v-for="event in state.data.data" :key="event.ID">
               <td>{{ event.SofaScoreEventId }}</td>
               <td>{{ event.league.name }}</td>
               <td>{{ event.Sport }}</td>

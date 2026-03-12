@@ -13,7 +13,7 @@ type CurrentEventsController struct {
 }
 
 func (c *CurrentEventsController) LoadRoutes() {
-	c.Group.GET("/current-events", authMiddleware(), handleGetCurrentEvents)
+	c.Group.GET("/current-events", handleGetCurrentEvents)
 }
 
 func handleGetCurrentEvents(c *gin.Context) {

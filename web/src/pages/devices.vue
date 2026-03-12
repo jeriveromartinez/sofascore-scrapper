@@ -1,46 +1,76 @@
 <script setup lang="ts">
-import { reactive } from "vue";
+import { onMounted, reactive } from "vue";
 import { devicesApiService } from "../store/services";
-import type { Device } from "../store/services/models";
+import type { DeviceResponse } from "../store/services/models";
 
-const form = reactive({
+const state = reactive({
   token: "",
   platform: "android",
   name: "",
   loading: false,
   error: "",
   success: "",
-  result: null as Device | null,
+  result: {} as DeviceResponse,
 });
 
-async function submit(): Promise<void> {
-  form.loading = true;
-  form.error = "";
-  form.success = "";
+async function fetchEvents(): Promise<void> {
+  state.loading = true;
+  state.error = "";
 
   try {
-    form.result = await devicesApiService.registerDevice({
-      token: form.token,
-      platform: form.platform,
-      name: form.name,
+    state.result = await devicesApiService.getDevices({
+      page: state.result.page || 1,
+      limit: state.result.limit || 10,
     });
-    form.success = "Dispositivo registrado/actualizado";
   } catch (error) {
-    form.error =
+    state.error =
+      error instanceof Error ? error.message : "Error cargando eventos";
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function submit(): Promise<void> {
+  state.loading = true;
+  state.error = "";
+  state.success = "";
+
+  try {
+    state.success = "Dispositivo registrado/actualizado";
+    await fetchEvents();
+  } catch (error) {
+    state.error =
       error instanceof Error
         ? error.message
         : "No se pudo registrar el dispositivo";
   } finally {
-    form.loading = false;
+    state.loading = false;
   }
 }
+
+function nextPage(): void {
+  if (!state.result) return;
+  if (state.result.page >= state.result.total_pages) return;
+  state.result.page += 1;
+  void fetchEvents();
+}
+
+function prevPage(): void {
+  if (!state.result) return;
+  if (state.result.page <= 1) return;
+  state.result.page -= 1;
+  void fetchEvents();
+}
+
+onMounted(() => {
+  void fetchEvents();
+});
 </script>
 
 <template>
   <div class="card">
     <div class="card-header">
       <h5 class="mb-0">Dispositivos</h5>
-      <small class="text-body-secondary">POST /api/v1/devices</small>
     </div>
 
     <div class="card-body">
@@ -48,7 +78,7 @@ async function submit(): Promise<void> {
         <div class="col-md-5">
           <label class="form-label">Token *</label>
           <input
-            v-model="form.token"
+            v-model="state.token"
             type="text"
             class="form-control"
             required
@@ -56,35 +86,65 @@ async function submit(): Promise<void> {
         </div>
         <div class="col-md-3">
           <label class="form-label">Plataforma</label>
-          <input v-model="form.platform" type="text" class="form-control" />
+          <input v-model="state.platform" type="text" class="form-control" />
         </div>
         <div class="col-md-4">
           <label class="form-label">Nombre</label>
-          <input v-model="form.name" type="text" class="form-control" />
+          <input v-model="state.name" type="text" class="form-control" />
         </div>
 
         <div class="col-12">
-          <button class="btn btn-primary" :disabled="form.loading">
+          <button class="btn btn-primary" :disabled="state.loading">
             Guardar dispositivo
           </button>
         </div>
       </form>
 
-      <div v-if="form.error" class="alert alert-danger mt-3">
-        {{ form.error }}
-      </div>
-      <div v-if="form.success" class="alert alert-success mt-3">
-        {{ form.success }}
+      <div v-if="state.error" class="alert alert-danger">{{ state.error }}</div>
+      <div v-if="state.loading" class="alert alert-info">
+        Cargando eventos...
       </div>
 
-      <div v-if="form.result" class="mt-3 p-3 border rounded bg-lighter">
-        <h6 class="mb-2">Respuesta</h6>
-        <p class="mb-1"><strong>ID:</strong> {{ form.result.ID }}</p>
-        <p class="mb-1"><strong>UserID:</strong> {{ form.result.UserID }}</p>
-        <p class="mb-1"><strong>Token:</strong> {{ form.result.Token }}</p>
-        <p class="mb-1">
-          <strong>LastSeen:</strong> {{ form.result.LastSeen }}
-        </p>
+      <div v-if="state.result" class="table-responsive text-nowrap">
+        <table class="table table-sm table-striped align-middle">
+          <thead>
+            <tr>
+              <th>Token Auth</th>
+              <th>Platform</th>
+              <th>Name</th>
+              <th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="event in state.result.data" :key="event.ID">
+              <td>{{ event.Token }}</td>
+              <td>{{ event.Platform }}</td>
+              <td>{{ event.Name }}</td>
+              <td>{{ event.LastSeen }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div v-if="state.result" class="d-flex gap-2 mt-3 align-items-center">
+        <button
+          class="btn btn-outline-secondary btn-sm"
+          @click="prevPage"
+          :disabled="state.result.page <= 1 || state.loading"
+        >
+          Anterior
+        </button>
+        <button
+          class="btn btn-outline-secondary btn-sm"
+          @click="nextPage"
+          :disabled="state.loading || state.result.page >= state.result.total_pages"
+        >
+          Siguiente
+        </button>
+        <span class="text-body-secondary small">
+          Pagina {{ state.result.page }} / {{ state.result.total_pages }} - Total
+          {{ state.result.total }}
+        </span>
       </div>
     </div>
   </div>

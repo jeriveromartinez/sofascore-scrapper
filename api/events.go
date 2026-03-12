@@ -77,7 +77,7 @@ func handleGetEvents(c *gin.Context) {
 
 	totalPages := int((total + int64(limit) - 1) / int64(limit))
 	respondCBOR(c, http.StatusOK, map[string]any{
-		"events":      events,
+		"data":      events,
 		"page":        page,
 		"limit":       limit,
 		"total":       total,

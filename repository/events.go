@@ -97,16 +97,17 @@ func GetCurrentAndUpcomingEvents(limit int) ([]models.SofaScoreEvent, error) {
 		limit = 6
 	}
 
-	now := time.Now().Unix()
+	now := time.Now().Add(-(time.Minute * 5)).Unix()
 	var events []models.SofaScoreEvent
 
 	// First, try to get current events (where CurrentPeriodStartTimestamp is set and recent)
 	// Events are considered "current" if their CurrentPeriodStartTimestamp is within the last 3 hours
-	db.Where("current_period_start_timestamp > 0 AND current_period_start_timestamp <= ?", now).
+	db.Where("current_period_start_timestamp > 0 AND current_period_start_timestamp >= ?", now).
 		Order("current_period_start_timestamp DESC").
 		Limit(limit).
 		Preload("HomeTeamModel").
 		Preload("AwayTeamModel").
+		Preload("League").
 		Find(&events)
 
 	// If we don't have enough current events, fill with upcoming events
@@ -120,6 +121,7 @@ func GetCurrentAndUpcomingEvents(limit int) ([]models.SofaScoreEvent, error) {
 			existingIDs[i] = e.ID
 		}
 
+		now = time.Now().Add((time.Minute * 5)).Unix()
 		query := db.Where("start_timestamp > ?", now).Order("start_timestamp ASC")
 		if len(existingIDs) > 0 {
 			query = query.Where("id NOT IN ?", existingIDs)
@@ -128,6 +130,7 @@ func GetCurrentAndUpcomingEvents(limit int) ([]models.SofaScoreEvent, error) {
 		query.Limit(remaining).
 			Preload("HomeTeamModel").
 			Preload("AwayTeamModel").
+			Preload("League").
 			Find(&upcomingEvents)
 
 		events = append(events, upcomingEvents...)
