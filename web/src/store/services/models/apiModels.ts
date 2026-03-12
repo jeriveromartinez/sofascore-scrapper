@@ -102,7 +102,7 @@ export interface DeviceTournament extends GormEntity {
 }
 
 export interface GlobalTournamentConfig extends GormEntity {
-  TournamentID: number;
+  tournament_id: number;
   Tournament?: Tournament;
 }
 

@@ -12,7 +12,7 @@ func GetAllTournaments() ([]models.Tournament, error) {
 		return nil, err
 	}
 	var tournaments []models.Tournament
-	result := db.Find(&tournaments)
+	result := db.Order("slug ASC").Find(&tournaments)
 	return tournaments, result.Error
 }
 

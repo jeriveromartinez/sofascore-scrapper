@@ -16,18 +16,12 @@ async function loadData(): Promise<void> {
   state.loading = true;
   state.error = "";
   try {
-    const [globalConfig, tournaments] = await Promise.all([
-      globalConfigApiService.getGlobalConfig(),
-      tournamentsApiService.getAllTournaments(),
-    ]);
+    const [globalConfig, tournaments] = await Promise.all([globalConfigApiService.getGlobalConfig(), tournamentsApiService.getAllTournaments()]);
     state.globalConfig = globalConfig;
     state.tournaments = tournaments;
-    state.selectedTournamentIds = globalConfig.map(gc => gc.TournamentID);
+    state.selectedTournamentIds = globalConfig.map(gc => gc.tournament_id);
   } catch (error) {
-    state.error =
-      error instanceof Error
-        ? error.message
-        : "No se pudieron cargar los datos";
+    state.error = error instanceof Error ? error.message : "No se pudieron cargar los datos";
   } finally {
     state.loading = false;
   }
@@ -38,16 +32,11 @@ async function saveGlobalConfig(): Promise<void> {
   state.error = "";
   state.success = "";
   try {
-    await globalConfigApiService.setGlobalConfig({
-      tournament_ids: state.selectedTournamentIds,
-    });
+    await globalConfigApiService.setGlobalConfig({ tournament_ids: state.selectedTournamentIds });
     state.success = "Configuración global actualizada correctamente";
     await loadData();
   } catch (error) {
-    state.error =
-      error instanceof Error
-        ? error.message
-        : "No se pudo actualizar la configuración global";
+    state.error = error instanceof Error ? error.message : "No se pudo actualizar la configuración global";
   } finally {
     state.loading = false;
   }
@@ -109,8 +98,8 @@ onMounted(() => {
               @change="toggleTournament(tournament.ID)"
             />
             <label class="form-check-label" :for="`tournament-${tournament.ID}`">
-              <strong>{{ tournament.Name }}</strong>
-              <small class="text-muted ms-2">({{ tournament.Slug }})</small>
+              <strong>{{ tournament.name }}</strong>
+              <small class="text-muted ms-2">({{ tournament.slug }})</small>
             </label>
           </div>
         </div>
@@ -122,25 +111,6 @@ onMounted(() => {
         >
           Guardar Configuración
         </button>
-
-        <hr class="my-4" />
-
-        <h6>Torneos Configurados Actualmente</h6>
-        <div v-if="state.globalConfig.length > 0" class="list-group">
-          <div
-            v-for="config in state.globalConfig"
-            :key="config.ID"
-            class="list-group-item"
-          >
-            <div class="d-flex w-100 justify-content-between">
-              <h6 class="mb-1">{{ config.Tournament?.Name || `ID: ${config.TournamentID}` }}</h6>
-              <small>{{ config.Tournament?.Slug }}</small>
-            </div>
-          </div>
-        </div>
-        <p v-else class="text-muted">
-          No hay torneos en la configuración global. Los dispositivos sin torneos asignados no verán ningún torneo.
-        </p>
       </div>
     </div>
   </div>
