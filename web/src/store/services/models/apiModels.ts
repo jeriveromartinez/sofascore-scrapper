@@ -89,6 +89,50 @@ export interface EventStats {
   ViewCount: number;
 }
 
+export interface Tournament extends GormEntity {
+  Name: string;
+  Slug: string;
+}
+
+export interface DeviceTournament extends GormEntity {
+  DeviceID: number;
+  TournamentID: number;
+  Device?: Device;
+  Tournament?: Tournament;
+}
+
+export interface GlobalTournamentConfig extends GormEntity {
+  TournamentID: number;
+  Tournament?: Tournament;
+}
+
+export interface CreateTournamentPayload {
+  name: string;
+  slug: string;
+}
+
+export interface UpdateTournamentPayload {
+  name: string;
+  slug: string;
+}
+
+export interface AssignTournamentPayload {
+  device_id: number;
+  tournament_id: number;
+}
+
+export interface SetDeviceTournamentsPayload {
+  tournament_ids: number[];
+}
+
+export interface SetGlobalConfigPayload {
+  tournament_ids: number[];
+}
+
+export interface AddGlobalConfigPayload {
+  tournament_id: number;
+}
+
 export interface UploadApkResponse {
   id: number;
   version: string;
