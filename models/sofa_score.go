@@ -8,7 +8,7 @@ import (
 
 type SofaScoreEvent struct {
 	gorm.Model
-	SofaScoreEventId            int64  `gorm:"uniqueIndex"`
+	SofaScoreEventId            int64 `gorm:"uniqueIndex"`
 	Sport                       string
 	HomeTeam                    string
 	HomeScore                   int
@@ -17,14 +17,17 @@ type SofaScoreEvent struct {
 	AwayScore                   int
 	AwayTeamId                  int64
 	ScrapedAt                   int64
-	Category                    string
 	StartTimestamp              int64
 	CurrentPeriodStartTimestamp int64
 	Slug                        string
-	LeagueName                  string
+	LeagueId                    uint
+	HomeTeamModel               *Team       `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
+	AwayTeamModel               *Team       `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
+	League                      *Tournament `gorm:"foreignKey:LeagueId" json:"league,omitempty"`
+}
 
-	HomeTeamModel *Team `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
-	AwayTeamModel *Team `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
+func (SofaScoreEvent) TableName() string {
+	return "events"
 }
 
 func (s SofaScoreEvent) GetHomeTeamLogo() string {

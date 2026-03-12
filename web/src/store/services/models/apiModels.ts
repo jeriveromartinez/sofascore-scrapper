@@ -28,10 +28,10 @@ export interface SofaScoreEvent extends GormEntity {
   StartTimestamp: number;
   CurrentPeriodStartTimestamp: number;
   Slug: string;
-  LeagueName: string;
 
   teamHome: Team;
   teamAway: Team;
+  league: Tournament;
 }
 
 export interface EventsResponse {
@@ -90,8 +90,8 @@ export interface EventStats {
 }
 
 export interface Tournament extends GormEntity {
-  Name: string;
-  Slug: string;
+  name: string;
+  slug: string;
 }
 
 export interface DeviceTournament extends GormEntity {
