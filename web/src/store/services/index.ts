@@ -5,3 +5,7 @@ export * from "./DevicesApiService";
 export * from "./PlaybackApiService";
 export * from "./StatsApiService";
 export * from "./ApkApiService";
+export * from "./TournamentsApiService";
+export * from "./DeviceTournamentsApiService";
+export * from "./GlobalConfigApiService";
+export * from "./CurrentEventsApiService";
