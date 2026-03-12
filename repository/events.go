@@ -84,3 +84,54 @@ func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {
 		log.Printf("repository: failed to update logo URL for team %d: %v", teamID, err)
 	}
 }
+
+// GetCurrentAndUpcomingEvents retrieves up to 6 events that are currently happening
+// (based on CurrentPeriodStartTimestamp) or upcoming (based on StartTimestamp)
+func GetCurrentAndUpcomingEvents(limit int) ([]models.SofaScoreEvent, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+
+	if limit <= 0 || limit > 6 {
+		limit = 6
+	}
+
+	now := time.Now().Unix()
+	var events []models.SofaScoreEvent
+
+	// First, try to get current events (where CurrentPeriodStartTimestamp is set and recent)
+	// Events are considered "current" if their CurrentPeriodStartTimestamp is within the last 3 hours
+	db.Where("current_period_start_timestamp > 0 AND current_period_start_timestamp <= ?", now).
+		Order("current_period_start_timestamp DESC").
+		Limit(limit).
+		Preload("HomeTeamModel").
+		Preload("AwayTeamModel").
+		Find(&events)
+
+	// If we don't have enough current events, fill with upcoming events
+	if len(events) < limit {
+		remaining := limit - len(events)
+		var upcomingEvents []models.SofaScoreEvent
+
+		// Get IDs of events we already have to exclude them
+		existingIDs := make([]uint, len(events))
+		for i, e := range events {
+			existingIDs[i] = e.ID
+		}
+
+		query := db.Where("start_timestamp > ?", now).Order("start_timestamp ASC")
+		if len(existingIDs) > 0 {
+			query = query.Where("id NOT IN ?", existingIDs)
+		}
+
+		query.Limit(remaining).
+			Preload("HomeTeamModel").
+			Preload("AwayTeamModel").
+			Find(&upcomingEvents)
+
+		events = append(events, upcomingEvents...)
+	}
+
+	return events, nil
+}

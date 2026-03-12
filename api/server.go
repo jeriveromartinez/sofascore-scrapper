@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,6 +91,14 @@ func getUserID(c *gin.Context) uint {
 	return id
 }
 
+func parseID(idStr string) (uint, error) {
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return uint(id), nil
+}
+
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -120,6 +129,10 @@ func Start(addr string) {
 	(&StatsController{Group: v1}).LoadRoutes()
 	(&ApkController{Group: v1}).LoadRoutes()
 	(&TeamController{Group: v1}).LoadRoutes()
+	(&TournamentController{Group: v1}).LoadRoutes()
+	(&DeviceTournamentController{Group: v1}).LoadRoutes()
+	(&GlobalConfigController{Group: v1}).LoadRoutes()
+	(&CurrentEventsController{Group: v1}).LoadRoutes()
 
 	registerDashboardRoutes(router)
 
