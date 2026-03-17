@@ -15,7 +15,6 @@ func (c *GlobalConfigController) LoadRoutes() {
 	c.Group.GET("/global-tournament-config", authMiddleware(), handleGetGlobalConfig)
 	c.Group.POST("/global-tournament-config", authMiddleware(), handleAddGlobalConfig)
 	c.Group.DELETE("/global-tournament-config/:tournamentId", authMiddleware(), handleRemoveGlobalConfig)
-	c.Group.PUT("/global-tournament-config", authMiddleware(), handleSetGlobalConfig)
 }
 
 func handleGetGlobalConfig(c *gin.Context) {
@@ -29,14 +28,14 @@ func handleGetGlobalConfig(c *gin.Context) {
 
 func handleAddGlobalConfig(c *gin.Context) {
 	var req struct {
-		TournamentID uint `json:"tournament_id" cbor:"tournament_id"`
+		TournamentIDs []uint `json:"tournament_ids" cbor:"tournament_ids"`
 	}
 	if err := parseCBORBody(c, &req); err != nil {
 		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid request"})
 		return
 	}
 
-	config, err := repository.AddGlobalTournamentConfig(req.TournamentID)
+	config, err := repository.SetGlobalTournamentConfig(req.TournamentIDs)
 	if err != nil {
 		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -56,20 +55,4 @@ func handleRemoveGlobalConfig(c *gin.Context) {
 		return
 	}
 	respondCBOR(c, http.StatusOK, map[string]string{"message": "tournament removed from global config"})
-}
-
-func handleSetGlobalConfig(c *gin.Context) {
-	var req struct {
-		TournamentIDs []uint `json:"tournament_ids" cbor:"tournament_ids"`
-	}
-	if err := parseCBORBody(c, &req); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid request"})
-		return
-	}
-
-	if err := repository.SetGlobalTournamentConfig(req.TournamentIDs); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	respondCBOR(c, http.StatusOK, map[string]string{"message": "global config updated"})
 }

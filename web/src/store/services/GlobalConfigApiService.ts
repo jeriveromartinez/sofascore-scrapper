@@ -1,5 +1,5 @@
 import { BaseApiService } from "./BaseApiService";
-import type { GlobalTournamentConfig, AddGlobalConfigPayload, SetGlobalConfigPayload, StatusResponse } from "./models";
+import type { GlobalTournamentConfig, SetDeviceTournamentsPayload, StatusResponse } from "./models";
 
 export class GlobalConfigApiService extends BaseApiService {
   constructor() {
@@ -10,16 +10,12 @@ export class GlobalConfigApiService extends BaseApiService {
     return this.get<GlobalTournamentConfig[]>("");
   }
 
-  async addGlobalConfig(payload: AddGlobalConfigPayload): Promise<GlobalTournamentConfig> {
-    return this.post<GlobalTournamentConfig, AddGlobalConfigPayload>("", payload);
-  }
-
   async removeGlobalConfig(tournamentId: number): Promise<StatusResponse> {
     return this.delete<StatusResponse>(`/${tournamentId}`);
   }
 
-  async setGlobalConfig(payload: SetGlobalConfigPayload): Promise<StatusResponse> {
-    return this.put<StatusResponse, SetGlobalConfigPayload>("", payload);
+  async setGlobalConfig(payload: SetDeviceTournamentsPayload): Promise<StatusResponse> {
+    return this.post<StatusResponse, SetDeviceTournamentsPayload>("", payload);
   }
 }
 

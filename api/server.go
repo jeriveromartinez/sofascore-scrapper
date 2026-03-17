@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -36,7 +38,11 @@ func respondCBOR(c *gin.Context, status int, v any) {
 }
 
 func parseCBORBody(c *gin.Context, v any) error {
-	return cbor.NewDecoder(c.Request.Body).Decode(v)
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return err
+	}
+	return cbor.NewDecoder(bytes.NewReader(body)).Decode(v)
 }
 
 func generateToken(userID uint, username string) (string, error) {

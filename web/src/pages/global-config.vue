@@ -32,7 +32,7 @@ async function saveGlobalConfig(): Promise<void> {
   state.error = "";
   state.success = "";
   try {
-    await globalConfigApiService.setGlobalConfig({ tournament_ids: state.selectedTournamentIds });
+    await globalConfigApiService.setGlobalConfig({ tournament_ids: [...state.selectedTournamentIds] });
     state.success = "Configuración global actualizada correctamente";
     await loadData();
   } catch (error) {

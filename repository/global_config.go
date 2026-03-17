@@ -5,7 +5,6 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 
-// GetGlobalTournamentConfig retrieves all global tournament configurations
 func GetGlobalTournamentConfig() ([]models.GlobalTournamentConfig, error) {
 	db, err := database.GetDB()
 	if err != nil {
@@ -16,54 +15,44 @@ func GetGlobalTournamentConfig() ([]models.GlobalTournamentConfig, error) {
 	return configs, result.Error
 }
 
-// AddGlobalTournamentConfig adds a tournament to global configuration
-func AddGlobalTournamentConfig(tournamentID uint) (*models.GlobalTournamentConfig, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-	config := &models.GlobalTournamentConfig{
-		TournamentID: tournamentID,
-	}
-	result := db.Create(config)
-	return config, result.Error
-}
-
-// RemoveGlobalTournamentConfig removes a tournament from global configuration
 func RemoveGlobalTournamentConfig(tournamentID uint) error {
 	db, err := database.GetDB()
 	if err != nil {
 		return err
 	}
-	return db.Where("tournament_id = ?", tournamentID).Delete(&models.GlobalTournamentConfig{}).Error
+	return db.Where("tournament_id = ?", tournamentID).Unscoped().Delete(&models.GlobalTournamentConfig{}).Error
 }
 
-// SetGlobalTournamentConfig sets the global tournament configuration (replaces all existing)
-func SetGlobalTournamentConfig(tournamentIDs []uint) error {
+func SetGlobalTournamentConfig(tournamentIDs []uint) ([]*models.GlobalTournamentConfig, error) {
 	db, err := database.GetDB()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Start transaction
 	tx := db.Begin()
-
-	// Delete all existing configurations
-	if err := tx.Where("1 = 1").Delete(&models.GlobalTournamentConfig{}).Error; err != nil {
+	if err := tx.Where("1 = 1").Unscoped().Delete(&models.GlobalTournamentConfig{}).Error; err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
-	// Create new configurations
 	for _, tournamentID := range tournamentIDs {
 		config := &models.GlobalTournamentConfig{
 			TournamentID: tournamentID,
 		}
 		if err := tx.Create(config).Error; err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 	}
 
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	var configs []*models.GlobalTournamentConfig
+	if err := db.Preload("Tournament").Find(&configs).Error; err != nil {
+		return nil, err
+	}
+
+	return configs, nil
 }

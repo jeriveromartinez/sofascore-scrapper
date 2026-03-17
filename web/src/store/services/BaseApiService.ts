@@ -81,6 +81,7 @@ export abstract class BaseApiService {
   protected async post<T, B = unknown>(url: string, body?: B): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = body === undefined ? undefined : encode(body);
+    console.log("POST payload:", body, payload);
     const { data, status } = await this.http.post<ArrayBuffer>(
       `${this.pathApi}${url}`,
       payload,
@@ -180,7 +181,9 @@ export abstract class BaseApiService {
     if (status >= 400) {
       const errData = data as Record<string, unknown> | undefined;
       const message =
-        errData && typeof errData === "object" && typeof errData.error === "string"
+        errData &&
+        typeof errData === "object" &&
+        typeof errData.error === "string"
           ? errData.error
           : `HTTP ${status}`;
       throw new Error(message);
@@ -225,7 +228,10 @@ export abstract class BaseApiService {
     return this.decodeResponse<T>(data);
   }
 
-  protected async deleteWithBody<T, B = unknown>(url: string, body?: B): Promise<T> {
+  protected async deleteWithBody<T, B = unknown>(
+    url: string,
+    body?: B,
+  ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = body === undefined ? undefined : encode(body);
     const { data, status } = await this.http.delete<ArrayBuffer>(
