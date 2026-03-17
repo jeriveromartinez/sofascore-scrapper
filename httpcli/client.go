@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"strings"
 	"time"
 )
 
@@ -20,7 +21,7 @@ func setBrowserHeaders(req *http.Request, accept string, referer string) {
 	}
 }
 
-func LoadData(sport string, date time.Time) []byte {
+func loadCookies() *http.Client {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar, Timeout: 5 * time.Second}
 
@@ -40,9 +41,48 @@ func LoadData(sport string, date time.Time) []byte {
 		return nil
 	}
 	_, _ = io.Copy(io.Discard, homeResp.Body)
+	return client
+}
+
+func LoadDataBySport(sport string, date time.Time) []byte {
+	client := loadCookies()
+	if client == nil {
+		return nil
+	}
 
 	now := date.Format("2006-01-02")
 	apiURL := "https://www.sofascore.com/api/v1/sport/" + sport + "/scheduled-events/" + now
+	apiReq, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil
+	}
+
+	setBrowserHeaders(apiReq, "application/json, text/plain, */*", "https://www.sofascore.com/es/")
+	resp, err := client.Do(apiReq)
+	if err != nil {
+		return nil
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 305 {
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	return body
+}
+
+func LoadDataByTrendingCountry(countryCode string) []byte {
+	client := loadCookies()
+	if client == nil {
+		return nil
+	}
+
+	apiURL := "https://www.sofascore.com/api/v1/trending/events/" + strings.ToUpper(countryCode) + "/all"
 	apiReq, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil

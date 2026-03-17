@@ -11,7 +11,7 @@ import (
 )
 
 func scrape(sport string, date time.Time) {
-	body := httpcli.LoadData(sport, date)
+	body := httpcli.LoadDataBySport(sport, date)
 	var list models.EventsListResponse
 	if err := json.Unmarshal(body, &list); err != nil {
 		log.Printf("scheduler: error parsing JSON for %s on %s: %v", sport, date.Format("2006-01-02"), err)
@@ -21,9 +21,23 @@ func scrape(sport string, date time.Time) {
 	log.Printf("scheduler: scraped %d events for %s on %s", len(list.Events), sport, date.Format("2006-01-02"))
 }
 
+func scrapeCountry(countryCode string) {
+	body := httpcli.LoadDataByTrendingCountry(countryCode)
+	var list models.EventsListResponse
+	if err := json.Unmarshal(body, &list); err != nil {
+		log.Printf("scheduler: error parsing JSON for country %s: %v", countryCode, err)
+		return
+	}
+	repository.SaveSofaScoreEvent(list.Events, countryCode)
+	log.Printf("scheduler: scraped %d events for country %s", len(list.Events), countryCode)
+}
+
 func scrapeToday(date time.Time) {
 	for _, sport := range httpcli.GET_SPORTS() {
 		scrape(sport, date)
+	}
+	for _, country := range httpcli.GET_COUNTRIES() {
+		scrapeCountry(country)
 	}
 }
 

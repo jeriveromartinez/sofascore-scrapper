@@ -36,8 +36,8 @@ func SaveSofaScoreEvent(Events []*models.APIEvent, sport string) {
 			scheduleLogoDownload(db, model.AwayTeamId, model.GetAwayTeamLogo())
 		}
 
-		tournament := models.Tournament{Slug: event.Tournament.UniqueTournament.Slug, Name: event.Tournament.UniqueTournament.Name, Model: gorm.Model{ID: uint(event.Tournament.UniqueTournament.ID)}}
-		db.FirstOrCreate(&tournament, models.Tournament{Slug: event.Tournament.UniqueTournament.Slug})
+		tournament := models.Tournament{Slug: event.Tournament.UniqueTournament.Slug + "-" + strings.ToLower(event.Tournament.UniqueTournament.Category.Slug), Name: event.Tournament.UniqueTournament.Name, Region: event.Tournament.UniqueTournament.Category.Name, Model: gorm.Model{ID: uint(event.Tournament.UniqueTournament.ID)}}
+		db.FirstOrCreate(&tournament, models.Tournament{Slug: event.Tournament.UniqueTournament.Slug + "-" + strings.ToLower(event.Tournament.UniqueTournament.Category.Slug)})
 
 		model.ScrapedAt = now
 		model.Sport = sport

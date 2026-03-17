@@ -29,9 +29,13 @@ type APIEvent struct {
 		ID               int64  `json:"id"`
 		Name             string `json:"name"`
 		UniqueTournament struct {
-			ID   int64  `json:"id"`
-			Name string `json:"name"`
-			Slug string `json:"slug"`
+			ID       int64  `json:"id"`
+			Name     string `json:"name"`
+			Slug     string `json:"slug"`
+			Category struct {
+				Name string `json:"name"`
+				Slug string `json:"slug"`
+			} `json:"category"`
 		} `json:"uniqueTournament"`
 	} `json:"tournament"`
 
