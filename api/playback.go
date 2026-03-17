@@ -16,10 +16,9 @@ type PlaybackController struct {
 }
 
 func (c *PlaybackController) LoadRoutes() {
-	auth := authMiddleware()
-	c.Group.POST("/playback", auth, handleLogPlayback)
-	c.Group.PUT("/playback/:id", auth, handleUpdatePlayback)
-	c.Group.PATCH("/playback/:id", auth, handleUpdatePlayback)
+	c.Group.POST("/playback", authMiddleware(), handleLogPlayback)
+	c.Group.PUT("/playback/:id", authMiddleware(), handleUpdatePlayback)
+	c.Group.PATCH("/playback/:id", authMiddleware(), handleUpdatePlayback)
 }
 
 func handleLogPlayback(c *gin.Context) {

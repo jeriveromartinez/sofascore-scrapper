@@ -11,7 +11,6 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/imageproxy"
 )
 
-// TeamController serves proxied team logo images.
 type TeamController struct {
 	Group *gin.RouterGroup
 }
@@ -20,8 +19,6 @@ func (c *TeamController) LoadRoutes() {
 	c.Group.GET("/teams/logo/:teamId", handleGetTeamLogo)
 }
 
-// handleGetTeamLogo serves a locally cached team logo image.
-// The teamId path parameter must be a positive integer.
 func handleGetTeamLogo(c *gin.Context) {
 	teamIDStr := c.Param("teamId")
 	teamID, err := strconv.ParseInt(teamIDStr, 10, 64)
@@ -32,7 +29,6 @@ func handleGetTeamLogo(c *gin.Context) {
 
 	localPath := imageproxy.TeamLogoLocalPath(teamID)
 
-	// Security: confirm the resolved path stays inside the designated storage directory.
 	storageDir, err := filepath.Abs(filepath.Join(imageproxy.StoragePath(), "teams"))
 	if err != nil {
 		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "internal error"})

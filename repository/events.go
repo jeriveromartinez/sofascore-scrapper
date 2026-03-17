@@ -12,8 +12,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// downloadSem caps the number of concurrent logo download goroutines to avoid
-// exhausting system resources when a large batch of events is processed.
 var downloadSem = make(chan struct{}, 10)
 
 func SaveSofaScoreEvent(Events []*models.APIEvent, sport string) {
@@ -50,14 +48,10 @@ func SaveSofaScoreEvent(Events []*models.APIEvent, sport string) {
 	}
 }
 
-// isProxiedLogoURL reports whether url already points to the local image proxy.
 func isProxiedLogoURL(url string) bool {
 	return strings.HasPrefix(url, "/api/v1/teams/logo/")
 }
 
-// scheduleLogoDownload acquires a slot from the semaphore and starts a
-// goroutine that downloads the logo and updates the database.  Each goroutine
-// uses its own GORM session to avoid sharing state across goroutines.
 func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
 	select {
 	case downloadSem <- struct{}{}:
@@ -70,9 +64,6 @@ func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
 	}
 }
 
-// downloadAndUpdateTeamLogo downloads the logo for the given team and, on
-// success, updates the team's LogoUrl in the database to the local API path so
-// that subsequent event responses return the proxied URL.
 func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {
 	if _, err := imageproxy.DownloadTeamLogo(teamID, sourceURL); err != nil {
 		log.Printf("repository: failed to download logo for team %d: %v", teamID, err)
@@ -85,9 +76,7 @@ func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {
 	}
 }
 
-// GetCurrentAndUpcomingEvents retrieves up to 6 events that are currently happening
-// (based on CurrentPeriodStartTimestamp) or upcoming (based on StartTimestamp)
-func GetCurrentAndUpcomingEvents(limit int) ([]models.SofaScoreEvent, error) {
+func GetCurrentAndUpcomingEvents(devId uint, limit int) ([]models.SofaScoreEvent, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
@@ -99,10 +88,25 @@ func GetCurrentAndUpcomingEvents(limit int) ([]models.SofaScoreEvent, error) {
 
 	now := time.Now().Add(-(time.Minute * 5)).Unix()
 	var events []models.SofaScoreEvent
+	var selfEvents []models.DeviceTournament
 
-	// First, try to get current events (where CurrentPeriodStartTimestamp is set and recent)
-	// Events are considered "current" if their CurrentPeriodStartTimestamp is within the last 3 hours
-	db.Where("current_period_start_timestamp > 0 AND current_period_start_timestamp >= ?", now).
+	var tournamentIDs []uint
+	db.Find(&selfEvents, "device_id = ?", devId)
+	if len(selfEvents) > 0 {
+		tournamentIDs = make([]uint, len(selfEvents))
+		for i, dt := range selfEvents {
+			tournamentIDs[i] = dt.TournamentID
+		}
+	} else {
+		var globalConfig []models.GlobalTournamentConfig
+		db.Find(&globalConfig)
+		tournamentIDs = make([]uint, len(globalConfig))
+		for i, gc := range globalConfig {
+			tournamentIDs[i] = gc.TournamentID
+		}
+	}
+
+	db.Where("current_period_start_timestamp > 0 AND current_period_start_timestamp >= ? AND league_id IN ?", now, tournamentIDs).
 		Order("current_period_start_timestamp DESC").
 		Limit(limit).
 		Preload("HomeTeamModel").
@@ -110,19 +114,16 @@ func GetCurrentAndUpcomingEvents(limit int) ([]models.SofaScoreEvent, error) {
 		Preload("League").
 		Find(&events)
 
-	// If we don't have enough current events, fill with upcoming events
 	if len(events) < limit {
 		remaining := limit - len(events)
 		var upcomingEvents []models.SofaScoreEvent
-
-		// Get IDs of events we already have to exclude them
 		existingIDs := make([]uint, len(events))
 		for i, e := range events {
 			existingIDs[i] = e.ID
 		}
 
 		now = time.Now().Add((time.Minute * 5)).Unix()
-		query := db.Where("start_timestamp > ?", now).Order("start_timestamp ASC")
+		query := db.Where("start_timestamp > ? AND league_id IN ?", now, tournamentIDs).Order("start_timestamp ASC")
 		if len(existingIDs) > 0 {
 			query = query.Where("id NOT IN ?", existingIDs)
 		}

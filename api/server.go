@@ -12,6 +12,8 @@ import (
 	cbor "github.com/fxamacker/cbor/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jeriveromartinez/sofascore-scrapper/database"
+	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 
 const userIDKey = "userID"
@@ -85,10 +87,25 @@ func authMiddleware() gin.HandlerFunc {
 	}
 }
 
-func getUserID(c *gin.Context) uint {
-	v, _ := c.Get(userIDKey)
-	id, _ := v.(uint)
-	return id
+func appMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		db, err := database.GetDB()
+		if err != nil {
+			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "you are lost"})
+			c.Abort()
+			return
+		}
+
+		var device models.Device
+		if err := db.Where("token = ?", c.GetHeader("APP-XIPTV")).First(&device).Error; err != nil {
+			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "you are lost"})
+			c.Abort()
+			return
+		}
+
+		c.Set("device", device)
+		c.Next()
+	}
 }
 
 func parseID(idStr string) (uint, error) {

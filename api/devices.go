@@ -14,8 +14,8 @@ type DeviceController struct {
 }
 
 func (c *DeviceController) LoadRoutes() {
-	c.Group.GET("/devices", handleGetDevices)
-	c.Group.GET("/devices/all", handleGetAllDevices)
+	c.Group.GET("/devices", authMiddleware(), handleGetDevices)
+	c.Group.GET("/devices/all", authMiddleware(), handleGetAllDevices)
 	c.Group.POST("/devices", handleRegisterDevice)
 }
 
