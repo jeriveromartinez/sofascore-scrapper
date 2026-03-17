@@ -31,6 +31,5 @@ func handleGetCurrentEvents(c *gin.Context) {
 		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	// respondCBOR(c, http.StatusOK, events)
-	c.JSON(200, events)
+	respondCBOR(c, http.StatusOK, events)
 }
