@@ -15,6 +15,7 @@ type DeviceController struct {
 
 func (c *DeviceController) LoadRoutes() {
 	c.Group.GET("/devices", handleGetDevices)
+	c.Group.GET("/devices/all", handleGetAllDevices)
 	c.Group.POST("/devices", handleRegisterDevice)
 }
 
@@ -64,10 +65,19 @@ func handleGetDevices(c *gin.Context) {
 
 	totalPages := int((total + int64(limit) - 1) / int64(limit))
 	respondCBOR(c, http.StatusOK, map[string]any{
-		"data":     devices,
+		"data":        devices,
 		"page":        page,
 		"limit":       limit,
 		"total":       total,
 		"total_pages": totalPages,
 	})
+}
+
+func handleGetAllDevices(c *gin.Context) {
+	devices, err := repository.GetAllDevices()
+	if err != nil {
+		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	respondCBOR(c, http.StatusOK, map[string]any{"data": devices})
 }

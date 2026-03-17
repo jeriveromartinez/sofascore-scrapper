@@ -45,3 +45,13 @@ func GetDevices(page, limit uint) ([]models.Device, int64, error) {
 	result := db.Offset(int(offset)).Limit(int(limit)).Preload("Manager").Find(&devices)
 	return devices, total, result.Error
 }
+
+func GetAllDevices() ([]models.Device, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+	var devices []models.Device
+	result := db.Preload("Manager").Find(&devices)
+	return devices, result.Error
+}

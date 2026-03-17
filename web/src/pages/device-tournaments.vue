@@ -1,21 +1,20 @@
 <script setup lang="ts">
-import { reactive, onMounted, computed } from "vue";
+import { reactive, onMounted } from "vue";
 import {
-  devicesApiService,
   deviceTournamentsApiService,
   tournamentsApiService,
+  devicesApiService,
 } from "../store/services";
 import type {
   DeviceTournament,
   Tournament,
   Device,
-  DeviceResponse,
 } from "../store/services/models";
 
 const state = reactive({
   deviceTournaments: [] as DeviceTournament[],
   tournaments: [] as Tournament[],
-  devices: {} as DeviceResponse,
+  devices: [] as Device[],
   loading: false,
   error: "",
   success: "",
@@ -27,26 +26,12 @@ async function loadData(): Promise<void> {
   state.loading = true;
   state.error = "";
   try {
-    const [deviceTournaments, tournaments, devices] = await Promise.all([
-      deviceTournamentsApiService.getAllDeviceTournaments(),
+    const [tournaments, devices] = await Promise.all([
       tournamentsApiService.getAllTournaments(),
-      devicesApiService.getDevices({
-        page: state.devices.page || 1,
-        limit: state.devices.limit || 10,
-      }),
+      devicesApiService.getAllDevices(),
     ]);
-    state.deviceTournaments = deviceTournaments;
-    state.devices = devices;
+    state.devices = devices.data;
     state.tournaments = tournaments;
-
-    // Extract unique devices from device tournaments
-    const deviceMap = new Map<number, Device>();
-    deviceTournaments.forEach((dt) => {
-      if (dt.Device && !deviceMap.has(dt.Device.ID)) {
-        deviceMap.set(dt.Device.ID, dt.Device);
-      }
-    });
-    // state.devices = Array.from(deviceMap.values());
   } catch (error) {
     state.error =
       error instanceof Error
@@ -57,26 +42,11 @@ async function loadData(): Promise<void> {
   }
 }
 
-const deviceTournamentsByDevice = computed(() => {
-  const grouped = new Map<number, DeviceTournament[]>();
-  state.deviceTournaments.forEach((dt) => {
-    const list = grouped.get(dt.DeviceID) || [];
-    list.push(dt);
-    grouped.set(dt.DeviceID, list);
-  });
-  return grouped;
-});
-
 async function selectDevice(deviceId: number): Promise<void> {
   state.loading = true;
   state.selectedDeviceId = deviceId;
-  const deviceTournaments =
-    await deviceTournamentsApiService.getDeviceTournaments(
-      state.selectedDeviceId,
-    );
-  console.log(deviceTournaments);
-  //   const deviceTournaments = deviceTournamentsByDevice.value.get(deviceId) || [];
-  //   state.selectedTournamentIds = deviceTournaments.map((dt) => dt.tournament_id);
+  const deviceTournaments = await deviceTournamentsApiService.getDeviceTournaments(state.selectedDeviceId);
+  state.selectedTournamentIds = deviceTournaments.map((dt) => dt.tournament_id);
   state.success = "";
   state.error = "";
   state.loading = false;
@@ -91,9 +61,7 @@ async function saveDeviceTournaments(): Promise<void> {
   try {
     await deviceTournamentsApiService.setDeviceTournaments(
       state.selectedDeviceId,
-      {
-        tournament_ids: state.selectedTournamentIds,
-      },
+      { tournament_ids: state.selectedTournamentIds },
     );
     state.success = "Torneos del dispositivo actualizados correctamente";
     await loadData();
@@ -114,6 +82,11 @@ function toggleTournament(tournamentId: number): void {
   } else {
     state.selectedTournamentIds.push(tournamentId);
   }
+}
+
+function cancelChanges(): void {
+    state.selectedTournamentIds = [];
+    state.selectedDeviceId = null;
 }
 
 onMounted(() => {
@@ -146,7 +119,7 @@ onMounted(() => {
           <h6>Dispositivos</h6>
           <div class="list-group">
             <button
-              v-for="device in state.devices.data"
+              v-for="device in state.devices"
               :key="device.ID"
               type="button"
               class="list-group-item list-group-item-action"
@@ -160,7 +133,7 @@ onMounted(() => {
               <small>{{ device.Platform }}</small>
             </button>
           </div>
-          <p v-if="state.devices.total === 0" class="text-muted mt-3">
+          <p v-if="state.devices.length === 0" class="text-muted mt-3">
             No hay dispositivos con torneos asignados
           </p>
         </div>
@@ -197,42 +170,20 @@ onMounted(() => {
             >
               Guardar Cambios
             </button>
+
+            <button
+              class="btn btn-warning ms-2"
+              :disabled="state.loading"
+              @click="cancelChanges"
+            >
+              Cancelar
+            </button>
           </div>
           <div v-else class="text-center text-muted">
             Seleccione un dispositivo para gestionar sus torneos
           </div>
         </div>
       </div>
-
-      <hr class="my-4" />
-
-      <h6>Vista General</h6>
-      <div v-if="state.deviceTournaments.length > 0" class="table-responsive">
-        <table class="table table-sm table-striped">
-          <thead>
-            <tr>
-              <th>Dispositivo</th>
-              <th>Torneo</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="dt in state.deviceTournaments"
-              :key="`${dt.DeviceID}-${dt.tournament_id}`"
-            >
-              <td>
-                {{
-                  dt.Device?.Name || dt.Device?.Token || `ID: ${dt.DeviceID}`
-                }}
-              </td>
-              <td>{{ dt.Tournament?.name || `ID: ${dt.tournament_id}` }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-else class="text-muted">
-        No hay relaciones dispositivo-torneo configuradas
-      </p>
     </div>
   </div>
 </template>

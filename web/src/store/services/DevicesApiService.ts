@@ -13,6 +13,10 @@ export class DevicesApiService extends BaseApiService {
   async getDevices({ page, limit }: { page: number; limit: number }): Promise<DeviceResponse> {
     return this.get<DeviceResponse>(`?page=${page}&limit=${limit}`);
   }
+    
+    async getAllDevices(): Promise<DeviceResponse> {
+        return this.get<DeviceResponse>('/all');
+    }
 }
 
 export const devicesApiService = new DevicesApiService();
