@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/apkutil"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
@@ -70,20 +71,20 @@ func apkStoragePath() string {
 func handleUploadApk(c *gin.Context) {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "file is required"})
+		respondError(c, http.StatusBadRequest, "file is required")
 		return
 	}
 
 	storagePath := apkStoragePath()
 	if err := os.MkdirAll(storagePath, 0o755); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not create storage directory"})
+		respondError(c, http.StatusInternalServerError, "could not create storage directory")
 		return
 	}
 
 	// Use a random temporary name to avoid path traversal via the user-supplied filename.
 	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", randomSuffix()))
 	if err := c.SaveUploadedFile(fileHeader, tmpPath); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not save file"})
+		respondError(c, http.StatusInternalServerError, "could not save file")
 		return
 	}
 
@@ -91,7 +92,7 @@ func handleUploadApk(c *gin.Context) {
 	apkInfo, parseErr := apkutil.ParseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "could not parse APK metadata: " + parseErr.Error()})
+		respondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
 		return
 	}
 
@@ -102,13 +103,11 @@ func handleUploadApk(c *gin.Context) {
 	}
 	if version == "" || !semverPattern.MatchString(version) {
 		_ = os.Remove(tmpPath)
-		errResp := map[string]string{
-			"error": "version must be in MAJOR.MINOR.PATCH format; provide it via the 'version' field or ensure the APK versionName uses that format",
-		}
+		msg := "version must be in MAJOR.MINOR.PATCH format; provide it via the 'version' field or ensure the APK versionName uses that format"
 		if apkInfo.VersionName != "" {
-			errResp["apk_version_name"] = apkInfo.VersionName
+			msg += " (apk_version_name: " + apkInfo.VersionName + ")"
 		}
-		respondCBOR(c, http.StatusBadRequest, errResp)
+		respondError(c, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -116,7 +115,7 @@ func handleUploadApk(c *gin.Context) {
 	destPath := filepath.Join(storagePath, fileName)
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		_ = os.Remove(tmpPath)
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "could not finalize file"})
+		respondError(c, http.StatusInternalServerError, "could not finalize file")
 		return
 	}
 
@@ -127,23 +126,23 @@ func handleUploadApk(c *gin.Context) {
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		respondCBOR(c, http.StatusConflict, map[string]string{"error": "could not save APK version: " + err.Error()})
+		respondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
 		return
 	}
 
-	respondCBOR(c, http.StatusCreated, map[string]any{
-		"id":                 apk.ID,
-		"version":            apk.Version,
-		"file_name":          apk.FileName,
-		"file_size":          apk.FileSize,
-		"description":        apk.Description,
-		"package_name":       apk.PackageName,
-		"version_code":       apk.VersionCode,
-		"min_sdk_version":    apk.MinSDKVersion,
-		"target_sdk_version": apk.TargetSDKVersion,
-		"download_token":     apk.DownloadToken,
-		"download_url":       fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
-		"created_at":         apk.CreatedAt,
+	respondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
+		Id:               uint32(apk.ID),
+		Version:          apk.Version,
+		FileName:         apk.FileName,
+		FileSize:         apk.FileSize,
+		Description:      apk.Description,
+		PackageName:      apk.PackageName,
+		VersionCode:      apk.VersionCode,
+		MinSdkVersion:    apk.MinSDKVersion,
+		TargetSdkVersion: apk.TargetSDKVersion,
+		DownloadToken:    apk.DownloadToken,
+		DownloadUrl:      fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
+		CreatedAt:        apk.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
 
@@ -345,19 +344,19 @@ func handleAssembleChunks(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, map[string]any{
-		"id":                 apk.ID,
-		"version":            apk.Version,
-		"file_name":          apk.FileName,
-		"file_size":          apk.FileSize,
-		"description":        apk.Description,
-		"package_name":       apk.PackageName,
-		"version_code":       apk.VersionCode,
-		"min_sdk_version":    apk.MinSDKVersion,
-		"target_sdk_version": apk.TargetSDKVersion,
-		"download_token":     apk.DownloadToken,
-		"download_url":       fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
-		"created_at":         apk.CreatedAt,
+	respondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
+		Id:               uint32(apk.ID),
+		Version:          apk.Version,
+		FileName:         apk.FileName,
+		FileSize:         apk.FileSize,
+		Description:      apk.Description,
+		PackageName:      apk.PackageName,
+		VersionCode:      apk.VersionCode,
+		MinSdkVersion:    apk.MinSDKVersion,
+		TargetSdkVersion: apk.TargetSDKVersion,
+		DownloadToken:    apk.DownloadToken,
+		DownloadUrl:      fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
+		CreatedAt:        apk.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
 
@@ -368,55 +367,55 @@ func handleCheckApkUpdate(c *gin.Context) {
 	clientVersion := c.Query("version")
 	clientPackage := c.Query("package")
 	if clientVersion == "" {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "version query parameter is required"})
+		respondError(c, http.StatusBadRequest, "version query parameter is required")
 		return
 	}
 
 	if clientPackage == "" {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "package query parameter is required"})
+		respondError(c, http.StatusBadRequest, "package query parameter is required")
 		return
 	}
 
 	latest, err := repository.GetLatestApkVersion(clientPackage)
 	if err != nil {
-		respondCBOR(c, http.StatusNotFound, map[string]string{"error": "no APK version available"})
+		respondError(c, http.StatusNotFound, "no APK version available")
 		return
 	}
 
 	newer, err := repository.IsNewerVersion(clientVersion, latest.Version)
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	resp := map[string]any{
-		"update_available": newer,
-		"latest_version":   latest.Version,
-		"package_name":     latest.PackageName,
-		"version_code":     latest.VersionCode,
+	resp := &pb.ApkUpdateCheckResponse{
+		UpdateAvailable: newer,
+		LatestVersion:   latest.Version,
+		PackageName:     latest.PackageName,
+		VersionCode:     latest.VersionCode,
 	}
 	if newer {
-		resp["download_url"] = fmt.Sprintf("/api/v1/apk/download/%s", latest.DownloadToken)
-		resp["description"] = latest.Description
-		resp["file_size"] = latest.FileSize
-		resp["min_sdk_version"] = latest.MinSDKVersion
-		resp["target_sdk_version"] = latest.TargetSDKVersion
+		resp.DownloadUrl = fmt.Sprintf("/api/v1/apk/download/%s", latest.DownloadToken)
+		resp.Description = latest.Description
+		resp.FileSize = latest.FileSize
+		resp.MinSdkVersion = latest.MinSDKVersion
+		resp.TargetSdkVersion = latest.TargetSDKVersion
 	}
 
-	respondCBOR(c, http.StatusOK, resp)
+	respondProto(c, http.StatusOK, resp)
 }
 
 // handleDownloadApk streams the APK file identified by its UUID download token.
 func handleDownloadApk(c *gin.Context) {
 	token := c.Param("token")
 	if _, err := uuid.Parse(token); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid download token"})
+		respondError(c, http.StatusBadRequest, "invalid download token")
 		return
 	}
 
 	apk, err := repository.GetApkVersionByToken(token)
 	if err != nil {
-		respondCBOR(c, http.StatusNotFound, map[string]string{"error": "APK version not found"})
+		respondError(c, http.StatusNotFound, "APK version not found")
 		return
 	}
 
@@ -424,7 +423,7 @@ func handleDownloadApk(c *gin.Context) {
 	storagePath, _ := filepath.Abs(apkStoragePath())
 	absPath, err := filepath.Abs(apk.FilePath)
 	if err != nil || !strings.HasPrefix(absPath, storagePath+string(filepath.Separator)) {
-		respondCBOR(c, http.StatusForbidden, map[string]string{"error": "file path is invalid"})
+		respondError(c, http.StatusForbidden, "file path is invalid")
 		return
 	}
 
@@ -435,44 +434,9 @@ func handleDownloadApk(c *gin.Context) {
 func handleListApkVersions(c *gin.Context) {
 	versions, err := repository.ListApkVersions()
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	type apkInfo struct {
-		ID               uint   `json:"id" cbor:"id"`
-		Version          string `json:"version" cbor:"version"`
-		FileName         string `json:"file_name" cbor:"file_name"`
-		FileSize         int64  `json:"file_size" cbor:"file_size"`
-		Description      string `json:"description" cbor:"description"`
-		IsActive         bool   `json:"is_active" cbor:"is_active"`
-		PackageName      string `json:"package_name" cbor:"package_name"`
-		VersionCode      int32  `json:"version_code" cbor:"version_code"`
-		MinSDKVersion    int32  `json:"min_sdk_version" cbor:"min_sdk_version"`
-		TargetSDKVersion int32  `json:"target_sdk_version" cbor:"target_sdk_version"`
-		DownloadToken    string `json:"download_token" cbor:"download_token"`
-		DownloadURL      string `json:"download_url" cbor:"download_url"`
-		CreatedAt        any    `json:"created_at" cbor:"created_at"`
-	}
-
-	result := make([]apkInfo, 0, len(versions))
-	for _, v := range versions {
-		result = append(result, apkInfo{
-			ID:               v.ID,
-			Version:          v.Version,
-			FileName:         v.FileName,
-			FileSize:         v.FileSize,
-			Description:      v.Description,
-			IsActive:         v.IsActive,
-			PackageName:      v.PackageName,
-			VersionCode:      v.VersionCode,
-			MinSDKVersion:    v.MinSDKVersion,
-			TargetSDKVersion: v.TargetSDKVersion,
-			DownloadToken:    v.DownloadToken,
-			DownloadURL:      fmt.Sprintf("/api/v1/apk/download/%s", v.DownloadToken),
-			CreatedAt:        v.CreatedAt,
-		})
-	}
-
-	respondCBOR(c, http.StatusOK, result)
+	respondProto(c, http.StatusOK, &pb.ApkList{Versions: apksToProto(versions)})
 }

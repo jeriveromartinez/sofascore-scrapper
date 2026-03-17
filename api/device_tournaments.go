@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
@@ -22,80 +23,77 @@ func (c *DeviceTournamentController) LoadRoutes() {
 func handleGetAllDeviceTournaments(c *gin.Context) {
 	deviceTournaments, err := repository.GetAllDeviceTournaments()
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, deviceTournaments)
+	respondProto(c, http.StatusOK, &pb.DeviceTournamentList{DeviceTournaments: deviceTournamentsToProto(deviceTournaments)})
 }
 
 func handleGetDeviceTournaments(c *gin.Context) {
 	deviceID, err := parseID(c.Param("deviceId"))
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid device id"})
+		respondError(c, http.StatusBadRequest, "invalid device id")
 		return
 	}
 
 	deviceTournaments, err := repository.GetDeviceTournaments(deviceID)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, deviceTournaments)
+	respondProto(c, http.StatusOK, &pb.DeviceTournamentList{DeviceTournaments: deviceTournamentsToProto(deviceTournaments)})
 }
 
 func handleAssignTournamentToDevice(c *gin.Context) {
-	var req struct {
-		DeviceID     uint `json:"device_id" cbor:"device_id"`
-		TournamentID uint `json:"tournament_id" cbor:"tournament_id"`
-	}
-	if err := parseCBORBody(c, &req); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	var req pb.AssignTournamentRequest
+	if err := parseProtoBody(c, &req); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid request")
 		return
 	}
 
-	deviceTournament, err := repository.AssignTournamentToDevice(req.DeviceID, req.TournamentID)
+	deviceTournament, err := repository.AssignTournamentToDevice(uint(req.DeviceId), uint(req.TournamentId))
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusCreated, deviceTournament)
+	respondProto(c, http.StatusCreated, deviceTournamentToProto(*deviceTournament))
 }
 
 func handleRemoveTournamentFromDevice(c *gin.Context) {
-	var req struct {
-		DeviceID     uint `json:"device_id" cbor:"device_id"`
-		TournamentID uint `json:"tournament_id" cbor:"tournament_id"`
-	}
-	if err := parseCBORBody(c, &req); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	var req pb.AssignTournamentRequest
+	if err := parseProtoBody(c, &req); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid request")
 		return
 	}
 
-	if err := repository.RemoveTournamentFromDevice(req.DeviceID, req.TournamentID); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	if err := repository.RemoveTournamentFromDevice(uint(req.DeviceId), uint(req.TournamentId)); err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, map[string]string{"message": "tournament removed from device"})
+	respondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament removed from device"})
 }
 
 func handleSetDeviceTournaments(c *gin.Context) {
 	deviceID, err := parseID(c.Param("deviceId"))
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid device id"})
+		respondError(c, http.StatusBadRequest, "invalid device id")
 		return
 	}
 
-	var req struct {
-		TournamentIDs []uint `json:"tournament_ids" cbor:"tournament_ids"`
-	}
-	if err := parseCBORBody(c, &req); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	var req pb.SetTournamentIdsRequest
+	if err := parseProtoBody(c, &req); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid request")
 		return
 	}
 
-	if err := repository.SetDeviceTournaments(deviceID, req.TournamentIDs); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	ids := make([]uint, len(req.TournamentIds))
+	for i, id := range req.TournamentIds {
+		ids[i] = uint(id)
+	}
+
+	if err := repository.SetDeviceTournaments(deviceID, ids); err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, map[string]string{"message": "device tournaments updated"})
+	respondProto(c, http.StatusOK, &pb.StatusMessage{Message: "device tournaments updated"})
 }

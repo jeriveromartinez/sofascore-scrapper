@@ -1,4 +1,9 @@
 import { BaseApiService } from "./BaseApiService";
+import {
+  Device as ProtoDeviceMessage,
+  DeviceList,
+  DeviceRegisterRequest,
+} from "../../proto/api";
 import type { Device, DeviceResponse, RegisterDevicePayload } from "./models";
 
 export class DevicesApiService extends BaseApiService {
@@ -7,16 +12,27 @@ export class DevicesApiService extends BaseApiService {
   }
 
   async registerDevice(payload: RegisterDevicePayload): Promise<Device> {
-    return this.post<Device, RegisterDevicePayload>("", payload);
+    return this.post<Device, RegisterDevicePayload>(
+      "",
+      payload,
+      DeviceRegisterRequest,
+      ProtoDeviceMessage,
+    );
   }
 
-  async getDevices({ page, limit }: { page: number; limit: number }): Promise<DeviceResponse> {
-    return this.get<DeviceResponse>(`?page=${page}&limit=${limit}`);
+  async getDevices({
+    page,
+    limit,
+  }: {
+    page: number;
+    limit: number;
+  }): Promise<DeviceResponse> {
+    return this.get<DeviceResponse>(`?page=${page}&limit=${limit}`, DeviceList);
   }
-    
-    async getAllDevices(): Promise<DeviceResponse> {
-        return this.get<DeviceResponse>('/all');
-    }
+
+  async getAllDevices(): Promise<DeviceResponse> {
+    return this.get<DeviceResponse>("/all", DeviceList);
+  }
 }
 
 export const devicesApiService = new DevicesApiService();

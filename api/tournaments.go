@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
@@ -22,79 +23,73 @@ func (c *TournamentController) LoadRoutes() {
 func handleGetTournaments(c *gin.Context) {
 	tournaments, err := repository.GetAllTournaments()
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, tournaments)
+	respondProto(c, http.StatusOK, &pb.TournamentList{Tournaments: tournamentsToProto(tournaments)})
 }
 
 func handleGetTournament(c *gin.Context) {
 	id, err := parseID(c.Param("id"))
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		respondError(c, http.StatusBadRequest, "invalid id")
 		return
 	}
 
 	tournament, err := repository.GetTournamentByID(id)
 	if err != nil {
-		respondCBOR(c, http.StatusNotFound, map[string]string{"error": "tournament not found"})
+		respondError(c, http.StatusNotFound, "tournament not found")
 		return
 	}
-	respondCBOR(c, http.StatusOK, tournament)
+	respondProto(c, http.StatusOK, tournamentToProto(*tournament))
 }
 
 func handleCreateTournament(c *gin.Context) {
-	var req struct {
-		Name string `json:"name" cbor:"name"`
-		Slug string `json:"slug" cbor:"slug"`
-	}
-	if err := parseCBORBody(c, &req); err != nil || req.Name == "" {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "name is required"})
+	var req pb.TournamentRequest
+	if err := parseProtoBody(c, &req); err != nil || req.Name == "" {
+		respondError(c, http.StatusBadRequest, "name is required")
 		return
 	}
 
 	tournament, err := repository.CreateTournament(req.Name, req.Slug)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusCreated, tournament)
+	respondProto(c, http.StatusCreated, tournamentToProto(*tournament))
 }
 
 func handleUpdateTournament(c *gin.Context) {
 	id, err := parseID(c.Param("id"))
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		respondError(c, http.StatusBadRequest, "invalid id")
 		return
 	}
 
-	var req struct {
-		Name string `json:"name" cbor:"name"`
-		Slug string `json:"slug" cbor:"slug"`
-	}
-	if err := parseCBORBody(c, &req); err != nil || req.Name == "" {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "name is required"})
+	var req pb.TournamentRequest
+	if err := parseProtoBody(c, &req); err != nil || req.Name == "" {
+		respondError(c, http.StatusBadRequest, "name is required")
 		return
 	}
 
 	tournament, err := repository.UpdateTournament(id, req.Name, req.Slug)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, tournament)
+	respondProto(c, http.StatusOK, tournamentToProto(*tournament))
 }
 
 func handleDeleteTournament(c *gin.Context) {
 	id, err := parseID(c.Param("id"))
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		respondError(c, http.StatusBadRequest, "invalid id")
 		return
 	}
 
 	if err := repository.DeleteTournament(id); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, map[string]string{"message": "tournament deleted"})
+	respondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament deleted"})
 }

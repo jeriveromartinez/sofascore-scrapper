@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"io"
 	"log"
 	"net/http"
@@ -11,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	cbor "github.com/fxamacker/cbor/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jeriveromartinez/sofascore-scrapper/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	"google.golang.org/protobuf/proto"
 )
 
 const userIDKey = "userID"
@@ -28,21 +27,25 @@ func getJWTSecret() []byte {
 	return []byte("changeme-please-set-JWT_SECRET-env")
 }
 
-func respondCBOR(c *gin.Context, status int, v any) {
-	data, err := cbor.Marshal(v)
+func respondProto(c *gin.Context, status int, v proto.Message) {
+	data, err := proto.Marshal(v)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "encoding error")
 		return
 	}
-	c.Data(status, "application/cbor", data)
+	c.Data(status, "application/x-protobuf", data)
 }
 
-func parseCBORBody(c *gin.Context, v any) error {
+func respondError(c *gin.Context, status int, msg string) {
+	c.JSON(status, map[string]string{"error": msg})
+}
+
+func parseProtoBody(c *gin.Context, v proto.Message) error {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		return err
 	}
-	return cbor.NewDecoder(bytes.NewReader(body)).Decode(v)
+	return proto.Unmarshal(body, v)
 }
 
 func generateToken(userID uint, username string) (string, error) {
@@ -59,7 +62,7 @@ func authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "missing token"})
+			respondError(c, http.StatusUnauthorized, "missing token")
 			c.Abort()
 			return
 		}
@@ -71,13 +74,13 @@ func authMiddleware() gin.HandlerFunc {
 			return getJWTSecret(), nil
 		})
 		if err != nil || !token.Valid {
-			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			respondError(c, http.StatusUnauthorized, "invalid token")
 			c.Abort()
 			return
 		}
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			respondError(c, http.StatusUnauthorized, "invalid token")
 			c.Abort()
 			return
 		}
@@ -97,14 +100,14 @@ func appMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		db, err := database.GetDB()
 		if err != nil {
-			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "you are lost"})
+			respondError(c, http.StatusUnauthorized, "you are lost")
 			c.Abort()
 			return
 		}
 
 		var device models.Device
 		if err := db.Where("token = ?", c.GetHeader("APP-XIPTV")).First(&device).Error; err != nil {
-			respondCBOR(c, http.StatusUnauthorized, map[string]string{"error": "you are lost"})
+			respondError(c, http.StatusUnauthorized, "you are lost")
 			c.Abort()
 			return
 		}
@@ -181,7 +184,7 @@ func registerDashboardRoutes(router *gin.Engine) {
 
 	router.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
-			respondCBOR(c, http.StatusNotFound, map[string]string{"error": "not found"})
+			respondError(c, http.StatusNotFound, "not found")
 			return
 		}
 

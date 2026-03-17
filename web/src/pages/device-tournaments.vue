@@ -45,11 +45,25 @@ async function loadData(): Promise<void> {
 async function selectDevice(deviceId: number): Promise<void> {
   state.loading = true;
   state.selectedDeviceId = deviceId;
-  const deviceTournaments = await deviceTournamentsApiService.getDeviceTournaments(state.selectedDeviceId);
-  state.selectedTournamentIds = deviceTournaments.map((dt) => dt.tournament_id);
   state.success = "";
   state.error = "";
-  state.loading = false;
+
+  try {
+    const deviceTournaments =
+      await deviceTournamentsApiService.getDeviceTournaments(
+        state.selectedDeviceId,
+      );
+    state.selectedTournamentIds = deviceTournaments.map(
+      (dt) => dt.tournamentId,
+    );
+  } catch (error) {
+    state.error =
+      error instanceof Error
+        ? error.message
+        : "No se pudieron cargar los torneos del dispositivo";
+  } finally {
+    state.loading = false;
+  }
 }
 
 async function saveDeviceTournaments(): Promise<void> {
@@ -61,7 +75,7 @@ async function saveDeviceTournaments(): Promise<void> {
   try {
     await deviceTournamentsApiService.setDeviceTournaments(
       state.selectedDeviceId,
-      { tournament_ids: state.selectedTournamentIds },
+      { tournamentIds: state.selectedTournamentIds },
     );
     state.success = "Torneos del dispositivo actualizados correctamente";
     await loadData();
@@ -85,8 +99,8 @@ function toggleTournament(tournamentId: number): void {
 }
 
 function cancelChanges(): void {
-    state.selectedTournamentIds = [];
-    state.selectedDeviceId = null;
+  state.selectedTournamentIds = [];
+  state.selectedDeviceId = null;
 }
 
 onMounted(() => {
@@ -120,17 +134,17 @@ onMounted(() => {
           <div class="list-group">
             <button
               v-for="device in state.devices"
-              :key="device.ID"
+              :key="device.id"
               type="button"
               class="list-group-item list-group-item-action"
-              :class="{ active: state.selectedDeviceId === device.ID }"
-              @click="selectDevice(device.ID)"
+              :class="{ active: state.selectedDeviceId === device.id }"
+              @click="selectDevice(device.id)"
             >
               <div class="d-flex w-100 justify-content-between">
-                <h6 class="mb-1">{{ device.Name || device.Token }}</h6>
-                <small>ID: {{ device.ID }}</small>
+                <h6 class="mb-1">{{ device.name || device.token }}</h6>
+                <small>ID: {{ device.id }}</small>
               </div>
-              <small>{{ device.Platform }}</small>
+              <small>{{ device.platform }}</small>
             </button>
           </div>
           <p v-if="state.devices.length === 0" class="text-muted mt-3">
@@ -144,19 +158,19 @@ onMounted(() => {
             <div class="mb-3">
               <div
                 v-for="tournament in state.tournaments"
-                :key="tournament.ID"
+                :key="tournament.id"
                 class="form-check"
               >
                 <input
-                  :id="`tournament-${tournament.ID}`"
+                  :id="`tournament-${tournament.id}`"
                   type="checkbox"
                   class="form-check-input"
-                  :checked="state.selectedTournamentIds.includes(tournament.ID)"
-                  @change="toggleTournament(tournament.ID)"
+                  :checked="state.selectedTournamentIds.includes(tournament.id)"
+                  @change="toggleTournament(tournament.id)"
                 />
                 <label
                   class="form-check-label"
-                  :for="`tournament-${tournament.ID}`"
+                  :for="`tournament-${tournament.id}`"
                 >
                   {{ tournament.name }}
                   <small class="text-muted">({{ tournament.slug }})</small>

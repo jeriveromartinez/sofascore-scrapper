@@ -1,0 +1,239 @@
+syntax = "proto3";
+
+package sofascore;
+
+option go_package = "github.com/jeriveromartinez/sofascore-scrapper/pb;pb";
+
+// ========== Common ==========
+
+message ErrorResponse {
+  string error = 1;
+}
+
+message StatusMessage {
+  string message = 1;
+}
+
+message StatusResponse {
+  string status = 1;
+}
+
+// ========== Auth / Users ==========
+
+message AuthRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message AuthResponse {
+  uint32 id = 1;
+  string email = 2;
+  string token = 3;
+}
+
+// ========== Devices ==========
+
+message DeviceRegisterRequest {
+  string token = 1;
+  string platform = 2;
+  string name = 3;
+}
+
+message Device {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  string token = 4;
+  string platform = 5;
+  string name = 6;
+  int64 last_seen = 7;
+}
+
+message DeviceList {
+  repeated Device data = 1;
+  int32 page = 2;
+  int32 limit = 3;
+  int64 total = 4;
+  int32 total_pages = 5;
+}
+
+// ========== Tournaments ==========
+
+message TournamentRequest {
+  string name = 1;
+  string slug = 2;
+}
+
+message Tournament {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  string name = 4;
+  string slug = 5;
+  string region = 6;
+}
+
+message TournamentList {
+  repeated Tournament tournaments = 1;
+}
+
+// ========== Device Tournaments ==========
+
+message AssignTournamentRequest {
+  uint32 device_id = 1;
+  uint32 tournament_id = 2;
+}
+
+message SetTournamentIdsRequest {
+  repeated uint32 tournament_ids = 1;
+}
+
+message DeviceTournament {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  uint32 device_id = 4;
+  uint32 tournament_id = 5;
+  Device device = 6;
+  Tournament tournament = 7;
+}
+
+message DeviceTournamentList {
+  repeated DeviceTournament device_tournaments = 1;
+}
+
+// ========== Global Config ==========
+
+message GlobalTournamentConfig {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  uint32 tournament_id = 4;
+  Tournament tournament = 5;
+}
+
+message GlobalTournamentConfigList {
+  repeated GlobalTournamentConfig configs = 1;
+}
+
+// ========== Teams ==========
+
+message Team {
+  uint32 id = 1;
+  int64 team_id = 2;
+  string logo_url = 3;
+}
+
+// ========== Events ==========
+
+message SofaScoreEvent {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  int64 sofa_score_event_id = 4;
+  string sport = 5;
+  string home_team = 6;
+  int32 home_score = 7;
+  int64 home_team_id = 8;
+  string away_team = 9;
+  int32 away_score = 10;
+  int64 away_team_id = 11;
+  int64 scraped_at = 12;
+  string category = 13;
+  int64 start_timestamp = 14;
+  int64 current_period_start_timestamp = 15;
+  string slug = 16;
+  Team team_home = 17;
+  Team team_away = 18;
+  Tournament league = 19;
+}
+
+message EventsList {
+  repeated SofaScoreEvent data = 1;
+  int32 page = 2;
+  int32 limit = 3;
+  int64 total = 4;
+  int32 total_pages = 5;
+}
+
+// ========== Playback ==========
+
+message LogPlaybackRequest {
+  string device_token = 1;
+  int64 sofa_score_event_id = 2;
+  int64 started_at = 3;
+}
+
+message UpdatePlaybackRequest {
+  int64 ended_at = 1;
+}
+
+message PlaybackLog {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  uint32 device_id = 4;
+  int64 sofa_score_event_id = 5;
+  int64 started_at = 6;
+  int64 ended_at = 7;
+}
+
+// ========== Stats ==========
+
+message EventStats {
+  int64 sofa_score_event_id = 1;
+  int64 view_count = 2;
+}
+
+message TopEventsResponse {
+  repeated EventStats stats = 1;
+}
+
+// ========== APK ==========
+
+message ApkInfo {
+  uint32 id = 1;
+  string version = 2;
+  string file_name = 3;
+  int64 file_size = 4;
+  string description = 5;
+  string package_name = 6;
+  int32 version_code = 7;
+  int32 min_sdk_version = 8;
+  int32 target_sdk_version = 9;
+  string download_token = 10;
+  string download_url = 11;
+  string created_at = 12;
+  bool is_active = 13;
+}
+
+message ApkList {
+  repeated ApkInfo versions = 1;
+}
+
+message ApkUploadResponse {
+  uint32 id = 1;
+  string version = 2;
+  string file_name = 3;
+  int64 file_size = 4;
+  string description = 5;
+  string package_name = 6;
+  int32 version_code = 7;
+  int32 min_sdk_version = 8;
+  int32 target_sdk_version = 9;
+  string download_token = 10;
+  string download_url = 11;
+  string created_at = 12;
+}
+
+message ApkUpdateCheckResponse {
+  bool update_available = 1;
+  string latest_version = 2;
+  string package_name = 3;
+  int32 version_code = 4;
+  string download_url = 5;
+  string description = 6;
+  int64 file_size = 7;
+  int32 min_sdk_version = 8;
+  int32 target_sdk_version = 9;
+}

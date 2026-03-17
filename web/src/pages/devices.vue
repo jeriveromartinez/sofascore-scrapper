@@ -36,6 +36,11 @@ async function submit(): Promise<void> {
   state.success = "";
 
   try {
+    await devicesApiService.registerDevice({
+      token: state.token,
+      platform: state.platform,
+      name: state.name,
+    });
     state.success = "Dispositivo registrado/actualizado";
     await fetchEvents();
   } catch (error) {
@@ -50,7 +55,7 @@ async function submit(): Promise<void> {
 
 function nextPage(): void {
   if (!state.result) return;
-  if (state.result.page >= state.result.total_pages) return;
+  if (state.result.page >= state.result.totalPages) return;
   state.result.page += 1;
   void fetchEvents();
 }
@@ -116,11 +121,11 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="event in state.result.data" :key="event.ID">
-              <td>{{ event.Token }}</td>
-              <td>{{ event.Platform }}</td>
-              <td>{{ event.Name }}</td>
-              <td>{{ event.LastSeen }}</td>
+            <tr v-for="event in state.result.data" :key="event.id">
+              <td>{{ event.token }}</td>
+              <td>{{ event.platform }}</td>
+              <td>{{ event.name }}</td>
+              <td>{{ event.lastSeen }}</td>
             </tr>
           </tbody>
         </table>
@@ -137,12 +142,14 @@ onMounted(() => {
         <button
           class="btn btn-outline-secondary btn-sm"
           @click="nextPage"
-          :disabled="state.loading || state.result.page >= state.result.total_pages"
+          :disabled="
+            state.loading || state.result.page >= state.result.totalPages
+          "
         >
           Siguiente
         </button>
         <span class="text-body-secondary small">
-          Pagina {{ state.result.page }} / {{ state.result.total_pages }} - Total
+          Pagina {{ state.result.page }} / {{ state.result.totalPages }} - Total
           {{ state.result.total }}
         </span>
       </div>

@@ -5,6 +5,7 @@ import type { ApkCheckResponse } from "../../store/services/models";
 
 const state = reactive({
   version: "1.0.0",
+  packageName: "",
   loading: false,
   error: "",
   data: null as ApkCheckResponse | null,
@@ -42,7 +43,7 @@ async function downloadWithApiBlob(appKey: string): Promise<void> {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `sofascore-${state.data?.latest_version ?? "latest"}.apk`;
+    anchor.download = `sofascore-${state.data?.latestVersion ?? "latest"}.apk`;
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
@@ -59,7 +60,10 @@ async function check(): Promise<void> {
   state.data = null;
 
   try {
-    state.data = await apkApiService.checkUpdate(state.version);
+    state.data = await apkApiService.checkUpdate(
+      state.version,
+      state.packageName,
+    );
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "No se pudo validar version";
@@ -92,6 +96,16 @@ async function check(): Promise<void> {
             required
           />
         </div>
+        <div class="col-md-4">
+          <label class="form-label">Package</label>
+          <input
+            v-model="state.packageName"
+            class="form-control"
+            type="text"
+            placeholder="com.example.app"
+            required
+          />
+        </div>
         <div class="col-md-2 d-flex align-items-end">
           <button class="btn btn-primary w-100" :disabled="state.loading">
             Verificar
@@ -104,38 +118,38 @@ async function check(): Promise<void> {
 
       <div v-if="state.data" class="border rounded p-3">
         <p class="mb-1">
-          <strong>Ultima version:</strong> {{ state.data.latest_version }}
+          <strong>Ultima version:</strong> {{ state.data.latestVersion }}
         </p>
         <p class="mb-1">
-          <strong>Package:</strong> {{ state.data.package_name }}
+          <strong>Package:</strong> {{ state.data.packageName }}
         </p>
         <p class="mb-1">
-          <strong>VersionCode:</strong> {{ state.data.version_code }}
+          <strong>VersionCode:</strong> {{ state.data.versionCode }}
         </p>
         <p class="mb-3">
           <strong>Update:</strong>
           <span
-            :class="state.data.update_available ? 'text-success' : 'text-muted'"
+            :class="state.data.updateAvailable ? 'text-success' : 'text-muted'"
           >
-            {{ state.data.update_available ? "Disponible" : "No disponible" }}
+            {{ state.data.updateAvailable ? "Disponible" : "No disponible" }}
           </span>
         </p>
 
         <div
-          v-if="state.data.update_available && state.data.download_url"
+          v-if="state.data.updateAvailable && state.data.downloadUrl"
           class="d-flex flex-wrap gap-2"
         >
           <button
             class="btn btn-success"
             type="button"
-            @click="downloadWithAnchor(state.data.download_url)"
+            @click="downloadWithAnchor(state.data.downloadUrl)"
           >
             Descargar (enlace directo)
           </button>
           <button
             class="btn btn-outline-success"
             type="button"
-            @click="downloadWithApiBlob(state.data.download_url)"
+            @click="downloadWithApiBlob(state.data.downloadUrl)"
           >
             Descargar (via API Blob)
           </button>

@@ -1,4 +1,5 @@
 import { BaseApiService } from "./BaseApiService";
+import { TopEventsResponse } from "../../proto/api";
 import type { EventStats } from "./models";
 
 export class StatsApiService extends BaseApiService {
@@ -8,7 +9,7 @@ export class StatsApiService extends BaseApiService {
 
   async getTopEvents(limit?: number): Promise<EventStats[]> {
     const suffix = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
-    return this.get<EventStats[]>(`/top-events${suffix}`);
+    return (await this.get(`/top-events${suffix}`, TopEventsResponse)).stats;
   }
 }
 

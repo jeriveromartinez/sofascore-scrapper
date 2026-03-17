@@ -49,7 +49,7 @@ async function fetchEvents(): Promise<void> {
 
 function nextPage(): void {
   if (!state.data) return;
-  if (state.page >= state.data.total_pages) return;
+  if (state.page >= state.data.totalPages) return;
   state.page += 1;
   void fetchEvents();
 }
@@ -148,27 +148,27 @@ onMounted(() => fetchEvents());
             </tr>
           </thead>
           <tbody>
-            <tr v-for="event in state.data.data" :key="event.ID">
-              <td>{{ event.SofaScoreEventId }}</td>
-              <td>{{ event.league.name }}</td>
-              <td>{{ event.Sport }}</td>
+            <tr v-for="event in state.data.data" :key="event.id">
+              <td>{{ event.sofaScoreEventId }}</td>
+              <td>{{ event.league?.name || "-" }}</td>
+              <td>{{ event.sport }}</td>
               <td>
                 <img
-                  :src="event.teamHome.LogoUrl"
-                  :alt="event.HomeTeam"
+                  :src="event.teamHome?.logoUrl"
+                  :alt="event.homeTeam"
                   class="me-2"
                   width="40px"
                 />
-                {{ event.HomeTeam }} vs {{ event.AwayTeam }}
+                {{ event.homeTeam }} vs {{ event.awayTeam }}
                 <img
-                  :src="event.teamAway.LogoUrl"
-                  :alt="event.AwayTeam"
+                  :src="event.teamAway?.logoUrl"
+                  :alt="event.awayTeam"
                   class="me-2"
                   width="40px"
                 />
               </td>
-              <td>{{ event.HomeScore }} - {{ event.AwayScore }}</td>
-              <td>{{ formatTimestamp(event.StartTimestamp) }}</td>
+              <td>{{ event.homeScore }} - {{ event.awayScore }}</td>
+              <td>{{ formatTimestamp(event.startTimestamp) }}</td>
             </tr>
           </tbody>
         </table>
@@ -185,12 +185,12 @@ onMounted(() => fetchEvents());
         <button
           class="btn btn-outline-secondary btn-sm"
           @click="nextPage"
-          :disabled="state.loading || state.page >= state.data.total_pages"
+          :disabled="state.loading || state.page >= state.data.totalPages"
         >
           Siguiente
         </button>
         <span class="text-body-secondary small">
-          Pagina {{ state.page }} / {{ state.data.total_pages }} - Total
+          Pagina {{ state.page }} / {{ state.data.totalPages }} - Total
           {{ state.data.total }}
         </span>
       </div>

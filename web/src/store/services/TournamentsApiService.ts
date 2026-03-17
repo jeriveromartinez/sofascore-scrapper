@@ -1,4 +1,10 @@
 import { BaseApiService } from "./BaseApiService";
+import {
+  StatusMessage,
+  Tournament as ProtoTournamentMessage,
+  TournamentList,
+  TournamentRequest,
+} from "../../proto/api";
 import type {
   Tournament,
   CreateTournamentPayload,
@@ -12,23 +18,33 @@ export class TournamentsApiService extends BaseApiService {
   }
 
   async getAllTournaments(): Promise<Tournament[]> {
-    return this.get<Tournament[]>("");
+    return (await this.get("", TournamentList)).tournaments;
   }
 
   async getTournament(id: number): Promise<Tournament> {
-    return this.get<Tournament>(`/${id}`);
+    return this.get(`/${id}`, ProtoTournamentMessage);
   }
 
-  async createTournament(payload: CreateTournamentPayload): Promise<Tournament> {
-    return this.post<Tournament, CreateTournamentPayload>("", payload);
+  async createTournament(
+    payload: CreateTournamentPayload,
+  ): Promise<Tournament> {
+    return this.post("", payload, TournamentRequest, ProtoTournamentMessage);
   }
 
-  async updateTournament(id: number, payload: UpdateTournamentPayload): Promise<Tournament> {
-    return this.put<Tournament, UpdateTournamentPayload>(`/${id}`, payload);
+  async updateTournament(
+    id: number,
+    payload: UpdateTournamentPayload,
+  ): Promise<Tournament> {
+    return this.put(
+      `/${id}`,
+      payload,
+      TournamentRequest,
+      ProtoTournamentMessage,
+    );
   }
 
   async deleteTournament(id: number): Promise<StatusResponse> {
-    return this.delete<StatusResponse>(`/${id}`);
+    return this.delete(`/${id}`, StatusMessage);
   }
 }
 

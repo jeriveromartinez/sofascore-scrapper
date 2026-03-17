@@ -1,50 +1,28 @@
-export interface GormDeletedAt {
-  Time?: string;
-  Valid?: boolean;
-}
+import type {
+  ApkInfo as ProtoApkInfo,
+  ApkUploadResponse as ProtoApkUploadResponse,
+  ApkUpdateCheckResponse as ProtoApkUpdateCheckResponse,
+  Device as ProtoDevice,
+  DeviceList,
+  DeviceRegisterRequest,
+  DeviceTournament as ProtoDeviceTournament,
+  EventsList,
+  GlobalTournamentConfig as ProtoGlobalTournamentConfig,
+  LogPlaybackRequest,
+  PlaybackLog as ProtoPlaybackLog,
+  SofaScoreEvent as ProtoSofaScoreEvent,
+  Team as ProtoTeam,
+  Tournament as ProtoTournament,
+  TournamentRequest,
+  SetTournamentIdsRequest,
+  AssignTournamentRequest,
+  EventStats as ProtoEventStats,
+} from "../../../proto/api";
 
-export interface GormEntity {
-  ID: number;
-  CreatedAt: string;
-  UpdatedAt: string;
-  DeletedAt: GormDeletedAt | null;
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  page: number;
-  limit: number;
-  total: number;
-  total_pages: number;
-}
-
-export interface Team extends GormEntity {
-  LogoUrl: string;
-}
-
-export interface SofaScoreEvent extends GormEntity {
-  SofaScoreEventId: number;
-  Sport: string;
-  HomeTeam: string;
-  HomeScore: number;
-  HomeTeamId: number;
-  AwayTeam: string;
-  AwayScore: number;
-  AwayTeamId: number;
-  ScrapedAt: number;
-  Category: string;
-  StartTimestamp: number;
-  CurrentPeriodStartTimestamp: number;
-  Slug: string;
-
-  teamHome: Team;
-  teamAway: Team;
-  league: Tournament;
-}
-
-export interface EventsResponse extends ApiResponse<SofaScoreEvent[]> {}
-
-export interface DeviceResponse extends ApiResponse<Device[]> {}
+export type Team = ProtoTeam;
+export type SofaScoreEvent = ProtoSofaScoreEvent;
+export type EventsResponse = EventsList;
+export type DeviceResponse = DeviceList;
 
 export interface EventsQuery {
   date?: string;
@@ -53,132 +31,35 @@ export interface EventsQuery {
   limit?: number;
 }
 
-export interface Device extends GormEntity {
-  UserID: number;
-  Token: string;
-  Platform: string;
-  Name: string;
-  LastSeen: number;
-}
-
-export interface RegisterDevicePayload {
-  token: string;
-  platform?: string;
-  name?: string;
-}
-
-export interface PlaybackLog extends GormEntity {
-  DeviceID: number;
-  SofaScoreEventId: number;
-  StartedAt: number;
-  EndedAt: number;
-}
-
-export interface CreatePlaybackPayload {
-  device_token: string;
-  sofa_score_event_id: number;
-  started_at?: number;
-}
-
+export type Device = ProtoDevice;
+export type RegisterDevicePayload = DeviceRegisterRequest;
+export type PlaybackLog = ProtoPlaybackLog;
+export type CreatePlaybackPayload = LogPlaybackRequest;
 export interface UpdatePlaybackPayload {
-  ended_at?: number;
+  endedAt?: number;
 }
 
 export interface StatusResponse {
-  status: string;
+  status?: string;
+  message?: string;
 }
 
-export interface EventStats {
-  SofaScoreEventId: number;
-  ViewCount: number;
-}
-
-export interface Tournament extends GormEntity {
-  name: string;
-  slug: string;
-}
-
-export interface DeviceTournament extends GormEntity {
-  DeviceID: number;
-  tournament_id: number;
-  Device?: Device;
-  Tournament?: Tournament;
-}
-
-export interface GlobalTournamentConfig extends GormEntity {
-  tournament_id: number;
-  Tournament?: Tournament;
-}
-
-export interface CreateTournamentPayload {
-  name: string;
-  slug: string;
-}
-
-export interface UpdateTournamentPayload {
-  name: string;
-  slug: string;
-}
-
-export interface AssignTournamentPayload {
-  device_id: number;
-  tournament_id: number;
-}
-
-export interface SetDeviceTournamentsPayload {
-  tournament_ids: number[];
-}
-
-export interface SetGlobalConfigPayload {
-  tournament_ids: number[];
-}
-
+export type EventStats = ProtoEventStats;
+export type Tournament = ProtoTournament;
+export type DeviceTournament = ProtoDeviceTournament;
+export type GlobalTournamentConfig = ProtoGlobalTournamentConfig;
+export type CreateTournamentPayload = TournamentRequest;
+export type UpdateTournamentPayload = TournamentRequest;
+export type AssignTournamentPayload = AssignTournamentRequest;
+export type SetDeviceTournamentsPayload = SetTournamentIdsRequest;
+export type SetGlobalConfigPayload = SetTournamentIdsRequest;
 export interface AddGlobalConfigPayload {
-  tournament_id: number;
+  tournamentId: number;
 }
 
-export interface UploadApkResponse {
-  id: number;
-  version: string;
-  file_name: string;
-  file_size: number;
-  description: string;
-  package_name: string;
-  version_code: number;
-  min_sdk_version: number;
-  target_sdk_version: number;
-  download_token: string;
-  download_url: string;
-  created_at: string;
-}
-
-export interface ApkVersionInfo {
-  id: number;
-  version: string;
-  file_name: string;
-  file_size: number;
-  description: string;
-  is_active: boolean;
-  package_name: string;
-  version_code: number;
-  min_sdk_version: number;
-  target_sdk_version: number;
-  download_token: string;
-  download_url: string;
-  created_at: string;
-}
-
-export interface ApkCheckResponse {
-  update_available: boolean;
-  latest_version: string;
-  package_name: string;
-  version_code: number;
-  download_url?: string;
-  description?: string;
-  file_size?: number;
-  min_sdk_version?: number;
-  target_sdk_version?: number;
-}
+export type UploadApkResponse = ProtoApkUploadResponse;
+export type ApkVersionInfo = ProtoApkInfo;
+export type ApkCheckResponse = ProtoApkUpdateCheckResponse;
 
 export interface ApiErrorResponse {
   error: string;

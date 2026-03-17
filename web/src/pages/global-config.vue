@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { reactive, onMounted } from "vue";
-import { globalConfigApiService, tournamentsApiService } from "../store/services";
-import type { GlobalTournamentConfig, Tournament } from "../store/services/models";
+import {
+  globalConfigApiService,
+  tournamentsApiService,
+} from "../store/services";
+import type {
+  GlobalTournamentConfig,
+  Tournament,
+} from "../store/services/models";
 
 const state = reactive({
   globalConfig: [] as GlobalTournamentConfig[],
@@ -16,12 +22,18 @@ async function loadData(): Promise<void> {
   state.loading = true;
   state.error = "";
   try {
-    const [globalConfig, tournaments] = await Promise.all([globalConfigApiService.getGlobalConfig(), tournamentsApiService.getAllTournaments()]);
+    const [globalConfig, tournaments] = await Promise.all([
+      globalConfigApiService.getGlobalConfig(),
+      tournamentsApiService.getAllTournaments(),
+    ]);
     state.globalConfig = globalConfig;
     state.tournaments = tournaments;
-    state.selectedTournamentIds = globalConfig.map(gc => gc.tournament_id);
+    state.selectedTournamentIds = globalConfig.map((gc) => gc.tournamentId);
   } catch (error) {
-    state.error = error instanceof Error ? error.message : "No se pudieron cargar los datos";
+    state.error =
+      error instanceof Error
+        ? error.message
+        : "No se pudieron cargar los datos";
   } finally {
     state.loading = false;
   }
@@ -32,11 +44,16 @@ async function saveGlobalConfig(): Promise<void> {
   state.error = "";
   state.success = "";
   try {
-    await globalConfigApiService.setGlobalConfig({ tournament_ids: [...state.selectedTournamentIds] });
+    await globalConfigApiService.setGlobalConfig({
+      tournamentIds: [...state.selectedTournamentIds],
+    });
     state.success = "Configuración global actualizada correctamente";
     await loadData();
   } catch (error) {
-    state.error = error instanceof Error ? error.message : "No se pudo actualizar la configuración global";
+    state.error =
+      error instanceof Error
+        ? error.message
+        : "No se pudo actualizar la configuración global";
   } finally {
     state.loading = false;
   }
@@ -60,13 +77,15 @@ onMounted(() => {
   <div class="card">
     <div class="card-header">
       <h5 class="mb-0">Configuración Global de Torneos</h5>
-      <small class="text-body-secondary">/api/v1/global-tournament-config</small>
+      <small class="text-body-secondary"
+        >/api/v1/global-tournament-config</small
+      >
     </div>
 
     <div class="card-body">
       <div class="alert alert-info">
-        <strong>Nota:</strong> Los torneos seleccionados aquí serán visibles para los dispositivos
-        que no tengan torneos específicos asignados.
+        <strong>Nota:</strong> Los torneos seleccionados aquí serán visibles
+        para los dispositivos que no tengan torneos específicos asignados.
       </div>
 
       <div v-if="state.error" class="alert alert-danger">
@@ -87,17 +106,20 @@ onMounted(() => {
         <div class="mb-3">
           <div
             v-for="tournament in state.tournaments"
-            :key="tournament.ID"
+            :key="tournament.id"
             class="form-check"
           >
             <input
-              :id="`tournament-${tournament.ID}`"
+              :id="`tournament-${tournament.id}`"
               type="checkbox"
               class="form-check-input"
-              :checked="state.selectedTournamentIds.includes(tournament.ID)"
-              @change="toggleTournament(tournament.ID)"
+              :checked="state.selectedTournamentIds.includes(tournament.id)"
+              @change="toggleTournament(tournament.id)"
             />
-            <label class="form-check-label" :for="`tournament-${tournament.ID}`">
+            <label
+              class="form-check-label"
+              :for="`tournament-${tournament.id}`"
+            >
               <strong>{{ tournament.name }}</strong>
               <small class="text-muted ms-2">({{ tournament.slug }})</small>
             </label>

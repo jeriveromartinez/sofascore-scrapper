@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
@@ -24,8 +25,8 @@ func handleTopEvents(c *gin.Context) {
 	}
 	stats, err := repository.GetTopEvents(limit)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, stats)
+	respondProto(c, http.StatusOK, &pb.TopEventsResponse{Stats: eventStatsToProto(stats)})
 }

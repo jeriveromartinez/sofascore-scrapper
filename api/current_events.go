@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
@@ -28,8 +29,8 @@ func handleGetCurrentEvents(c *gin.Context) {
 
 	events, err := repository.GetCurrentAndUpcomingEvents(device.ID, limit)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, events)
+	respondProto(c, http.StatusOK, &pb.EventsList{Data: eventsToProto(events)})
 }

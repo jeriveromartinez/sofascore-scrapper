@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
@@ -20,39 +21,42 @@ func (c *GlobalConfigController) LoadRoutes() {
 func handleGetGlobalConfig(c *gin.Context) {
 	configs, err := repository.GetGlobalTournamentConfig()
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, configs)
+	respondProto(c, http.StatusOK, &pb.GlobalTournamentConfigList{Configs: globalConfigsToProto(configs)})
 }
 
 func handleAddGlobalConfig(c *gin.Context) {
-	var req struct {
-		TournamentIDs []uint `json:"tournament_ids" cbor:"tournament_ids"`
-	}
-	if err := parseCBORBody(c, &req); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	var req pb.SetTournamentIdsRequest
+	if err := parseProtoBody(c, &req); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid request")
 		return
 	}
 
-	config, err := repository.SetGlobalTournamentConfig(req.TournamentIDs)
+	ids := make([]uint, len(req.TournamentIds))
+	for i, id := range req.TournamentIds {
+		ids[i] = uint(id)
+	}
+
+	configs, err := repository.SetGlobalTournamentConfig(ids)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusCreated, config)
+	respondProto(c, http.StatusCreated, &pb.GlobalTournamentConfigList{Configs: globalConfigPtrsToProto(configs)})
 }
 
 func handleRemoveGlobalConfig(c *gin.Context) {
 	tournamentID, err := parseID(c.Param("tournamentId"))
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid tournament id"})
+		respondError(c, http.StatusBadRequest, "invalid tournament id")
 		return
 	}
 
 	if err := repository.RemoveGlobalTournamentConfig(tournamentID); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, map[string]string{"message": "tournament removed from global config"})
+	respondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament removed from global config"})
 }

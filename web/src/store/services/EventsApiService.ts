@@ -1,4 +1,5 @@
 import { BaseApiService } from "./BaseApiService";
+import { EventsList } from "../../proto/api";
 import type { EventsQuery, EventsResponse } from "./models";
 
 function toQueryString(query: EventsQuery): string {
@@ -19,7 +20,7 @@ export class EventsApiService extends BaseApiService {
   }
 
   async getEvents(query: EventsQuery = {}): Promise<EventsResponse> {
-    return this.get<EventsResponse>(toQueryString(query));
+    return this.get(toQueryString(query), EventsList);
   }
 }
 

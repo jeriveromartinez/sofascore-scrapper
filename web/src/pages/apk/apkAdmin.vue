@@ -80,13 +80,13 @@ onMounted(() => loadVersions());
             <tbody>
               <tr v-for="version in listState.versions" :key="version.id">
                 <td>{{ version.version }}</td>
-                <td>{{ version.package_name }}</td>
-                <td>{{ version.download_token }}</td>
-                <td>{{ version.file_size }}</td>
+                <td>{{ version.packageName }}</td>
+                <td>{{ version.downloadToken }}</td>
+                <td>{{ version.fileSize }}</td>
                 <td>
                   <a
                     class="btn btn-sm btn-outline-success"
-                    :href="getDownloadUrl(version.download_url)"
+                    :href="getDownloadUrl(version.downloadUrl)"
                   >
                     Descargar
                   </a>

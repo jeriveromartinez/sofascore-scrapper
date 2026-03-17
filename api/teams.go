@@ -23,7 +23,7 @@ func handleGetTeamLogo(c *gin.Context) {
 	teamIDStr := c.Param("teamId")
 	teamID, err := strconv.ParseInt(teamIDStr, 10, 64)
 	if err != nil || teamID <= 0 {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid team ID"})
+		respondError(c, http.StatusBadRequest, "invalid team ID")
 		return
 	}
 
@@ -31,22 +31,22 @@ func handleGetTeamLogo(c *gin.Context) {
 
 	storageDir, err := filepath.Abs(filepath.Join(imageproxy.StoragePath(), "teams"))
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		respondError(c, http.StatusInternalServerError, "internal error")
 		return
 	}
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		respondError(c, http.StatusInternalServerError, "internal error")
 		return
 	}
 	rel, relErr := filepath.Rel(storageDir, absPath)
 	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		respondCBOR(c, http.StatusForbidden, map[string]string{"error": "invalid path"})
+		respondError(c, http.StatusForbidden, "invalid path")
 		return
 	}
 
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
-		respondCBOR(c, http.StatusNotFound, map[string]string{"error": "image not found"})
+		respondError(c, http.StatusNotFound, "image not found")
 		return
 	}
 

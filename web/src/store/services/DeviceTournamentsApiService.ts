@@ -1,4 +1,11 @@
 import { BaseApiService } from "./BaseApiService";
+import {
+  AssignTournamentRequest,
+  DeviceTournament as ProtoDeviceTournamentMessage,
+  DeviceTournamentList,
+  SetTournamentIdsRequest,
+  StatusMessage,
+} from "../../proto/api";
 import type {
   DeviceTournament,
   AssignTournamentPayload,
@@ -8,27 +15,50 @@ import type {
 
 export class DeviceTournamentsApiService extends BaseApiService {
   constructor() {
-    super("device-tournaments");
+    super("/device-tournaments");
   }
 
   async getAllDeviceTournaments(): Promise<DeviceTournament[]> {
-    return this.get<DeviceTournament[]>("");
+    return (await this.get("", DeviceTournamentList)).deviceTournaments;
   }
 
   async getDeviceTournaments(deviceId: number): Promise<DeviceTournament[]> {
-    return this.get<DeviceTournament[]>(`/${deviceId}`);
+    return (await this.get(`/${deviceId}`, DeviceTournamentList))
+      .deviceTournaments;
   }
 
-  async assignTournamentToDevice(payload: AssignTournamentPayload): Promise<DeviceTournament> {
-    return this.post<DeviceTournament, AssignTournamentPayload>("", payload);
+  async assignTournamentToDevice(
+    payload: AssignTournamentPayload,
+  ): Promise<DeviceTournament> {
+    return this.post(
+      "",
+      payload,
+      AssignTournamentRequest,
+      ProtoDeviceTournamentMessage,
+    );
   }
 
-  async removeTournamentFromDevice(payload: AssignTournamentPayload): Promise<StatusResponse> {
-    return this.deleteWithBody<StatusResponse, AssignTournamentPayload>("", payload);
+  async removeTournamentFromDevice(
+    payload: AssignTournamentPayload,
+  ): Promise<StatusResponse> {
+    return this.deleteWithBody(
+      "",
+      payload,
+      AssignTournamentRequest,
+      StatusMessage,
+    );
   }
 
-  async setDeviceTournaments(deviceId: number, payload: SetDeviceTournamentsPayload): Promise<StatusResponse> {
-    return this.put<StatusResponse, SetDeviceTournamentsPayload>(`/${deviceId}`, payload);
+  async setDeviceTournaments(
+    deviceId: number,
+    payload: SetDeviceTournamentsPayload,
+  ): Promise<StatusResponse> {
+    return this.put(
+      `/${deviceId}`,
+      payload,
+      SetTournamentIdsRequest,
+      StatusMessage,
+    );
   }
 }
 

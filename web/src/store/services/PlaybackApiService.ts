@@ -1,4 +1,10 @@
 import { BaseApiService } from "./BaseApiService";
+import {
+  LogPlaybackRequest,
+  PlaybackLog as ProtoPlaybackLogMessage,
+  StatusResponse as ProtoStatusResponseMessage,
+  UpdatePlaybackRequest,
+} from "../../proto/api";
 import type {
   CreatePlaybackPayload,
   PlaybackLog,
@@ -13,7 +19,7 @@ export class PlaybackApiService extends BaseApiService {
   }
 
   async createPlayback(payload: CreatePlaybackPayload): Promise<PlaybackLog> {
-    return this.post<PlaybackLog, CreatePlaybackPayload>("", payload);
+    return this.post("", payload, LogPlaybackRequest, ProtoPlaybackLogMessage);
   }
 
   async updatePlayback(
@@ -22,13 +28,20 @@ export class PlaybackApiService extends BaseApiService {
     method: PlaybackUpdateMethod = "PUT",
   ): Promise<StatusResponse> {
     if (method === "PATCH") {
-      return this.patch<StatusResponse, UpdatePlaybackPayload>(
+      return this.patch(
         `/${id}`,
         payload,
+        UpdatePlaybackRequest,
+        ProtoStatusResponseMessage,
       );
     }
 
-    return this.put<StatusResponse, UpdatePlaybackPayload>(`/${id}`, payload);
+    return this.put(
+      `/${id}`,
+      payload,
+      UpdatePlaybackRequest,
+      ProtoStatusResponseMessage,
+    );
   }
 }
 

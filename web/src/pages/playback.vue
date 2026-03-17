@@ -39,13 +39,13 @@ async function createPlayback(): Promise<void> {
 
   try {
     createState.result = await playbackApiService.createPlayback({
-      device_token: createState.deviceToken,
-      sofa_score_event_id: createState.eventId,
-      started_at: parseUnix(createState.startedAt),
+      deviceToken: createState.deviceToken,
+      sofaScoreEventId: createState.eventId,
+      startedAt: parseUnix(createState.startedAt) ?? 0,
     });
 
     if (!updateState.playbackId) {
-      updateState.playbackId = String(createState.result.ID);
+      updateState.playbackId = String(createState.result.id);
     }
   } catch (error) {
     createState.error =
@@ -64,7 +64,7 @@ async function closePlayback(method: PlaybackUpdateMethod): Promise<void> {
     const id = Number(updateState.playbackId);
     await playbackApiService.updatePlayback(
       id,
-      { ended_at: parseUnix(updateState.endedAt) },
+      { endedAt: parseUnix(updateState.endedAt) ?? 0 },
       method,
     );
     updateState.success = `Playback actualizado con ${method}`;
@@ -128,7 +128,7 @@ async function closePlayback(method: PlaybackUpdateMethod): Promise<void> {
           </div>
 
           <div v-if="createState.result" class="alert alert-success mt-3 mb-0">
-            Playback creado con ID {{ createState.result.ID }}
+            Playback creado con ID {{ createState.result.id }}
           </div>
         </div>
       </div>

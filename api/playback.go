@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
@@ -22,24 +23,20 @@ func (c *PlaybackController) LoadRoutes() {
 }
 
 func handleLogPlayback(c *gin.Context) {
-	var req struct {
-		DeviceToken      string `json:"device_token" cbor:"device_token"`
-		SofaScoreEventId int64  `json:"sofa_score_event_id" cbor:"sofa_score_event_id"`
-		StartedAt        int64  `json:"started_at" cbor:"started_at"`
-	}
-	if err := parseCBORBody(c, &req); err != nil || req.SofaScoreEventId == 0 {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "sofa_score_event_id is required"})
+	var req pb.LogPlaybackRequest
+	if err := parseProtoBody(c, &req); err != nil || req.SofaScoreEventId == 0 {
+		respondError(c, http.StatusBadRequest, "sofa_score_event_id is required")
 		return
 	}
 
 	db, err := database.GetDB()
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var device models.Device
 	if err := db.Where("token = ?", req.DeviceToken).First(&device).Error; err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "device not found"})
+		respondError(c, http.StatusBadRequest, "device not found")
 		return
 	}
 
@@ -49,23 +46,21 @@ func handleLogPlayback(c *gin.Context) {
 	}
 	playbackLog, err := repository.LogPlayback(device.ID, req.SofaScoreEventId, startedAt)
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusCreated, playbackLog)
+	respondProto(c, http.StatusCreated, playbackToProto(playbackLog))
 }
 
 func handleUpdatePlayback(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		respondError(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	var req struct {
-		EndedAt int64 `json:"ended_at" cbor:"ended_at"`
-	}
-	if err := parseCBORBody(c, &req); err != nil {
-		respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+	var req pb.UpdatePlaybackRequest
+	if err := parseProtoBody(c, &req); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid body")
 		return
 	}
 	endedAt := req.EndedAt
@@ -73,8 +68,8 @@ func handleUpdatePlayback(c *gin.Context) {
 		endedAt = time.Now().Unix()
 	}
 	if err := repository.UpdatePlaybackEnd(uint(id), endedAt); err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondCBOR(c, http.StatusOK, map[string]string{"status": "updated"})
+	respondProto(c, http.StatusOK, &pb.StatusResponse{Status: "updated"})
 }

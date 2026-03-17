@@ -1,4 +1,9 @@
 import { BaseApiService } from "./BaseApiService";
+import {
+  ApkList,
+  ApkUpdateCheckResponse,
+  ApkUploadResponse,
+} from "../../proto/api";
 import type {
   ApkCheckResponse,
   ApkVersionInfo,
@@ -54,7 +59,11 @@ export class ApkApiService extends BaseApiService {
     form.append("total_chunks", String(totalChunks));
     if (version) form.append("version", version);
     if (description) form.append("description", description);
-    return this.postMultipartJSON<UploadApkResponse>("/upload/assemble", form);
+    return this.postMultipart<UploadApkResponse>(
+      "/upload/assemble",
+      form,
+      ApkUploadResponse,
+    );
   }
 
   /**
@@ -80,7 +89,11 @@ export class ApkApiService extends BaseApiService {
       if (version) form.append("version", version);
       if (description) form.append("description", description);
       onProgress?.(100);
-      return this.postMultipart<UploadApkResponse>("/upload", form);
+      return this.postMultipart<UploadApkResponse>(
+        "/upload",
+        form,
+        ApkUploadResponse,
+      );
     }
 
     // Large file – split into chunks and upload sequentially.
@@ -107,12 +120,16 @@ export class ApkApiService extends BaseApiService {
   }
 
   async listVersions(): Promise<ApkVersionInfo[]> {
-    return this.get<ApkVersionInfo[]>("/versions");
+    return (await this.get("/versions", ApkList)).versions;
   }
 
-  async checkUpdate(version: string): Promise<ApkCheckResponse> {
+  async checkUpdate(
+    version: string,
+    packageName: string,
+  ): Promise<ApkCheckResponse> {
     return this.get<ApkCheckResponse>(
-      `/check?version=${encodeURIComponent(version)}`,
+      `/check?version=${encodeURIComponent(version)}&package=${encodeURIComponent(packageName)}`,
+      ApkUpdateCheckResponse,
     );
   }
 

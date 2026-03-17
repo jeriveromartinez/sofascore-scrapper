@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 )
 
 type EventController struct {
@@ -21,7 +22,7 @@ func (c *EventController) LoadRoutes() {
 func handleGetEvents(c *gin.Context) {
 	db, err := database.GetDB()
 	if err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	date := c.Query("date")
@@ -32,7 +33,7 @@ func handleGetEvents(c *gin.Context) {
 	if pageParam := c.Query("page"); pageParam != "" {
 		parsedPage, parseErr := strconv.Atoi(pageParam)
 		if parseErr != nil || parsedPage < 1 {
-			respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "page must be a positive integer"})
+			respondError(c, http.StatusBadRequest, "page must be a positive integer")
 			return
 		}
 		page = parsedPage
@@ -41,7 +42,7 @@ func handleGetEvents(c *gin.Context) {
 	if limitParam := c.Query("limit"); limitParam != "" {
 		parsedLimit, parseErr := strconv.Atoi(limitParam)
 		if parseErr != nil || parsedLimit < 1 {
-			respondCBOR(c, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			respondError(c, http.StatusBadRequest, "limit must be a positive integer")
 			return
 		}
 		if parsedLimit > 100 {
@@ -69,22 +70,22 @@ func handleGetEvents(c *gin.Context) {
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	var events []models.SofaScoreEvent
 	if err := query.Offset((page - 1) * limit).Limit(limit).Preload("HomeTeamModel").Preload("AwayTeamModel").Preload("League").Order("start_timestamp ASC").Find(&events).Error; err != nil {
-		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	totalPages := int((total + int64(limit) - 1) / int64(limit))
-	respondCBOR(c, http.StatusOK, map[string]any{
-		"data":        events,
-		"page":        page,
-		"limit":       limit,
-		"total":       total,
-		"total_pages": totalPages,
+	respondProto(c, http.StatusOK, &pb.EventsList{
+		Data:       eventsToProto(events),
+		Page:       int32(page),
+		Limit:      int32(limit),
+		Total:      total,
+		TotalPages: int32(totalPages),
 	})
 }

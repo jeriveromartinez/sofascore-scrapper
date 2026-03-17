@@ -70,10 +70,10 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, index) in state.data" :key="row.SofaScoreEventId">
+            <tr v-for="(row, index) in state.data" :key="row.sofaScoreEventId">
               <td>{{ index + 1 }}</td>
-              <td>{{ row.SofaScoreEventId }}</td>
-              <td>{{ row.ViewCount }}</td>
+              <td>{{ row.sofaScoreEventId }}</td>
+              <td>{{ row.viewCount }}</td>
             </tr>
           </tbody>
         </table>

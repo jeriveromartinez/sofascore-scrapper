@@ -47,16 +47,14 @@ async function createTournament(): Promise<void> {
     await loadTournaments();
   } catch (error) {
     state.error =
-      error instanceof Error
-        ? error.message
-        : "No se pudo crear el torneo";
+      error instanceof Error ? error.message : "No se pudo crear el torneo";
   } finally {
     state.loading = false;
   }
 }
 
 function startEdit(tournament: Tournament): void {
-  state.editingId = tournament.ID;
+  state.editingId = tournament.id;
   state.form.name = tournament.name;
   state.form.slug = tournament.slug;
 }
@@ -99,9 +97,7 @@ async function deleteTournament(id: number): Promise<void> {
     await loadTournaments();
   } catch (error) {
     state.error =
-      error instanceof Error
-        ? error.message
-        : "No se pudo eliminar el torneo";
+      error instanceof Error ? error.message : "No se pudo eliminar el torneo";
   } finally {
     state.loading = false;
   }
@@ -123,7 +119,12 @@ onMounted(() => {
         {{ state.error }}
       </div>
 
-      <form class="row g-3 mb-4" @submit.prevent="state.editingId ? updateTournament() : createTournament()">
+      <form
+        class="row g-3 mb-4"
+        @submit.prevent="
+          state.editingId ? updateTournament() : createTournament()
+        "
+      >
         <div class="col-md-5">
           <label class="form-label">Nombre *</label>
           <input
@@ -146,17 +147,10 @@ onMounted(() => {
             Crear
           </button>
           <template v-else>
-            <button
-              class="btn btn-success me-2"
-              :disabled="state.loading"
-            >
+            <button class="btn btn-success me-2" :disabled="state.loading">
               Actualizar
             </button>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              @click="cancelEdit"
-            >
+            <button type="button" class="btn btn-secondary" @click="cancelEdit">
               Cancelar
             </button>
           </template>
@@ -180,8 +174,8 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="tournament in state.tournaments" :key="tournament.ID">
-              <td>{{ tournament.ID }}</td>
+            <tr v-for="tournament in state.tournaments" :key="tournament.id">
+              <td>{{ tournament.id }}</td>
               <td>{{ tournament.name }}</td>
               <td>{{ tournament.slug }}</td>
               <td>
@@ -193,7 +187,7 @@ onMounted(() => {
                 </button>
                 <button
                   class="btn btn-sm btn-danger"
-                  @click="deleteTournament(tournament.ID)"
+                  @click="deleteTournament(tournament.id)"
                 >
                   Eliminar
                 </button>

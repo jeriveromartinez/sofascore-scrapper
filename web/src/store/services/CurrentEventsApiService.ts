@@ -1,13 +1,14 @@
 import { BaseApiService } from "./BaseApiService";
+import { EventsList } from "../../proto/api";
 import type { SofaScoreEvent } from "./models";
 
 export class CurrentEventsApiService extends BaseApiService {
   constructor() {
-    super("/api/v1");
+    super("");
   }
 
   async getCurrentEvents(limit: number = 6): Promise<SofaScoreEvent[]> {
-    return this.get<SofaScoreEvent[]>(`/current-events?limit=${limit}`);
+    return (await this.get(`/current-events?limit=${limit}`, EventsList)).data;
   }
 }
 
