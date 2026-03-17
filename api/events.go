@@ -58,7 +58,11 @@ func handleGetEvents(c *gin.Context) {
 			end := t.Add(24 * time.Hour).Unix()
 			query = query.Where("start_timestamp >= ? AND start_timestamp < ?", start, end)
 		}
+	} else {
+		start := time.Now().Unix()
+		query = query.Where("start_timestamp >= ?", start)
 	}
+
 	if sport != "" {
 		query = query.Where("sport = ?", sport)
 	}
@@ -70,14 +74,14 @@ func handleGetEvents(c *gin.Context) {
 	}
 
 	var events []models.SofaScoreEvent
-	if err := query.Offset((page - 1) * limit).Limit(limit).Preload("HomeTeamModel").Preload("AwayTeamModel").Preload("League").Find(&events).Error; err != nil {
+	if err := query.Offset((page - 1) * limit).Limit(limit).Preload("HomeTeamModel").Preload("AwayTeamModel").Preload("League").Order("start_timestamp ASC").Find(&events).Error; err != nil {
 		respondCBOR(c, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
 	totalPages := int((total + int64(limit) - 1) / int64(limit))
 	respondCBOR(c, http.StatusOK, map[string]any{
-		"data":      events,
+		"data":        events,
 		"page":        page,
 		"limit":       limit,
 		"total":       total,
