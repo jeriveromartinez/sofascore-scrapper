@@ -10,7 +10,7 @@ func GetGlobalTournamentConfig() ([]models.GlobalTournamentConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	var configs []models.GlobalTournamentConfig
+	configs := make([]models.GlobalTournamentConfig, 0)
 	result := db.Preload("Tournament").Find(&configs)
 	return configs, result.Error
 }

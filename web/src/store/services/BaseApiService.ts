@@ -172,6 +172,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      transformRequest: [(data) => data],
     });
 
     this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
@@ -195,6 +196,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      transformRequest: [(data) => data],
     });
 
     this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");

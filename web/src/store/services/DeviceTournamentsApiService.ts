@@ -23,8 +23,10 @@ export class DeviceTournamentsApiService extends BaseApiService {
   }
 
   async getDeviceTournaments(deviceId: number): Promise<DeviceTournament[]> {
-    return (await this.get(`/${deviceId}`, DeviceTournamentList))
-      .deviceTournaments;
+    var resp = (await this.get(`/${deviceId}`, DeviceTournamentList)) ?? {
+      deviceTournaments: [],
+    };
+    return resp.deviceTournaments;
   }
 
   async assignTournamentToDevice(

@@ -16,7 +16,10 @@ export class GlobalConfigApiService extends BaseApiService {
   }
 
   async getGlobalConfig(): Promise<GlobalTournamentConfig[]> {
-    return (await this.get("", GlobalTournamentConfigList)).configs;
+    const resp = (await this.get("", GlobalTournamentConfigList)) ?? {
+      configs: [],
+    };
+    return resp.configs ?? [];
   }
 
   async removeGlobalConfig(tournamentId: number): Promise<StatusResponse> {
@@ -26,14 +29,13 @@ export class GlobalConfigApiService extends BaseApiService {
   async setGlobalConfig(
     payload: SetDeviceTournamentsPayload,
   ): Promise<GlobalTournamentConfig[]> {
-    return (
-      await this.post(
-        "",
-        payload,
-        SetTournamentIdsRequest,
-        GlobalTournamentConfigList,
-      )
-    ).configs;
+    var resp = (await this.post(
+      "",
+      payload,
+      SetTournamentIdsRequest,
+      GlobalTournamentConfigList,
+    )) ?? { configs: [] };
+    return resp.configs ?? [];
   }
 }
 
