@@ -3,7 +3,7 @@ package repository
 import (
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/database"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 

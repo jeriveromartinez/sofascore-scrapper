@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
-	"github.com/jeriveromartinez/sofascore-scrapper/apkutil"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/apkutil"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )

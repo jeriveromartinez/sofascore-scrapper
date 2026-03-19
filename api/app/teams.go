@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
-	"github.com/jeriveromartinez/sofascore-scrapper/imageproxy"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/imageproxy"
 )
 
 type TeamController struct {

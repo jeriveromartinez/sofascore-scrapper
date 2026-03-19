@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/imageproxy"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/imageproxy"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

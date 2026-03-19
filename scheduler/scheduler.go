@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/httpcli"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/httpcli"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )

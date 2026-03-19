@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jeriveromartinez/sofascore-scrapper/database"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 

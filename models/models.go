@@ -1,6 +1,6 @@
 package models
 
-import "github.com/jeriveromartinez/sofascore-scrapper/database"
+import "github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 
 func Migrate() {
 	db, err := database.GetDB()
