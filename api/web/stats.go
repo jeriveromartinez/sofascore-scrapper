@@ -1,10 +1,11 @@
-package api
+package web
 
 import (
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
@@ -14,7 +15,7 @@ type StatsController struct {
 }
 
 func (c *StatsController) LoadRoutes() {
-	c.Group.GET("/stats/top-events", authMiddleware(), handleTopEvents)
+	c.Group.GET("/stats/top-events", common.AuthMiddleware(), handleTopEvents)
 }
 
 func handleTopEvents(c *gin.Context) {
@@ -25,8 +26,8 @@ func handleTopEvents(c *gin.Context) {
 	}
 	stats, err := repository.GetTopEvents(limit)
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, err.Error())
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondProto(c, http.StatusOK, &pb.TopEventsResponse{Stats: eventStatsToProto(stats)})
+	common.RespondProto(c, http.StatusOK, &pb.TopEventsResponse{Stats: common.EventStatsToProto(stats)})
 }

@@ -1,4 +1,4 @@
-package api
+package web
 
 import (
 	"crypto/rand"
@@ -14,18 +14,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	"github.com/jeriveromartinez/sofascore-scrapper/apkutil"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
-// maxChunkSize is the maximum allowed size of a single uploaded chunk (20 MB).
-const maxChunkSize = 20 * 1024 * 1024
+const (
+	maxChunkSize   = 20 * 1024 * 1024
+	maxTotalChunks = 1000
+)
 
-// maxTotalChunks is the maximum number of chunks allowed per upload session.
-const maxTotalChunks = 1000
-
-// semverPattern accepts only digits and dots, e.g. "1.2.3".
 var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
 func randomSuffix() uint64 {
@@ -34,69 +33,43 @@ func randomSuffix() uint64 {
 	return binary.LittleEndian.Uint64(b[:])
 }
 
-// ApkController handles APK upload, version check, and download.
 type ApkController struct {
 	Group *gin.RouterGroup
 }
 
 func (c *ApkController) LoadRoutes() {
-	// Admin: upload a new APK (requires authentication)
-	c.Group.POST("/apk/upload", authMiddleware(), handleUploadApk)
-	// Admin: chunked upload – send one chunk at a time (requires authentication)
-	c.Group.POST("/apk/upload/chunk", authMiddleware(), handleUploadChunk)
-	// Admin: assemble previously uploaded chunks into a final APK (requires authentication)
-	c.Group.POST("/apk/upload/assemble", authMiddleware(), handleAssembleChunks)
-	// Admin: list all APK versions (requires authentication)
-	c.Group.GET("/apk/versions", authMiddleware(), handleListApkVersions)
-	// Public: check whether a newer APK is available
-	c.Group.GET("/apk/check", handleCheckApkUpdate)
-	// Public: download a specific APK by UUID token (prevents sequential enumeration)
-	c.Group.GET("/apk/download/:token", handleDownloadApk)
+	c.Group.POST("/apk/upload", common.AuthMiddleware(), handleUploadApk)
+	c.Group.POST("/apk/upload/chunk", common.AuthMiddleware(), handleUploadChunk)
+	c.Group.POST("/apk/upload/assemble", common.AuthMiddleware(), handleAssembleChunks)
+	c.Group.GET("/apk/versions", common.AuthMiddleware(), handleListApkVersions)
 }
 
-func apkStoragePath() string {
-	if p := os.Getenv("APK_STORAGE_PATH"); p != "" {
-		return p
-	}
-	return "./apk_storage"
-}
-
-// handleUploadApk accepts a multipart/form-data request with fields:
-//   - file        (required) – the APK binary
-//   - version     (optional) – override the version extracted from the APK, must be MAJOR.MINOR.PATCH
-//   - description (optional)
-//
-// The handler automatically extracts package name, version code, min/target SDK
-// from the APK's AndroidManifest.xml.
 func handleUploadApk(c *gin.Context) {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		respondError(c, http.StatusBadRequest, "file is required")
+		common.RespondError(c, http.StatusBadRequest, "file is required")
 		return
 	}
 
-	storagePath := apkStoragePath()
+	storagePath := common.ApkStoragePath()
 	if err := os.MkdirAll(storagePath, 0o755); err != nil {
-		respondError(c, http.StatusInternalServerError, "could not create storage directory")
+		common.RespondError(c, http.StatusInternalServerError, "could not create storage directory")
 		return
 	}
 
-	// Use a random temporary name to avoid path traversal via the user-supplied filename.
 	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", randomSuffix()))
 	if err := c.SaveUploadedFile(fileHeader, tmpPath); err != nil {
-		respondError(c, http.StatusInternalServerError, "could not save file")
+		common.RespondError(c, http.StatusInternalServerError, "could not save file")
 		return
 	}
 
-	// Parse metadata from the APK.
 	apkInfo, parseErr := apkutil.ParseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
-		respondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
+		common.RespondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
 		return
 	}
 
-	// Determine the version: explicit form field overrides the APK's versionName.
 	version := c.PostForm("version")
 	if version == "" {
 		version = apkInfo.VersionName
@@ -107,7 +80,7 @@ func handleUploadApk(c *gin.Context) {
 		if apkInfo.VersionName != "" {
 			msg += " (apk_version_name: " + apkInfo.VersionName + ")"
 		}
-		respondError(c, http.StatusBadRequest, msg)
+		common.RespondError(c, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -115,7 +88,7 @@ func handleUploadApk(c *gin.Context) {
 	destPath := filepath.Join(storagePath, fileName)
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		_ = os.Remove(tmpPath)
-		respondError(c, http.StatusInternalServerError, "could not finalize file")
+		common.RespondError(c, http.StatusInternalServerError, "could not finalize file")
 		return
 	}
 
@@ -126,11 +99,11 @@ func handleUploadApk(c *gin.Context) {
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		respondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
+		common.RespondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
 		return
 	}
 
-	respondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
+	common.RespondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
 		Id:               uint32(apk.ID),
 		Version:          apk.Version,
 		FileName:         apk.FileName,
@@ -141,21 +114,11 @@ func handleUploadApk(c *gin.Context) {
 		MinSdkVersion:    apk.MinSDKVersion,
 		TargetSdkVersion: apk.TargetSDKVersion,
 		DownloadToken:    apk.DownloadToken,
-		DownloadUrl:      fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
+		DownloadUrl:      fmt.Sprintf("/api/app/v1/apk/download/%s", apk.DownloadToken),
 		CreatedAt:        apk.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
 
-// handleUploadChunk receives a single file chunk and stores it in a temporary directory.
-// This endpoint is part of the chunked upload flow: the frontend splits large files into
-// 10 MB pieces so that each POST stays below Cloudflare's 50 MB body-size limit.
-// Responses are plain JSON (not CBOR) for maximum throughput.
-//
-// Form fields:
-//   - upload_id    (required) – UUID identifying the upload session
-//   - chunk_index  (required) – 0-based index of this chunk
-//   - total_chunks (required) – total number of chunks for this upload
-//   - file         (required) – the chunk binary data
 func handleUploadChunk(c *gin.Context) {
 	uploadID := c.PostForm("upload_id")
 	if _, err := uuid.Parse(uploadID); err != nil {
@@ -191,9 +154,8 @@ func handleUploadChunk(c *gin.Context) {
 		return
 	}
 
-	// Build the chunk directory path and verify it stays within the storage root.
-	chunkDir := filepath.Join(apkStoragePath(), "chunks", uploadID)
-	absStoragePath, _ := filepath.Abs(apkStoragePath())
+	chunkDir := filepath.Join(common.ApkStoragePath(), "chunks", uploadID)
+	absStoragePath, _ := filepath.Abs(common.ApkStoragePath())
 	absChunkDir, err := filepath.Abs(chunkDir)
 	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
@@ -218,15 +180,6 @@ func handleUploadChunk(c *gin.Context) {
 	})
 }
 
-// handleAssembleChunks joins all previously uploaded chunks into a single APK file,
-// parses its metadata, and creates the APK version record – exactly as handleUploadApk does.
-// Responses are plain JSON (not CBOR) to match the chunk upload endpoint.
-//
-// Form fields:
-//   - upload_id    (required) – UUID identifying the upload session
-//   - total_chunks (required) – total number of chunks expected
-//   - version      (optional) – override version extracted from APK (MAJOR.MINOR.PATCH)
-//   - description  (optional)
 func handleAssembleChunks(c *gin.Context) {
 	uploadID := c.PostForm("upload_id")
 	if _, err := uuid.Parse(uploadID); err != nil {
@@ -240,16 +193,14 @@ func handleAssembleChunks(c *gin.Context) {
 		return
 	}
 
-	// Validate the chunk directory stays within the storage root.
-	chunkDir := filepath.Join(apkStoragePath(), "chunks", uploadID)
-	absStoragePath, _ := filepath.Abs(apkStoragePath())
+	chunkDir := filepath.Join(common.ApkStoragePath(), "chunks", uploadID)
+	absStoragePath, _ := filepath.Abs(common.ApkStoragePath())
 	absChunkDir, err := filepath.Abs(chunkDir)
 	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
 
-	// Verify that every expected chunk is present before starting assembly.
 	for i := 0; i < totalChunks; i++ {
 		chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", i))
 		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
@@ -258,13 +209,12 @@ func handleAssembleChunks(c *gin.Context) {
 		}
 	}
 
-	storagePath := apkStoragePath()
+	storagePath := common.ApkStoragePath()
 	if err := os.MkdirAll(storagePath, 0o755); err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not create storage directory"})
 		return
 	}
 
-	// Create a temporary file to stream the assembled content into.
 	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", randomSuffix()))
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
@@ -291,17 +241,14 @@ func handleAssembleChunks(c *gin.Context) {
 		}
 	}
 
-	// Capture total file size before closing.
 	totalSize := int64(0)
 	if info, err := outFile.Stat(); err == nil {
 		totalSize = info.Size()
 	}
 	outFile.Close()
 
-	// Clean up chunk directory now that assembly is complete.
 	_ = os.RemoveAll(chunkDir)
 
-	// Parse APK metadata from the assembled file.
 	apkInfo, parseErr := apkutil.ParseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
@@ -344,7 +291,7 @@ func handleAssembleChunks(c *gin.Context) {
 		return
 	}
 
-	respondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
+	common.RespondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
 		Id:               uint32(apk.ID),
 		Version:          apk.Version,
 		FileName:         apk.FileName,
@@ -355,88 +302,17 @@ func handleAssembleChunks(c *gin.Context) {
 		MinSdkVersion:    apk.MinSDKVersion,
 		TargetSdkVersion: apk.TargetSDKVersion,
 		DownloadToken:    apk.DownloadToken,
-		DownloadUrl:      fmt.Sprintf("/api/v1/apk/download/%s", apk.DownloadToken),
+		DownloadUrl:      fmt.Sprintf("/api/app/v1/apk/download/%s", apk.DownloadToken),
 		CreatedAt:        apk.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
 
-// handleCheckApkUpdate compares the client's current version against the latest APK on the server.
-// Query param: version (e.g. "1.0.0")
-// Returns update_available=true with metadata when the server has a newer version.
-func handleCheckApkUpdate(c *gin.Context) {
-	clientVersion := c.Query("version")
-	clientPackage := c.Query("package")
-	if clientVersion == "" {
-		respondError(c, http.StatusBadRequest, "version query parameter is required")
-		return
-	}
-
-	if clientPackage == "" {
-		respondError(c, http.StatusBadRequest, "package query parameter is required")
-		return
-	}
-
-	latest, err := repository.GetLatestApkVersion(clientPackage)
-	if err != nil {
-		respondError(c, http.StatusNotFound, "no APK version available")
-		return
-	}
-
-	newer, err := repository.IsNewerVersion(clientVersion, latest.Version)
-	if err != nil {
-		respondError(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	resp := &pb.ApkUpdateCheckResponse{
-		UpdateAvailable: newer,
-		LatestVersion:   latest.Version,
-		PackageName:     latest.PackageName,
-		VersionCode:     latest.VersionCode,
-	}
-	if newer {
-		resp.DownloadUrl = fmt.Sprintf("/api/v1/apk/download/%s", latest.DownloadToken)
-		resp.Description = latest.Description
-		resp.FileSize = latest.FileSize
-		resp.MinSdkVersion = latest.MinSDKVersion
-		resp.TargetSdkVersion = latest.TargetSDKVersion
-	}
-
-	respondProto(c, http.StatusOK, resp)
-}
-
-// handleDownloadApk streams the APK file identified by its UUID download token.
-func handleDownloadApk(c *gin.Context) {
-	token := c.Param("token")
-	if _, err := uuid.Parse(token); err != nil {
-		respondError(c, http.StatusBadRequest, "invalid download token")
-		return
-	}
-
-	apk, err := repository.GetApkVersionByToken(token)
-	if err != nil {
-		respondError(c, http.StatusNotFound, "APK version not found")
-		return
-	}
-
-	// Ensure the stored path is still within the designated storage directory.
-	storagePath, _ := filepath.Abs(apkStoragePath())
-	absPath, err := filepath.Abs(apk.FilePath)
-	if err != nil || !strings.HasPrefix(absPath, storagePath+string(filepath.Separator)) {
-		respondError(c, http.StatusForbidden, "file path is invalid")
-		return
-	}
-
-	c.FileAttachment(absPath, apk.FileName)
-}
-
-// handleListApkVersions returns all uploaded APK versions.
 func handleListApkVersions(c *gin.Context) {
 	versions, err := repository.ListApkVersions()
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, err.Error())
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	respondProto(c, http.StatusOK, &pb.ApkList{Versions: apksToProto(versions)})
+	common.RespondProto(c, http.StatusOK, &pb.ApkList{Versions: common.ApksToProto(versions)})
 }

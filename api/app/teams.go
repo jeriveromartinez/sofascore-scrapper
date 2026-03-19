@@ -1,4 +1,4 @@
-package api
+package app
 
 import (
 	"net/http"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	"github.com/jeriveromartinez/sofascore-scrapper/imageproxy"
 )
 
@@ -23,7 +24,7 @@ func handleGetTeamLogo(c *gin.Context) {
 	teamIDStr := c.Param("teamId")
 	teamID, err := strconv.ParseInt(teamIDStr, 10, 64)
 	if err != nil || teamID <= 0 {
-		respondError(c, http.StatusBadRequest, "invalid team ID")
+		common.RespondError(c, http.StatusBadRequest, "invalid team ID")
 		return
 	}
 
@@ -31,22 +32,22 @@ func handleGetTeamLogo(c *gin.Context) {
 
 	storageDir, err := filepath.Abs(filepath.Join(imageproxy.StoragePath(), "teams"))
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, "internal error")
+		common.RespondError(c, http.StatusInternalServerError, "internal error")
 		return
 	}
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, "internal error")
+		common.RespondError(c, http.StatusInternalServerError, "internal error")
 		return
 	}
 	rel, relErr := filepath.Rel(storageDir, absPath)
 	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		respondError(c, http.StatusForbidden, "invalid path")
+		common.RespondError(c, http.StatusForbidden, "invalid path")
 		return
 	}
 
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
-		respondError(c, http.StatusNotFound, "image not found")
+		common.RespondError(c, http.StatusNotFound, "image not found")
 		return
 	}
 

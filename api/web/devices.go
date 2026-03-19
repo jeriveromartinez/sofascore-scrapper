@@ -1,10 +1,11 @@
-package api
+package web
 
 import (
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
@@ -14,23 +15,8 @@ type DeviceController struct {
 }
 
 func (c *DeviceController) LoadRoutes() {
-	c.Group.GET("/devices", authMiddleware(), handleGetDevices)
-	c.Group.GET("/devices/all", authMiddleware(), handleGetAllDevices)
-	c.Group.POST("/devices", handleRegisterDevice)
-}
-
-func handleRegisterDevice(c *gin.Context) {
-	var req pb.DeviceRegisterRequest
-	if err := parseProtoBody(c, &req); err != nil || req.Token == "" {
-		respondError(c, http.StatusBadRequest, "token is required")
-		return
-	}
-	device, err := repository.RegisterDevice(nil, req.Token, req.Platform, req.Name)
-	if err != nil {
-		respondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	respondProto(c, http.StatusOK, deviceToProto(*device))
+	c.Group.GET("/devices", common.AuthMiddleware(), handleGetDevices)
+	c.Group.GET("/devices/all", common.AuthMiddleware(), handleGetAllDevices)
 }
 
 func handleGetDevices(c *gin.Context) {
@@ -39,7 +25,7 @@ func handleGetDevices(c *gin.Context) {
 	if pageParam := c.Query("page"); pageParam != "" {
 		parsedPage, parseErr := strconv.Atoi(pageParam)
 		if parseErr != nil || parsedPage < 1 {
-			respondError(c, http.StatusBadRequest, "page must be a positive integer")
+			common.RespondError(c, http.StatusBadRequest, "page must be a positive integer")
 			return
 		}
 		page = parsedPage
@@ -48,7 +34,7 @@ func handleGetDevices(c *gin.Context) {
 	if limitParam := c.Query("limit"); limitParam != "" {
 		parsedLimit, parseErr := strconv.Atoi(limitParam)
 		if parseErr != nil || parsedLimit < 1 {
-			respondError(c, http.StatusBadRequest, "limit must be a positive integer")
+			common.RespondError(c, http.StatusBadRequest, "limit must be a positive integer")
 			return
 		}
 		if parsedLimit > 100 {
@@ -59,13 +45,13 @@ func handleGetDevices(c *gin.Context) {
 
 	devices, total, err := repository.GetDevices(uint(page), uint(limit))
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, err.Error())
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	totalPages := int((total + int64(limit) - 1) / int64(limit))
-	respondProto(c, http.StatusOK, &pb.DeviceList{
-		Data:       devicesToProto(devices),
+	common.RespondProto(c, http.StatusOK, &pb.DeviceList{
+		Data:       common.DevicesToProto(devices),
 		Page:       int32(page),
 		Limit:      int32(limit),
 		Total:      total,
@@ -76,8 +62,8 @@ func handleGetDevices(c *gin.Context) {
 func handleGetAllDevices(c *gin.Context) {
 	devices, err := repository.GetAllDevices()
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, err.Error())
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondProto(c, http.StatusOK, &pb.DeviceList{Data: devicesToProto(devices)})
+	common.RespondProto(c, http.StatusOK, &pb.DeviceList{Data: common.DevicesToProto(devices)})
 }

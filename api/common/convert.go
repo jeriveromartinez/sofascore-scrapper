@@ -1,4 +1,4 @@
-package api
+package common
 
 import (
 	"fmt"
@@ -9,18 +9,18 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
-func formatTime(t time.Time) string {
+func FormatTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
 	return t.Format(time.RFC3339)
 }
 
-func deviceToProto(d models.Device) *pb.Device {
+func DeviceToProto(d models.Device) *pb.Device {
 	return &pb.Device{
 		Id:        uint32(d.ID),
-		CreatedAt: formatTime(d.CreatedAt),
-		UpdatedAt: formatTime(d.UpdatedAt),
+		CreatedAt: FormatTime(d.CreatedAt),
+		UpdatedAt: FormatTime(d.UpdatedAt),
 		Token:     d.Token,
 		Platform:  d.Platform,
 		Name:      d.Name,
@@ -28,41 +28,41 @@ func deviceToProto(d models.Device) *pb.Device {
 	}
 }
 
-func devicesToProto(devices []models.Device) []*pb.Device {
+func DevicesToProto(devices []models.Device) []*pb.Device {
 	result := make([]*pb.Device, 0, len(devices))
 	for _, d := range devices {
-		result = append(result, deviceToProto(d))
+		result = append(result, DeviceToProto(d))
 	}
 	return result
 }
 
-func tournamentToProto(t models.Tournament) *pb.Tournament {
+func TournamentToProto(t models.Tournament) *pb.Tournament {
 	return &pb.Tournament{
 		Id:        uint32(t.ID),
-		CreatedAt: formatTime(t.CreatedAt),
-		UpdatedAt: formatTime(t.UpdatedAt),
+		CreatedAt: FormatTime(t.CreatedAt),
+		UpdatedAt: FormatTime(t.UpdatedAt),
 		Name:      t.Name,
 		Slug:      t.Slug,
 		Region:    t.Region,
 	}
 }
 
-func tournamentPtrToProto(t *models.Tournament) *pb.Tournament {
+func TournamentPtrToProto(t *models.Tournament) *pb.Tournament {
 	if t == nil {
 		return nil
 	}
-	return tournamentToProto(*t)
+	return TournamentToProto(*t)
 }
 
-func tournamentsToProto(ts []models.Tournament) []*pb.Tournament {
+func TournamentsToProto(ts []models.Tournament) []*pb.Tournament {
 	result := make([]*pb.Tournament, 0, len(ts))
 	for _, t := range ts {
-		result = append(result, tournamentToProto(t))
+		result = append(result, TournamentToProto(t))
 	}
 	return result
 }
 
-func teamPtrToProto(t *models.Team) *pb.Team {
+func TeamPtrToProto(t *models.Team) *pb.Team {
 	if t == nil {
 		return nil
 	}
@@ -73,11 +73,11 @@ func teamPtrToProto(t *models.Team) *pb.Team {
 	}
 }
 
-func eventToProto(e models.SofaScoreEvent) *pb.SofaScoreEvent {
+func EventToProto(e models.SofaScoreEvent) *pb.SofaScoreEvent {
 	return &pb.SofaScoreEvent{
 		Id:                          uint32(e.ID),
-		CreatedAt:                   formatTime(e.CreatedAt),
-		UpdatedAt:                   formatTime(e.UpdatedAt),
+		CreatedAt:                   FormatTime(e.CreatedAt),
+		UpdatedAt:                   FormatTime(e.UpdatedAt),
 		SofaScoreEventId:            e.SofaScoreEventId,
 		Sport:                       e.Sport,
 		HomeTeam:                    e.HomeTeam,
@@ -90,28 +90,28 @@ func eventToProto(e models.SofaScoreEvent) *pb.SofaScoreEvent {
 		StartTimestamp:              e.StartTimestamp,
 		CurrentPeriodStartTimestamp: e.CurrentPeriodStartTimestamp,
 		Slug:                        e.Slug,
-		TeamHome:                    teamPtrToProto(e.HomeTeamModel),
-		TeamAway:                    teamPtrToProto(e.AwayTeamModel),
-		League:                      tournamentPtrToProto(e.League),
+		TeamHome:                    TeamPtrToProto(e.HomeTeamModel),
+		TeamAway:                    TeamPtrToProto(e.AwayTeamModel),
+		League:                      TournamentPtrToProto(e.League),
 	}
 }
 
-func eventsToProto(events []models.SofaScoreEvent) []*pb.SofaScoreEvent {
+func EventsToProto(events []models.SofaScoreEvent) []*pb.SofaScoreEvent {
 	result := make([]*pb.SofaScoreEvent, 0, len(events))
 	for _, e := range events {
-		result = append(result, eventToProto(e))
+		result = append(result, EventToProto(e))
 	}
 	return result
 }
 
-func playbackToProto(p *models.PlaybackLog) *pb.PlaybackLog {
+func PlaybackToProto(p *models.PlaybackLog) *pb.PlaybackLog {
 	if p == nil {
 		return nil
 	}
 	return &pb.PlaybackLog{
 		Id:               uint32(p.ID),
-		CreatedAt:        formatTime(p.CreatedAt),
-		UpdatedAt:        formatTime(p.UpdatedAt),
+		CreatedAt:        FormatTime(p.CreatedAt),
+		UpdatedAt:        FormatTime(p.UpdatedAt),
 		DeviceId:         uint32(p.DeviceID),
 		SofaScoreEventId: p.SofaScoreEventId,
 		StartedAt:        p.StartedAt,
@@ -119,65 +119,65 @@ func playbackToProto(p *models.PlaybackLog) *pb.PlaybackLog {
 	}
 }
 
-func globalConfigToProto(g models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {
+func GlobalConfigToProto(g models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {
 	return &pb.GlobalTournamentConfig{
 		Id:           uint32(g.ID),
-		CreatedAt:    formatTime(g.CreatedAt),
-		UpdatedAt:    formatTime(g.UpdatedAt),
+		CreatedAt:    FormatTime(g.CreatedAt),
+		UpdatedAt:    FormatTime(g.UpdatedAt),
 		TournamentId: uint32(g.TournamentID),
-		Tournament:   tournamentPtrToProto(g.Tournament),
+		Tournament:   TournamentPtrToProto(g.Tournament),
 	}
 }
 
-func globalConfigPtrToProto(g *models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {
+func GlobalConfigPtrToProto(g *models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {
 	if g == nil {
 		return nil
 	}
-	return globalConfigToProto(*g)
+	return GlobalConfigToProto(*g)
 }
 
-func globalConfigsToProto(gs []models.GlobalTournamentConfig) []*pb.GlobalTournamentConfig {
+func GlobalConfigsToProto(gs []models.GlobalTournamentConfig) []*pb.GlobalTournamentConfig {
 	result := make([]*pb.GlobalTournamentConfig, 0, len(gs))
 	for _, g := range gs {
-		result = append(result, globalConfigToProto(g))
+		result = append(result, GlobalConfigToProto(g))
 	}
 	return result
 }
 
-func globalConfigPtrsToProto(gs []*models.GlobalTournamentConfig) []*pb.GlobalTournamentConfig {
+func GlobalConfigPtrsToProto(gs []*models.GlobalTournamentConfig) []*pb.GlobalTournamentConfig {
 	result := make([]*pb.GlobalTournamentConfig, 0, len(gs))
 	for _, g := range gs {
-		result = append(result, globalConfigPtrToProto(g))
+		result = append(result, GlobalConfigPtrToProto(g))
 	}
 	return result
 }
 
-func deviceTournamentToProto(dt models.DeviceTournament) *pb.DeviceTournament {
+func DeviceTournamentToProto(dt models.DeviceTournament) *pb.DeviceTournament {
 	p := &pb.DeviceTournament{
 		Id:           uint32(dt.ID),
-		CreatedAt:    formatTime(dt.CreatedAt),
-		UpdatedAt:    formatTime(dt.UpdatedAt),
+		CreatedAt:    FormatTime(dt.CreatedAt),
+		UpdatedAt:    FormatTime(dt.UpdatedAt),
 		DeviceId:     uint32(dt.DeviceID),
 		TournamentId: uint32(dt.TournamentID),
 	}
 	if dt.Tournament != nil {
-		p.Tournament = tournamentToProto(*dt.Tournament)
+		p.Tournament = TournamentToProto(*dt.Tournament)
 	}
 	if dt.Device != nil {
-		p.Device = deviceToProto(*dt.Device)
+		p.Device = DeviceToProto(*dt.Device)
 	}
 	return p
 }
 
-func deviceTournamentsToProto(dts []models.DeviceTournament) []*pb.DeviceTournament {
+func DeviceTournamentsToProto(dts []models.DeviceTournament) []*pb.DeviceTournament {
 	result := make([]*pb.DeviceTournament, 0, len(dts))
 	for _, dt := range dts {
-		result = append(result, deviceTournamentToProto(dt))
+		result = append(result, DeviceTournamentToProto(dt))
 	}
 	return result
 }
 
-func eventStatsToProto(stats []repository.EventStats) []*pb.EventStats {
+func EventStatsToProto(stats []repository.EventStats) []*pb.EventStats {
 	result := make([]*pb.EventStats, 0, len(stats))
 	for _, s := range stats {
 		result = append(result, &pb.EventStats{
@@ -188,7 +188,7 @@ func eventStatsToProto(stats []repository.EventStats) []*pb.EventStats {
 	return result
 }
 
-func apkToProto(v models.ApkVersion, downloadURL string) *pb.ApkInfo {
+func ApkToProto(v models.ApkVersion, downloadURL string) *pb.ApkInfo {
 	return &pb.ApkInfo{
 		Id:               uint32(v.ID),
 		Version:          v.Version,
@@ -202,14 +202,14 @@ func apkToProto(v models.ApkVersion, downloadURL string) *pb.ApkInfo {
 		TargetSdkVersion: v.TargetSDKVersion,
 		DownloadToken:    v.DownloadToken,
 		DownloadUrl:      downloadURL,
-		CreatedAt:        formatTime(v.CreatedAt),
+		CreatedAt:        FormatTime(v.CreatedAt),
 	}
 }
 
-func apksToProto(versions []models.ApkVersion) []*pb.ApkInfo {
+func ApksToProto(versions []models.ApkVersion) []*pb.ApkInfo {
 	result := make([]*pb.ApkInfo, 0, len(versions))
 	for _, v := range versions {
-		result = append(result, apkToProto(v, fmt.Sprintf("/api/v1/apk/download/%s", v.DownloadToken)))
+		result = append(result, ApkToProto(v, fmt.Sprintf("/api/app/v1/apk/download/%s", v.DownloadToken)))
 	}
 	return result
 }

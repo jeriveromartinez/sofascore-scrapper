@@ -1,10 +1,11 @@
-package api
+package app
 
 import (
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
@@ -15,7 +16,7 @@ type CurrentEventsController struct {
 }
 
 func (c *CurrentEventsController) LoadRoutes() {
-	c.Group.GET("/current-events", appMiddleware(), handleGetCurrentEvents)
+	c.Group.GET("/current-events", common.AppMiddleware(), handleGetCurrentEvents)
 }
 
 func handleGetCurrentEvents(c *gin.Context) {
@@ -29,8 +30,8 @@ func handleGetCurrentEvents(c *gin.Context) {
 
 	events, err := repository.GetCurrentAndUpcomingEvents(device.ID, limit)
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, err.Error())
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondProto(c, http.StatusOK, &pb.EventsList{Data: eventsToProto(events)})
+	common.RespondProto(c, http.StatusOK, &pb.EventsList{Data: common.EventsToProto(events)})
 }
