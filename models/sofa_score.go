@@ -23,11 +23,3 @@ type SofaScoreEvent struct {
 func (SofaScoreEvent) TableName() string {
 	return "events"
 }
-
-/* func (s SofaScoreEvent) GetHomeTeamLogo() string {
-	return "https://img.sofascore.com/api/v1/team/" + fmt.Sprint(s.HomeTeamId) + "/image"
-}
-
-func (s SofaScoreEvent) GetAwayTeamLogo() string {
-	return "https://img.sofascore.com/api/v1/team/" + fmt.Sprint(s.AwayTeamId) + "/image"
-} */
