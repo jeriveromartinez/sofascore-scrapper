@@ -29,7 +29,7 @@ func TeamLogoLocalPath(teamID int64) string {
 
 // TeamLogoAPIPath returns the API URL path that serves a team's proxied logo.
 func TeamLogoAPIPath(teamID int64) string {
-	return fmt.Sprintf("/api/v1/teams/logo/%d", teamID)
+	return fmt.Sprintf("/teams/logo/%d", teamID)
 }
 
 // DownloadTeamLogo fetches the image at sourceURL and saves it under the team

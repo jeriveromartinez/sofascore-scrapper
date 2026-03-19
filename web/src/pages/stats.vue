@@ -38,7 +38,6 @@ onMounted(() => {
     >
       <div>
         <h5 class="mb-0">Top Eventos</h5>
-        <small class="text-body-secondary">GET /api/v1/stats/top-events</small>
       </div>
       <div class="d-flex gap-2">
         <input

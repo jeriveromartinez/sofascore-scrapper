@@ -78,9 +78,6 @@ async function check(): Promise<void> {
     <div class="card-header d-flex justify-content-between align-items-center">
       <div>
         <h5 class="mb-0">APK Cliente</h5>
-        <small class="text-body-secondary"
-          >GET /api/v1/apk/check y GET /api/v1/apk/download/:token</small
-        >
       </div>
     </div>
 

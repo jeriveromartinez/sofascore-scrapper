@@ -83,7 +83,6 @@ async function closePlayback(method: PlaybackUpdateMethod): Promise<void> {
       <div class="card h-100">
         <div class="card-header">
           <h5 class="mb-0">Crear Playback</h5>
-          <small class="text-body-secondary">POST /api/v1/playback</small>
         </div>
 
         <div class="card-body">
@@ -138,9 +137,6 @@ async function closePlayback(method: PlaybackUpdateMethod): Promise<void> {
       <div class="card h-100">
         <div class="card-header">
           <h5 class="mb-0">Cerrar Playback</h5>
-          <small class="text-body-secondary"
-            >PUT/PATCH /api/v1/playback/:id</small
-          >
         </div>
 
         <div class="card-body">

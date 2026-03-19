@@ -77,9 +77,6 @@ onMounted(() => {
   <div class="card">
     <div class="card-header">
       <h5 class="mb-0">Configuración Global de Torneos</h5>
-      <small class="text-body-secondary"
-        >/api/v1/global-tournament-config</small
-      >
     </div>
 
     <div class="card-body">
