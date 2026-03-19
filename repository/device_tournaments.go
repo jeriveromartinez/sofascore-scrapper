@@ -61,17 +61,14 @@ func SetDeviceTournaments(deviceID uint, tournamentIDs []uint) error {
 	tx := db.Begin()
 
 	// Delete existing associations
-	if err := tx.Where("device_id = ?", deviceID).Delete(&models.DeviceTournament{}).Error; err != nil {
+	if err := tx.Where("device_id = ?", deviceID).Unscoped().Delete(&models.DeviceTournament{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
 
 	// Create new associations
 	for _, tournamentID := range tournamentIDs {
-		deviceTournament := &models.DeviceTournament{
-			DeviceID:     deviceID,
-			TournamentID: tournamentID,
-		}
+		deviceTournament := &models.DeviceTournament{DeviceID: deviceID, TournamentID: tournamentID}
 		if err := tx.Create(deviceTournament).Error; err != nil {
 			tx.Rollback()
 			return err
