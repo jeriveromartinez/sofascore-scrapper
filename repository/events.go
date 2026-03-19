@@ -24,16 +24,16 @@ func SaveSofaScoreEvent(Events []*models.APIEvent, sport string) {
 	for _, event := range Events {
 		model := event.ToSofaScoreEvent()
 
-		homeTeam := models.Team{TeamId: model.HomeTeamId, LogoUrl: model.GetHomeTeamLogo()}
+		homeTeam := event.HomeTeam.ToSofaScoreTeam()
 		db.FirstOrCreate(&homeTeam, models.Team{TeamId: model.HomeTeamId})
 		if !isProxiedLogoURL(homeTeam.LogoUrl) {
-			scheduleLogoDownload(db, model.HomeTeamId, model.GetHomeTeamLogo())
+			scheduleLogoDownload(db, model.HomeTeamId, homeTeam.LogoUrl)
 		}
 
-		awayTeam := models.Team{TeamId: model.AwayTeamId, LogoUrl: model.GetAwayTeamLogo()}
+		awayTeam := event.AwayTeam.ToSofaScoreTeam()
 		db.FirstOrCreate(&awayTeam, models.Team{TeamId: model.AwayTeamId})
 		if !isProxiedLogoURL(awayTeam.LogoUrl) {
-			scheduleLogoDownload(db, model.AwayTeamId, model.GetAwayTeamLogo())
+			scheduleLogoDownload(db, model.AwayTeamId, awayTeam.LogoUrl)
 		}
 
 		tournament := models.Tournament{Slug: event.Tournament.UniqueTournament.Slug + "-" + strings.ToLower(event.Tournament.UniqueTournament.Category.Slug), Name: event.Tournament.UniqueTournament.Name, Region: event.Tournament.UniqueTournament.Category.Name, Model: gorm.Model{ID: uint(event.Tournament.UniqueTournament.ID)}}

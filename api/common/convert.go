@@ -67,9 +67,13 @@ func TeamPtrToProto(t *models.Team) *pb.Team {
 		return nil
 	}
 	return &pb.Team{
-		Id:      uint32(t.ID),
-		TeamId:  t.TeamId,
-		LogoUrl: t.LogoUrl,
+		Id:             uint32(t.ID),
+		TeamId:         t.TeamId,
+		LogoUrl:        t.LogoUrl,
+		Name:           t.Name,
+		PrimaryColor:   t.PrimaryColor,
+		SecondaryColor: t.SecondaryColor,
+		TextColor:      t.TextColor,
 	}
 }
 
@@ -80,10 +84,8 @@ func EventToProto(e models.SofaScoreEvent) *pb.SofaScoreEvent {
 		UpdatedAt:                   FormatTime(e.UpdatedAt),
 		SofaScoreEventId:            e.SofaScoreEventId,
 		Sport:                       e.Sport,
-		HomeTeam:                    e.HomeTeam,
 		HomeScore:                   int32(e.HomeScore),
 		HomeTeamId:                  e.HomeTeamId,
-		AwayTeam:                    e.AwayTeam,
 		AwayScore:                   int32(e.AwayScore),
 		AwayTeamId:                  e.AwayTeamId,
 		ScrapedAt:                   e.ScrapedAt,

@@ -155,14 +155,14 @@ onMounted(() => fetchEvents());
               <td>
                 <img
                   :src="event.teamHome?.logoUrl"
-                  :alt="event.homeTeam"
+                  :alt="event.teamHome?.name ?? 'Home Team'"
                   class="me-2"
                   width="40px"
                 />
-                {{ event.homeTeam }} vs {{ event.awayTeam }}
+                {{ event.teamHome?.name ?? 'Home Team' }} vs {{ event.teamAway?.name ?? 'Away Team' }}
                 <img
                   :src="event.teamAway?.logoUrl"
-                  :alt="event.awayTeam"
+                  :alt="event.teamAway?.name ?? 'Away Team'"
                   class="me-2"
                   width="40px"
                 />

@@ -1026,12 +1026,16 @@ func (x *GlobalTournamentConfigList) GetConfigs() []*GlobalTournamentConfig {
 }
 
 type Team struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	TeamId        int64                  `protobuf:"varint,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
-	LogoUrl       string                 `protobuf:"bytes,3,opt,name=logo_url,json=logoUrl,proto3" json:"logo_url,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	TeamId         int64                  `protobuf:"varint,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	LogoUrl        string                 `protobuf:"bytes,3,opt,name=logo_url,json=logoUrl,proto3" json:"logo_url,omitempty"`
+	PrimaryColor   string                 `protobuf:"bytes,4,opt,name=primary_color,json=primaryColor,proto3" json:"primary_color,omitempty"`
+	SecondaryColor string                 `protobuf:"bytes,5,opt,name=secondary_color,json=secondaryColor,proto3" json:"secondary_color,omitempty"`
+	TextColor      string                 `protobuf:"bytes,6,opt,name=text_color,json=textColor,proto3" json:"text_color,omitempty"`
+	Name           string                 `protobuf:"bytes,7,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Team) Reset() {
@@ -1085,6 +1089,34 @@ func (x *Team) GetLogoUrl() string {
 	return ""
 }
 
+func (x *Team) GetPrimaryColor() string {
+	if x != nil {
+		return x.PrimaryColor
+	}
+	return ""
+}
+
+func (x *Team) GetSecondaryColor() string {
+	if x != nil {
+		return x.SecondaryColor
+	}
+	return ""
+}
+
+func (x *Team) GetTextColor() string {
+	if x != nil {
+		return x.TextColor
+	}
+	return ""
+}
+
+func (x *Team) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 type SofaScoreEvent struct {
 	state                       protoimpl.MessageState `protogen:"open.v1"`
 	Id                          uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1092,20 +1124,18 @@ type SofaScoreEvent struct {
 	UpdatedAt                   string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	SofaScoreEventId            int64                  `protobuf:"varint,4,opt,name=sofa_score_event_id,json=sofaScoreEventId,proto3" json:"sofa_score_event_id,omitempty"`
 	Sport                       string                 `protobuf:"bytes,5,opt,name=sport,proto3" json:"sport,omitempty"`
-	HomeTeam                    string                 `protobuf:"bytes,6,opt,name=home_team,json=homeTeam,proto3" json:"home_team,omitempty"`
-	HomeScore                   int32                  `protobuf:"varint,7,opt,name=home_score,json=homeScore,proto3" json:"home_score,omitempty"`
-	HomeTeamId                  int64                  `protobuf:"varint,8,opt,name=home_team_id,json=homeTeamId,proto3" json:"home_team_id,omitempty"`
-	AwayTeam                    string                 `protobuf:"bytes,9,opt,name=away_team,json=awayTeam,proto3" json:"away_team,omitempty"`
-	AwayScore                   int32                  `protobuf:"varint,10,opt,name=away_score,json=awayScore,proto3" json:"away_score,omitempty"`
-	AwayTeamId                  int64                  `protobuf:"varint,11,opt,name=away_team_id,json=awayTeamId,proto3" json:"away_team_id,omitempty"`
-	ScrapedAt                   int64                  `protobuf:"varint,12,opt,name=scraped_at,json=scrapedAt,proto3" json:"scraped_at,omitempty"`
-	Category                    string                 `protobuf:"bytes,13,opt,name=category,proto3" json:"category,omitempty"`
-	StartTimestamp              int64                  `protobuf:"varint,14,opt,name=start_timestamp,json=startTimestamp,proto3" json:"start_timestamp,omitempty"`
-	CurrentPeriodStartTimestamp int64                  `protobuf:"varint,15,opt,name=current_period_start_timestamp,json=currentPeriodStartTimestamp,proto3" json:"current_period_start_timestamp,omitempty"`
-	Slug                        string                 `protobuf:"bytes,16,opt,name=slug,proto3" json:"slug,omitempty"`
-	TeamHome                    *Team                  `protobuf:"bytes,17,opt,name=team_home,json=teamHome,proto3" json:"team_home,omitempty"`
-	TeamAway                    *Team                  `protobuf:"bytes,18,opt,name=team_away,json=teamAway,proto3" json:"team_away,omitempty"`
-	League                      *Tournament            `protobuf:"bytes,19,opt,name=league,proto3" json:"league,omitempty"`
+	HomeScore                   int32                  `protobuf:"varint,6,opt,name=home_score,json=homeScore,proto3" json:"home_score,omitempty"`
+	HomeTeamId                  int64                  `protobuf:"varint,7,opt,name=home_team_id,json=homeTeamId,proto3" json:"home_team_id,omitempty"`
+	AwayScore                   int32                  `protobuf:"varint,8,opt,name=away_score,json=awayScore,proto3" json:"away_score,omitempty"`
+	AwayTeamId                  int64                  `protobuf:"varint,9,opt,name=away_team_id,json=awayTeamId,proto3" json:"away_team_id,omitempty"`
+	ScrapedAt                   int64                  `protobuf:"varint,10,opt,name=scraped_at,json=scrapedAt,proto3" json:"scraped_at,omitempty"`
+	Category                    string                 `protobuf:"bytes,11,opt,name=category,proto3" json:"category,omitempty"`
+	StartTimestamp              int64                  `protobuf:"varint,12,opt,name=start_timestamp,json=startTimestamp,proto3" json:"start_timestamp,omitempty"`
+	CurrentPeriodStartTimestamp int64                  `protobuf:"varint,13,opt,name=current_period_start_timestamp,json=currentPeriodStartTimestamp,proto3" json:"current_period_start_timestamp,omitempty"`
+	Slug                        string                 `protobuf:"bytes,14,opt,name=slug,proto3" json:"slug,omitempty"`
+	TeamHome                    *Team                  `protobuf:"bytes,15,opt,name=team_home,json=teamHome,proto3" json:"team_home,omitempty"`
+	TeamAway                    *Team                  `protobuf:"bytes,16,opt,name=team_away,json=teamAway,proto3" json:"team_away,omitempty"`
+	League                      *Tournament            `protobuf:"bytes,17,opt,name=league,proto3" json:"league,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -1175,13 +1205,6 @@ func (x *SofaScoreEvent) GetSport() string {
 	return ""
 }
 
-func (x *SofaScoreEvent) GetHomeTeam() string {
-	if x != nil {
-		return x.HomeTeam
-	}
-	return ""
-}
-
 func (x *SofaScoreEvent) GetHomeScore() int32 {
 	if x != nil {
 		return x.HomeScore
@@ -1194,13 +1217,6 @@ func (x *SofaScoreEvent) GetHomeTeamId() int64 {
 		return x.HomeTeamId
 	}
 	return 0
-}
-
-func (x *SofaScoreEvent) GetAwayTeam() string {
-	if x != nil {
-		return x.AwayTeam
-	}
-	return ""
 }
 
 func (x *SofaScoreEvent) GetAwayScore() int32 {
@@ -2150,11 +2166,16 @@ const file_proto_api_proto_rawDesc = "" +
 	"tournament\x18\x05 \x01(\v2\x15.sofascore.TournamentR\n" +
 	"tournament\"Y\n" +
 	"\x1aGlobalTournamentConfigList\x12;\n" +
-	"\aconfigs\x18\x01 \x03(\v2!.sofascore.GlobalTournamentConfigR\aconfigs\"J\n" +
+	"\aconfigs\x18\x01 \x03(\v2!.sofascore.GlobalTournamentConfigR\aconfigs\"\xcb\x01\n" +
 	"\x04Team\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x17\n" +
 	"\ateam_id\x18\x02 \x01(\x03R\x06teamId\x12\x19\n" +
-	"\blogo_url\x18\x03 \x01(\tR\alogoUrl\"\xa7\x05\n" +
+	"\blogo_url\x18\x03 \x01(\tR\alogoUrl\x12#\n" +
+	"\rprimary_color\x18\x04 \x01(\tR\fprimaryColor\x12'\n" +
+	"\x0fsecondary_color\x18\x05 \x01(\tR\x0esecondaryColor\x12\x1d\n" +
+	"\n" +
+	"text_color\x18\x06 \x01(\tR\ttextColor\x12\x12\n" +
+	"\x04name\x18\a \x01(\tR\x04name\"\xed\x04\n" +
 	"\x0eSofaScoreEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2162,27 +2183,25 @@ const file_proto_api_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\tR\tupdatedAt\x12-\n" +
 	"\x13sofa_score_event_id\x18\x04 \x01(\x03R\x10sofaScoreEventId\x12\x14\n" +
-	"\x05sport\x18\x05 \x01(\tR\x05sport\x12\x1b\n" +
-	"\thome_team\x18\x06 \x01(\tR\bhomeTeam\x12\x1d\n" +
+	"\x05sport\x18\x05 \x01(\tR\x05sport\x12\x1d\n" +
 	"\n" +
-	"home_score\x18\a \x01(\x05R\thomeScore\x12 \n" +
-	"\fhome_team_id\x18\b \x01(\x03R\n" +
-	"homeTeamId\x12\x1b\n" +
-	"\taway_team\x18\t \x01(\tR\bawayTeam\x12\x1d\n" +
+	"home_score\x18\x06 \x01(\x05R\thomeScore\x12 \n" +
+	"\fhome_team_id\x18\a \x01(\x03R\n" +
+	"homeTeamId\x12\x1d\n" +
 	"\n" +
-	"away_score\x18\n" +
-	" \x01(\x05R\tawayScore\x12 \n" +
-	"\faway_team_id\x18\v \x01(\x03R\n" +
+	"away_score\x18\b \x01(\x05R\tawayScore\x12 \n" +
+	"\faway_team_id\x18\t \x01(\x03R\n" +
 	"awayTeamId\x12\x1d\n" +
 	"\n" +
-	"scraped_at\x18\f \x01(\x03R\tscrapedAt\x12\x1a\n" +
-	"\bcategory\x18\r \x01(\tR\bcategory\x12'\n" +
-	"\x0fstart_timestamp\x18\x0e \x01(\x03R\x0estartTimestamp\x12C\n" +
-	"\x1ecurrent_period_start_timestamp\x18\x0f \x01(\x03R\x1bcurrentPeriodStartTimestamp\x12\x12\n" +
-	"\x04slug\x18\x10 \x01(\tR\x04slug\x12,\n" +
-	"\tteam_home\x18\x11 \x01(\v2\x0f.sofascore.TeamR\bteamHome\x12,\n" +
-	"\tteam_away\x18\x12 \x01(\v2\x0f.sofascore.TeamR\bteamAway\x12-\n" +
-	"\x06league\x18\x13 \x01(\v2\x15.sofascore.TournamentR\x06league\"\x9c\x01\n" +
+	"scraped_at\x18\n" +
+	" \x01(\x03R\tscrapedAt\x12\x1a\n" +
+	"\bcategory\x18\v \x01(\tR\bcategory\x12'\n" +
+	"\x0fstart_timestamp\x18\f \x01(\x03R\x0estartTimestamp\x12C\n" +
+	"\x1ecurrent_period_start_timestamp\x18\r \x01(\x03R\x1bcurrentPeriodStartTimestamp\x12\x12\n" +
+	"\x04slug\x18\x0e \x01(\tR\x04slug\x12,\n" +
+	"\tteam_home\x18\x0f \x01(\v2\x0f.sofascore.TeamR\bteamHome\x12,\n" +
+	"\tteam_away\x18\x10 \x01(\v2\x0f.sofascore.TeamR\bteamAway\x12-\n" +
+	"\x06league\x18\x11 \x01(\v2\x15.sofascore.TournamentR\x06league\"\x9c\x01\n" +
 	"\n" +
 	"EventsList\x12-\n" +
 	"\x04data\x18\x01 \x03(\v2\x19.sofascore.SofaScoreEventR\x04data\x12\x12\n" +

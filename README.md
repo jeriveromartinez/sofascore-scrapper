@@ -76,3 +76,13 @@ La tabla `sport_events` almacena:
 | `start_time`      | varchar(50)  | Hora de inicio                           |
 | `raw_text`        | text         | Texto completo del elemento scrapeado    |
 | `scraped_at`      | datetime     | Marca de tiempo del scraping             |
+
+## CMD para ejecutar protoc para GO
+```bash
+PATH="$PATH:/D/.go/bin" protoc --proto_path="E:/Projects/sofascore-scrapper" --go_out="E:/Projects/sofascore-scrapper" --go_opt=module=github.com/jeriveromartinez/sofascore-scrapper "E:/Projects/sofascore-scrapper/proto/api.proto"
+```
+
+## CMD para ejecutar protoc para vuejs
+```bash
+protoc --proto_path=E:/Projects/sofascore-scrapper --plugin=protoc-gen-ts_proto=E:/Projects/sofascore-scrapper/web/node_modules/.bin/protoc-gen-ts_proto.cmd --ts_proto_out=E:/Projects/sofascore-scrapper/web/src --ts_proto_opt=esModuleInterop=true,outputClientImpl=false E:/Projects/sofascore-scrapper/proto/api.proto
+```

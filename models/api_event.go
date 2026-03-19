@@ -1,5 +1,17 @@
 package models
 
+import "fmt"
+
+type TeamApi struct {
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	Colors struct {
+		Primary   string `json:"primary"`
+		Secondary string `json:"secondary"`
+		Text      string `json:"text"`
+	} `json:"teamColors"`
+}
+
 type APIEvent struct {
 	ID                              int64  `json:"id"`
 	Slug                            string `json:"slug"`
@@ -50,15 +62,9 @@ type APIEvent struct {
 		Name  string `json:"name"`
 	} `json:"roundInfo"`
 
-	HomeTeam struct {
-		ID   int64  `json:"id"`
-		Name string `json:"name"`
-	} `json:"homeTeam"`
+	HomeTeam TeamApi `json:"homeTeam"`
 
-	AwayTeam struct {
-		ID   int64  `json:"id"`
-		Name string `json:"name"`
-	} `json:"awayTeam"`
+	AwayTeam TeamApi `json:"awayTeam"`
 
 	HomeScore struct {
 		Current int `json:"current"`
@@ -75,13 +81,22 @@ type APIEvent struct {
 	} `json:"time"`
 }
 
-func (e APIEvent) ToSofaScoreEvent() SofaScoreEvent {
+func (t *TeamApi) ToSofaScoreTeam() Team {
+	return Team{
+		TeamId:         t.ID,
+		Name:           t.Name,
+		PrimaryColor:   t.Colors.Primary,
+		SecondaryColor: t.Colors.Secondary,
+		TextColor:      t.Colors.Text,
+		LogoUrl:        "https://img.sofascore.com/api/v1/team/" + fmt.Sprint(t.ID) + "/image",
+	}
+}
+
+func (e *APIEvent) ToSofaScoreEvent() SofaScoreEvent {
 	return SofaScoreEvent{
 		SofaScoreEventId:            e.ID,
-		HomeTeam:                    e.HomeTeam.Name,
 		HomeScore:                   e.HomeScore.Current,
 		HomeTeamId:                  e.HomeTeam.ID,
-		AwayTeam:                    e.AwayTeam.Name,
 		AwayScore:                   e.AwayScore.Current,
 		AwayTeamId:                  e.AwayTeam.ID,
 		StartTimestamp:              e.StartTimestamp,
