@@ -99,8 +99,8 @@ func EventToProto(e models.SofaScoreEvent) *pb.SofaScoreEvent {
 func EventsToProto(events []models.SofaScoreEvent) []*pb.SofaScoreEvent {
 	result := make([]*pb.SofaScoreEvent, 0, len(events))
 	for _, e := range events {
-		e.AwayTeamModel.LogoUrl = "/api/web/v1" + e.AwayTeamModel.LogoUrl
-		e.HomeTeamModel.LogoUrl = "/api/web/v1" + e.HomeTeamModel.LogoUrl
+		e.AwayTeamModel.LogoUrl = "/api/app/v1" + e.AwayTeamModel.LogoUrl
+		e.HomeTeamModel.LogoUrl = "/api/app/v1" + e.HomeTeamModel.LogoUrl
 		result = append(result, EventToProto(e))
 	}
 	return result
