@@ -106,7 +106,7 @@ func GetCurrentAndUpcomingEvents(devId uint, limit int) ([]models.SofaScoreEvent
 		}
 	}
 
-	db.Where("current_period_start_timestamp > 0 AND current_period_start_timestamp >= ? AND league_id IN ?", now, tournamentIDs).
+	db.Where("current_period_start_timestamp >= ? AND league_id IN ?", now, tournamentIDs).
 		Order("current_period_start_timestamp DESC").
 		Limit(limit).
 		Preload("HomeTeamModel").
