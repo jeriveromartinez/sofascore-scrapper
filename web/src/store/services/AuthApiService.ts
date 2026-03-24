@@ -1,5 +1,5 @@
 import { BaseApiService } from "./BaseApiService";
-import { AuthRequest, AuthResponse } from "../../proto/api";
+import { AuthRequest, AuthResponse, StatusMessage } from "../../proto/api";
 import { type UserAuthModel, type UserAuthPayload } from "./models";
 
 export class AuthApiService extends BaseApiService {
@@ -10,10 +10,7 @@ export class AuthApiService extends BaseApiService {
   async login(email: string, password: string): Promise<UserAuthModel> {
     const data = await this.post<UserAuthModel, UserAuthPayload>(
       "/login",
-      {
-        email,
-        password,
-      },
+      { email, password },
       AuthRequest,
       AuthResponse,
     );
@@ -23,14 +20,31 @@ export class AuthApiService extends BaseApiService {
   async register(email: string, password: string): Promise<UserAuthModel> {
     const data = await this.post<UserAuthModel, UserAuthPayload>(
       "/register",
-      {
-        email,
-        password,
-      },
+      { email, password },
       AuthRequest,
       AuthResponse,
     );
     return data;
+  }
+
+  async logout(): Promise<void> {
+    const storedUser =
+      sessionStorage.getItem("user_info") ??
+      localStorage.getItem("user_info") ??
+      "{}";
+
+    let refreshToken = "";
+    try {
+      refreshToken = (JSON.parse(storedUser) as UserAuthModel).refreshToken ?? "";
+    } catch {
+      refreshToken = "";
+    }
+
+    await this.postWithoutBody(
+      "/logout",
+      StatusMessage,
+      refreshToken ? { "X-Refresh-Token": refreshToken } : undefined,
+    );
   }
 }
 

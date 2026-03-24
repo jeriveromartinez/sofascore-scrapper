@@ -1,4 +1,6 @@
 <script lang="ts" setup>
+import { useRouter } from "vue-router";
+import { useAuthStore } from "../store/pinia";
 import leftNavBar from "./leftNavBar.vue";
 import themeSelector from "./themeSelector.vue";
 
@@ -8,7 +10,15 @@ import "../assets/css/demo.css";
 import "../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css";
 import "../assets/css/layout_override.css";
 
+const router = useRouter();
+const authStore = useAuthStore();
 const currentYear = new Date().getFullYear();
+
+function logout() {
+  authStore.logout().finally(() => {
+    router.push({ name: "Login" });
+  });
+}
 </script>
 
 <template>
@@ -126,7 +136,11 @@ const currentYear = new Date().getFullYear();
                     <div class="dropdown-divider my-1"></div>
                   </li>
                   <li>
-                    <a class="dropdown-item" href="javascript:void(0);">
+                    <a
+                      class="dropdown-item"
+                      href="javascript:void(0);"
+                      @click.prevent="logout"
+                    >
                       <i class="icon-base bx bx-power-off icon-md me-3"></i
                       ><span>Log Out</span>
                     </a>

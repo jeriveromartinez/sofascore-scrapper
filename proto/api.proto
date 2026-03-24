@@ -29,6 +29,7 @@ message AuthResponse {
   uint32 id = 1;
   string email = 2;
   string token = 3;
+  string refresh_token = 4;
 }
 
 // ========== Devices ==========

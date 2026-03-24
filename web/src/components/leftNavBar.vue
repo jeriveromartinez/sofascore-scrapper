@@ -2,14 +2,22 @@
 import { adminRoutes } from "../router/admin";
 import { managerRoutes } from "../router/manager";
 import { useRouter } from "vue-router";
+import { useAuthStore } from "../store/pinia/authStore";
 
 const router = useRouter();
+const authStore = useAuthStore();
 
 const goToRoute = (routeName: string) =>
   router.resolve({ name: routeName }).href;
 
 const isActiveRoute = (routeName: string) =>
   router.currentRoute.value.name === routeName;
+
+function logout() {
+  authStore.logout().finally(() => {
+    router.push({ name: "Login" });
+  });
+}
 </script>
 
 <template>
@@ -97,10 +105,7 @@ const isActiveRoute = (routeName: string) =>
         <span class="app-brand-text demo menu-text fw-bold ms-2">Sneat</span>
       </a>
 
-      <a
-        href="#!"
-        class="layout-menu-toggle menu-link text-large ms-auto"
-      >
+      <a href="#!" class="layout-menu-toggle menu-link text-large ms-auto">
         <i class="icon-base bx bx-chevron-left"></i>
       </a>
     </div>
@@ -113,8 +118,13 @@ const isActiveRoute = (routeName: string) =>
       <li class="menu-header small text-uppercase">
         <span class="menu-header-text">Administracion</span>
       </li>
-      <li class="menu-item" v-for="route in adminRoutes" :key="route.name" :class="{ 'active': isActiveRoute(route.name as string) }">
-        <a :href="goToRoute(route.name as string)" class="menu-link" >
+      <li
+        class="menu-item"
+        v-for="route in adminRoutes"
+        :key="route.name"
+        :class="{ active: isActiveRoute(route.name as string) }"
+      >
+        <a :href="goToRoute(route.name as string)" class="menu-link">
           <i :class="`menu-icon tf-icons bx ${route.icon}`"></i>
           <div class="text-truncate">
             {{ route.name }}
@@ -124,13 +134,24 @@ const isActiveRoute = (routeName: string) =>
       <li class="menu-header small text-uppercase">
         <span class="menu-header-text">Usuarios</span>
       </li>
-      <li class="menu-item" v-for="route in managerRoutes" :key="route.name" :class="{ 'active': isActiveRoute(route.name as string) }">
+      <li
+        class="menu-item"
+        v-for="route in managerRoutes"
+        :key="route.name"
+        :class="{ active: isActiveRoute(route.name as string) }"
+      >
         <a :href="goToRoute(route.name as string)" class="menu-link">
           <i :class="`menu-icon tf-icons bx ${route.icon}`"></i>
           <div class="text-truncate">
             {{ route.name }}
           </div>
         </a>
+      </li>
+      <li class="menu-item mt-auto">
+        <button class="menu-link btn btn-link w-100 text-start" @click="logout">
+          <i class="menu-icon tf-icons bx bx-log-out"></i>
+          <div class="text-truncate">Cerrar sesión</div>
+        </button>
       </li>
     </ul>
   </aside>

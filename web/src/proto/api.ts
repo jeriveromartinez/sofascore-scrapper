@@ -30,6 +30,7 @@ export interface AuthResponse {
   id: number;
   email: string;
   token: string;
+  refreshToken: string;
 }
 
 export interface DeviceRegisterRequest {
@@ -474,7 +475,7 @@ export const AuthRequest: MessageFns<AuthRequest> = {
 };
 
 function createBaseAuthResponse(): AuthResponse {
-  return { id: 0, email: "", token: "" };
+  return { id: 0, email: "", token: "", refreshToken: "" };
 }
 
 export const AuthResponse: MessageFns<AuthResponse> = {
@@ -487,6 +488,9 @@ export const AuthResponse: MessageFns<AuthResponse> = {
     }
     if (message.token !== "") {
       writer.uint32(26).string(message.token);
+    }
+    if (message.refreshToken !== "") {
+      writer.uint32(34).string(message.refreshToken);
     }
     return writer;
   },
@@ -522,6 +526,14 @@ export const AuthResponse: MessageFns<AuthResponse> = {
           message.token = reader.string();
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.refreshToken = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -536,6 +548,11 @@ export const AuthResponse: MessageFns<AuthResponse> = {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       email: isSet(object.email) ? globalThis.String(object.email) : "",
       token: isSet(object.token) ? globalThis.String(object.token) : "",
+      refreshToken: isSet(object.refreshToken)
+        ? globalThis.String(object.refreshToken)
+        : isSet(object.refresh_token)
+        ? globalThis.String(object.refresh_token)
+        : "",
     };
   },
 
@@ -550,6 +567,9 @@ export const AuthResponse: MessageFns<AuthResponse> = {
     if (message.token !== "") {
       obj.token = message.token;
     }
+    if (message.refreshToken !== "") {
+      obj.refreshToken = message.refreshToken;
+    }
     return obj;
   },
 
@@ -561,6 +581,7 @@ export const AuthResponse: MessageFns<AuthResponse> = {
     message.id = object.id ?? 0;
     message.email = object.email ?? "";
     message.token = object.token ?? "";
+    message.refreshToken = object.refreshToken ?? "";
     return message;
   },
 };

@@ -1,5 +1,6 @@
 import { KEY_USER_LOGIN } from "../../constants";
 import type { UserAuthModel } from "../services/models";
+import { authApiService } from "../services";
 import { defineStore } from "pinia";
 
 export const useAuthStore = defineStore("auth", {
@@ -22,9 +23,19 @@ export const useAuthStore = defineStore("auth", {
       sessionStorage.removeItem(KEY_USER_LOGIN);
       localStorage.removeItem(KEY_USER_LOGIN);
     },
+    async logout() {
+      try {
+        if (this.userData.token) {
+          await authApiService.logout();
+        }
+      } finally {
+        this.clearUser();
+      }
+    },
   },
   getters: {
     isAuthenticated: (state) => !!state.userData.token,
     getToken: (state) => state.userData.token ?? "",
+    getRefreshToken: (state) => state.userData.refreshToken ?? "",
   },
 });

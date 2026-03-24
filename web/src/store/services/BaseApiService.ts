@@ -1,13 +1,109 @@
 import { API_BASE_URL, KEY_USER_LOGIN } from "../../constants";
-import { ErrorResponse } from "../../proto/api";
-import axios, { type AxiosInstance } from "axios";
+import { ErrorResponse, AuthResponse } from "../../proto/api";
+import axios, {
+  type AxiosInstance,
+  type InternalAxiosRequestConfig,
+} from "axios";
 import { type ApiErrorResponse, type UserAuthModel } from "./models";
 
 const PROTO_CONTENT_TYPE = "application/x-protobuf";
 
+let refreshPromise: Promise<UserAuthModel | null> | null = null;
+
 export interface ProtoCodec<T> {
   encode(message: T): { finish(): Uint8Array };
   decode(input: Uint8Array): T;
+}
+
+function clearAuthStorage(): void {
+  sessionStorage.removeItem(KEY_USER_LOGIN);
+  localStorage.removeItem(KEY_USER_LOGIN);
+}
+
+function redirectToLogin(): void {
+  import("../../router").then(({ router }) => {
+    router.push({ name: "Login" });
+  });
+}
+
+function readStoredAuth(): {
+  user: UserAuthModel | null;
+  storage: Storage | null;
+} {
+  const storedSession = sessionStorage.getItem(KEY_USER_LOGIN);
+  if (storedSession) {
+    try {
+      return {
+        user: JSON.parse(storedSession) as UserAuthModel,
+        storage: sessionStorage,
+      };
+    } catch {
+      return { user: null, storage: null };
+    }
+  }
+
+  const storedLocal = localStorage.getItem(KEY_USER_LOGIN);
+  if (storedLocal) {
+    try {
+      return {
+        user: JSON.parse(storedLocal) as UserAuthModel,
+        storage: localStorage,
+      };
+    } catch {
+      return { user: null, storage: null };
+    }
+  }
+
+  return { user: null, storage: null };
+}
+
+function persistStoredAuth(user: UserAuthModel, storage: Storage | null): void {
+  storage?.setItem(KEY_USER_LOGIN, JSON.stringify(user));
+}
+
+async function refreshAuth(): Promise<UserAuthModel | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    const { user, storage } = readStoredAuth();
+    if (!user?.refreshToken || !storage) {
+      return null;
+    }
+
+    const refreshResp = await axios.post<ArrayBuffer>(
+      `${API_BASE_URL}/users/refresh`,
+      undefined,
+      {
+        headers: {
+          Accept: PROTO_CONTENT_TYPE,
+          Authorization: `Bearer ${user.refreshToken}`,
+        },
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
+    );
+
+    if (refreshResp.status !== 200) {
+      return null;
+    }
+
+    const auth = AuthResponse.decode(new Uint8Array(refreshResp.data));
+    const nextUser: UserAuthModel = {
+      id: auth.id,
+      email: auth.email,
+      token: auth.token,
+      refreshToken: auth.refreshToken,
+    };
+
+    persistStoredAuth(nextUser, storage);
+    return nextUser;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
 }
 
 export abstract class BaseApiService {
@@ -17,21 +113,42 @@ export abstract class BaseApiService {
   constructor(pathApi: string) {
     this.http = axios.create({ baseURL: API_BASE_URL });
     this.pathApi = pathApi;
+    this.setupInterceptors();
+  }
+
+  private setupInterceptors(): void {
+    this.http.interceptors.response.use(async (response) => {
+      const config = response.config as InternalAxiosRequestConfig & {
+        _retry?: boolean;
+      };
+
+      if (response.status !== 401 || config._retry) return response;
+
+      const url = config.url ?? "";
+      if (
+        url.includes("/users/login") ||
+        url.includes("/users/register") ||
+        url.includes("/users/refresh")
+      )
+        return response;
+
+      config._retry = true;
+
+      const nextUser = await refreshAuth();
+      if (!nextUser?.token) {
+        clearAuthStorage();
+        redirectToLogin();
+        return response;
+      }
+
+      config.headers = config.headers ?? {};
+      config.headers.Authorization = `Bearer ${nextUser.token}`;
+      return this.http.request(config);
+    });
   }
 
   private getToken(): string {
-    const userLogin =
-      sessionStorage.getItem(KEY_USER_LOGIN) ??
-      localStorage.getItem(KEY_USER_LOGIN) ??
-      "{}";
-
-    try {
-      const userInfo = JSON.parse(userLogin) as UserAuthModel;
-
-      return userInfo?.token ?? "";
-    } catch {
-      return "";
-    }
+    return readStoredAuth().user?.token ?? "";
   }
 
   private getHeaders(withBody = false): Record<string, string> {
@@ -149,6 +266,27 @@ export abstract class BaseApiService {
       responseType: "arraybuffer",
       validateStatus: () => true,
       transformRequest: [(data) => data],
+    });
+
+    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+
+    return this.decodeResponse<T>(data, decoder);
+  }
+
+  protected async postWithoutBody<T>(
+    url: string,
+    decoder: ProtoCodec<T>,
+    extraHeaders?: Record<string, string>,
+  ): Promise<T> {
+    const headers = { ...this.getHeaders(), ...extraHeaders };
+    const {
+      data,
+      status,
+      headers: responseHeaders,
+    } = await this.http.post<ArrayBuffer>(`${this.pathApi}${url}`, undefined, {
+      headers,
+      responseType: "arraybuffer",
+      validateStatus: () => true,
     });
 
     this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
