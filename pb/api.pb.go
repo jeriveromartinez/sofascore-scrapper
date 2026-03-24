@@ -1374,12 +1374,12 @@ func (x *EventsList) GetTotalPages() int32 {
 }
 
 type LogPlaybackRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	DeviceToken      string                 `protobuf:"bytes,1,opt,name=device_token,json=deviceToken,proto3" json:"device_token,omitempty"`
-	SofaScoreEventId int64                  `protobuf:"varint,2,opt,name=sofa_score_event_id,json=sofaScoreEventId,proto3" json:"sofa_score_event_id,omitempty"`
-	StartedAt        int64                  `protobuf:"varint,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceToken   string                 `protobuf:"bytes,1,opt,name=device_token,json=deviceToken,proto3" json:"device_token,omitempty"`
+	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	StartedAt     int64                  `protobuf:"varint,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LogPlaybackRequest) Reset() {
@@ -1419,11 +1419,11 @@ func (x *LogPlaybackRequest) GetDeviceToken() string {
 	return ""
 }
 
-func (x *LogPlaybackRequest) GetSofaScoreEventId() int64 {
+func (x *LogPlaybackRequest) GetContent() string {
 	if x != nil {
-		return x.SofaScoreEventId
+		return x.Content
 	}
-	return 0
+	return ""
 }
 
 func (x *LogPlaybackRequest) GetStartedAt() int64 {
@@ -1478,16 +1478,16 @@ func (x *UpdatePlaybackRequest) GetEndedAt() int64 {
 }
 
 type PlaybackLog struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Id               uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	CreatedAt        string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt        string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	DeviceId         uint32                 `protobuf:"varint,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
-	SofaScoreEventId int64                  `protobuf:"varint,5,opt,name=sofa_score_event_id,json=sofaScoreEventId,proto3" json:"sofa_score_event_id,omitempty"`
-	StartedAt        int64                  `protobuf:"varint,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	EndedAt          int64                  `protobuf:"varint,7,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	CreatedAt     string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	DeviceId      uint32                 `protobuf:"varint,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	Content       string                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
+	StartedAt     int64                  `protobuf:"varint,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	EndedAt       int64                  `protobuf:"varint,7,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PlaybackLog) Reset() {
@@ -1548,11 +1548,11 @@ func (x *PlaybackLog) GetDeviceId() uint32 {
 	return 0
 }
 
-func (x *PlaybackLog) GetSofaScoreEventId() int64 {
+func (x *PlaybackLog) GetContent() string {
 	if x != nil {
-		return x.SofaScoreEventId
+		return x.Content
 	}
-	return 0
+	return ""
 }
 
 func (x *PlaybackLog) GetStartedAt() int64 {
@@ -2218,22 +2218,22 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x14\n" +
 	"\x05total\x18\x04 \x01(\x03R\x05total\x12\x1f\n" +
 	"\vtotal_pages\x18\x05 \x01(\x05R\n" +
-	"totalPages\"\x85\x01\n" +
+	"totalPages\"p\n" +
 	"\x12LogPlaybackRequest\x12!\n" +
-	"\fdevice_token\x18\x01 \x01(\tR\vdeviceToken\x12-\n" +
-	"\x13sofa_score_event_id\x18\x02 \x01(\x03R\x10sofaScoreEventId\x12\x1d\n" +
+	"\fdevice_token\x18\x01 \x01(\tR\vdeviceToken\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12\x1d\n" +
 	"\n" +
 	"started_at\x18\x03 \x01(\x03R\tstartedAt\"2\n" +
 	"\x15UpdatePlaybackRequest\x12\x19\n" +
-	"\bended_at\x18\x01 \x01(\x03R\aendedAt\"\xe1\x01\n" +
+	"\bended_at\x18\x01 \x01(\x03R\aendedAt\"\xcc\x01\n" +
 	"\vPlaybackLog\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\tR\tupdatedAt\x12\x1b\n" +
-	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\x12-\n" +
-	"\x13sofa_score_event_id\x18\x05 \x01(\x03R\x10sofaScoreEventId\x12\x1d\n" +
+	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\x12\x18\n" +
+	"\acontent\x18\x05 \x01(\tR\acontent\x12\x1d\n" +
 	"\n" +
 	"started_at\x18\x06 \x01(\x03R\tstartedAt\x12\x19\n" +
 	"\bended_at\x18\a \x01(\x03R\aendedAt\"Z\n" +

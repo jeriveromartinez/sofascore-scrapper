@@ -25,8 +25,8 @@ func (c *PlaybackController) LoadRoutes() {
 
 func handleLogPlayback(c *gin.Context) {
 	var req pb.LogPlaybackRequest
-	if err := common.ParseProtoBody(c, &req); err != nil || req.SofaScoreEventId == 0 {
-		common.RespondError(c, http.StatusBadRequest, "sofa_score_event_id is required")
+	if err := common.ParseProtoBody(c, &req); err != nil || req.Content == "" {
+		common.RespondError(c, http.StatusBadRequest, "content is required")
 		return
 	}
 
@@ -45,7 +45,7 @@ func handleLogPlayback(c *gin.Context) {
 	if startedAt == 0 {
 		startedAt = time.Now().Unix()
 	}
-	playbackLog, err := repository.LogPlayback(device.ID, req.SofaScoreEventId, startedAt)
+	playbackLog, err := repository.LogPlayback(device.ID, req.Content, startedAt)
 	if err != nil {
 		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

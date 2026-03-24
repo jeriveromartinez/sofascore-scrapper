@@ -113,13 +113,13 @@ func PlaybackToProto(p *models.PlaybackLog) *pb.PlaybackLog {
 		return nil
 	}
 	return &pb.PlaybackLog{
-		Id:               uint32(p.ID),
-		CreatedAt:        FormatTime(p.CreatedAt),
-		UpdatedAt:        FormatTime(p.UpdatedAt),
-		DeviceId:         uint32(p.DeviceID),
-		SofaScoreEventId: p.SofaScoreEventId,
-		StartedAt:        p.StartedAt,
-		EndedAt:          p.EndedAt,
+		Id:        uint32(p.ID),
+		CreatedAt: FormatTime(p.CreatedAt),
+		UpdatedAt: FormatTime(p.UpdatedAt),
+		DeviceId:  uint32(p.DeviceID),
+		Content:   p.Content,
+		StartedAt: p.StartedAt,
+		EndedAt:   p.EndedAt,
 	}
 }
 

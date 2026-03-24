@@ -10,12 +10,18 @@ type EventStats struct {
 	ViewCount        int64
 }
 
-func LogPlayback(deviceID uint, sofaScoreEventId int64, startedAt int64) (*models.PlaybackLog, error) {
+func LogPlayback(deviceID uint, content string, startedAt int64) (*models.PlaybackLog, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	log := &models.PlaybackLog{DeviceID: deviceID, SofaScoreEventId: sofaScoreEventId, StartedAt: startedAt}
+	var lastLog models.PlaybackLog
+	db.Where("device_id=?", deviceID).Order("started_at DESC").First(&lastLog)
+	if lastLog.ID != 0 {
+		db.Model(&lastLog).Where("id = ?", lastLog.ID).Update("ended_at", startedAt)
+	}
+
+	log := &models.PlaybackLog{DeviceID: deviceID, Content: content, StartedAt: startedAt}
 	result := db.Create(log)
 	return log, result.Error
 }
@@ -35,8 +41,8 @@ func GetTopEvents(limit int) ([]EventStats, error) {
 	}
 	var stats []EventStats
 	result := db.Model(&models.PlaybackLog{}).
-		Select("sofa_score_event_id, count(*) as view_count").
-		Group("sofa_score_event_id").
+		Select("content, count(*) as view_count").
+		Group("content").
 		Order("view_count desc").
 		Limit(limit).
 		Scan(&stats)
