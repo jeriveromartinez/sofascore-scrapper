@@ -1,0 +1,148 @@
+/* Responsive improvements for mobile, tablet, and desktop */
+
+/* Mobile menu improvements */
+@media (max-width: 1199px) {
+  /* Ensure menu is hidden by default on mobile */
+  .layout-menu {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+  }
+
+  /* Show menu when expanded */
+  .layout-menu-expanded .layout-menu {
+    transform: translateX(0);
+  }
+
+  /* Overlay for mobile menu */
+  .layout-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 10;
+    display: none;
+  }
+
+  .layout-menu-expanded .layout-overlay {
+    display: block;
+  }
+}
+
+/* Table responsive improvements */
+.table-responsive {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ensure text truncation works properly */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Card improvements for small screens */
+@media (max-width: 767px) {
+  .card {
+    margin-bottom: 1rem;
+  }
+
+  .card-body {
+    padding: 1rem;
+  }
+
+  /* Smaller buttons on mobile */
+  .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+  }
+}
+
+/* Form improvements */
+@media (max-width: 575px) {
+  .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  .form-control {
+    font-size: 0.875rem;
+  }
+}
+
+/* Navbar improvements for small screens */
+@media (max-width: 1199px) {
+  .layout-navbar {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Hide search on very small screens */
+  @media (max-width: 767px) {
+    .navbar-nav .d-md-block {
+      display: none !important;
+    }
+  }
+}
+
+/* Ensure content wrapper has proper padding on mobile */
+@media (max-width: 767px) {
+  .content-wrapper {
+    padding: 1rem 0.5rem !important;
+  }
+
+  .container-fluid {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
+/* Image responsiveness */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Flex improvements for mobile */
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
+
+/* Alert improvements for mobile */
+@media (max-width: 575px) {
+  .alert {
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+  }
+}
+
+/* Pagination improvements */
+.pagination {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* Footer improvements for mobile */
+@media (max-width: 767px) {
+  .footer {
+    padding: 1rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .footer-container {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+}
