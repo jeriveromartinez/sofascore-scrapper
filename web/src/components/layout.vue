@@ -11,6 +11,7 @@ import "../assets/vendor/css/core.css";
 import "../assets/css/demo.css";
 import "../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css";
 import "../assets/css/layout_override.css";
+import "../assets/css/responsive.css";
 
 const router = useRouter();
 const authStore = useAuthStore();
