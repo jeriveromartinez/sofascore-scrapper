@@ -79,8 +79,8 @@ onMounted(() => {
     </div>
 
     <div class="card-body">
-      <form class="row g-3" @submit.prevent="submit">
-        <div class="col-md-5">
+      <form class="row g-3 mb-4" @submit.prevent="submit">
+        <div class="col-12 col-md-6 col-lg-5">
           <label class="form-label">Token *</label>
           <input
             v-model="state.token"
@@ -89,11 +89,11 @@ onMounted(() => {
             required
           />
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-3 col-lg-3">
           <label class="form-label">Plataforma</label>
           <input v-model="state.platform" type="text" class="form-control" />
         </div>
-        <div class="col-md-4">
+        <div class="col-6 col-md-3 col-lg-4">
           <label class="form-label">Nombre</label>
           <input v-model="state.name" type="text" class="form-control" />
         </div>
@@ -110,47 +110,52 @@ onMounted(() => {
         Cargando eventos...
       </div>
 
-      <div v-if="state.result" class="table-responsive text-nowrap">
+      <div v-if="state.result" class="table-responsive">
         <table class="table table-sm table-striped align-middle">
           <thead>
             <tr>
-              <th>Token Auth</th>
-              <th>Platform</th>
+              <th class="text-truncate" style="max-width: 150px">Token</th>
+              <th class="d-none d-md-table-cell">Platform</th>
               <th>Name</th>
-              <th>Last Seen</th>
+              <th class="d-none d-lg-table-cell">Last Seen</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="event in state.result.data" :key="event.id">
-              <td>{{ event.token }}</td>
-              <td>{{ event.platform }}</td>
-              <td>{{ event.name }}</td>
-              <td>{{ event.lastSeen }}</td>
+            <tr v-for="device in state.result.data" :key="device.id">
+              <td class="text-truncate" style="max-width: 150px" :title="device.token">
+                {{ device.token }}
+              </td>
+              <td class="d-none d-md-table-cell">{{ device.platform }}</td>
+              <td>{{ device.name }}</td>
+              <td class="d-none d-lg-table-cell">{{ device.lastSeen }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div v-if="state.result" class="d-flex gap-2 mt-3 align-items-center">
-        <button
-          class="btn btn-outline-secondary btn-sm"
-          @click="prevPage"
-          :disabled="state.result.page <= 1 || state.loading"
-        >
-          Anterior
-        </button>
-        <button
-          class="btn btn-outline-secondary btn-sm"
-          @click="nextPage"
-          :disabled="
-            state.loading || state.result.page >= state.result.totalPages
-          "
-        >
-          Siguiente
-        </button>
+      <div v-if="state.result" class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between">
+        <div class="d-flex gap-2">
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            @click="prevPage"
+            :disabled="state.result.page <= 1 || state.loading"
+          >
+            <span class="d-none d-sm-inline">Anterior</span>
+            <span class="d-inline d-sm-none">&lt;</span>
+          </button>
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            @click="nextPage"
+            :disabled="
+              state.loading || state.result.page >= state.result.totalPages
+            "
+          >
+            <span class="d-none d-sm-inline">Siguiente</span>
+            <span class="d-inline d-sm-none">&gt;</span>
+          </button>
+        </div>
         <span class="text-body-secondary small">
-          Pagina {{ state.result.page }} / {{ state.result.totalPages }} - Total
-          {{ state.result.total }}
+          Pág. {{ state.result.page }} / {{ state.result.totalPages }} ({{ state.result.total }})
         </span>
       </div>
     </div>
