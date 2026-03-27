@@ -7,7 +7,20 @@ func Migrate() {
 	if err != nil {
 		panic(err)
 	}
-	if err := db.AutoMigrate(&SofaScoreEvent{}, &Tournament{}, &Team{}, &User{}, &RefreshToken{}, &Device{}, &PlaybackLog{}, &ApkVersion{}, &DeviceTournament{}, &GlobalTournamentConfig{}); err != nil {
+
+	if err := db.AutoMigrate(
+		&SofaScoreEvent{},
+		&Tournament{},
+		&Team{},
+		&User{},
+		&RefreshToken{},
+		&Device{},
+		&PlaybackLog{},
+		&ApkVersion{},
+		&DeviceTournament{},
+		&GlobalTournamentConfig{},
+		&ContentStat{},
+	); err != nil {
 		panic(err)
 	}
 }
