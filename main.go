@@ -11,11 +11,9 @@ import (
 
 func main() {
 	models.Migrate()
-	scheduler.Start()
+	scheduler.Begin()
 	addr := os.Getenv("API_ADDR")
-	if addr == "" {
-		addr = ":8080"
-	}
+	if addr == "" {addr = ":8080"}
 	log.Println("Starting API server and scheduler...")
 	api.Start(addr)
 }

@@ -139,3 +139,48 @@ func GetCurrentAndUpcomingEvents(devId uint, limit int) ([]models.SofaScoreEvent
 
 	return events, nil
 }
+
+func GenerateDailyEventStats() error {
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	begin := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).Add(-time.Hour * 24)
+	end := begin.AddDate(0, 0, 1).Add(-time.Second)
+
+	var stats []struct {
+		Content    string
+		TotalViews int
+		TimePlayed int
+	}
+	ctx := db.Begin()
+	ctx.Model(&models.PlaybackLog{}).
+		Select("content, COUNT(id) as total_views, COALESCE(SUM(CAST(ended_at AS SIGNED) - CAST(started_at AS SIGNED)) DIV 1000, 0) as time_played").
+		Group("content").
+		Where("ended_at <= ? AND ended_at > 0", end.UnixMilli()).
+		Find(&stats)
+
+	if len(stats) > 0 {
+		dayStat := make([]models.ContentStat, 0)
+		for _, daily := range stats {
+			dayStat = append(dayStat, models.ContentStat{
+				ContentHash: daily.Content,
+				PeriodType:  models.PeriodTypeDay,
+				Seconds:     daily.TimePlayed,
+				Views:       daily.TotalViews,
+			})
+		}
+
+		if ctx.Save(&dayStat).Error != nil {
+			ctx.Rollback()
+			return err
+		}
+
+		ctx.Unscoped().Delete(&models.PlaybackLog{}, "ended_at <= ? AND ended_at > 0", end.UnixMilli())
+		ctx.Commit()
+	}
+
+	return nil
+}
