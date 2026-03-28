@@ -87,11 +87,11 @@ onMounted(() => fetchEvents());
 
     <div class="card-body">
       <form class="row g-3 mb-4" @submit.prevent="applyFilters">
-        <div class="col-md-3">
+        <div class="col-12 col-md-6 col-lg-3">
           <label class="form-label">Fecha</label>
           <input v-model="state.date" type="date" class="form-control" />
         </div>
-        <div class="col-md-3">
+        <div class="col-12 col-md-6 col-lg-3">
           <label class="form-label">Sport</label>
           <input
             v-model="state.sport"
@@ -100,7 +100,7 @@ onMounted(() => fetchEvents());
             placeholder="football"
           />
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md-4 col-lg-2">
           <label class="form-label">Page</label>
           <input
             v-model.number="state.page"
@@ -109,7 +109,7 @@ onMounted(() => fetchEvents());
             class="form-control"
           />
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md-4 col-lg-2">
           <label class="form-label">Limit</label>
           <input
             v-model.number="state.limit"
@@ -119,7 +119,7 @@ onMounted(() => fetchEvents());
             class="form-control"
           />
         </div>
-        <div class="col-md-2 d-flex align-items-end">
+        <div class="col-12 col-md-4 col-lg-2 d-flex align-items-end">
           <button
             class="btn btn-primary w-100"
             type="submit"
@@ -135,63 +135,79 @@ onMounted(() => fetchEvents());
         Cargando eventos...
       </div>
 
-      <div v-if="state.data" class="table-responsive text-nowrap">
+      <div v-if="state.data" class="table-responsive">
         <table class="table table-sm table-striped align-middle">
           <thead>
             <tr>
-              <th>Event ID</th>
-              <th>League</th>
-              <th>Sport</th>
+              <th class="d-none d-md-table-cell">Event ID</th>
+              <th class="d-none d-lg-table-cell">League</th>
+              <th class="d-none d-lg-table-cell">Sport</th>
               <th>Partido</th>
               <th>Score</th>
-              <th>Inicio</th>
+              <th class="d-none d-md-table-cell">Inicio</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="event in state.data.data" :key="event.id">
-              <td>{{ event.sofaScoreEventId }}</td>
-              <td>{{ event.league?.name || "-" }}</td>
-              <td>{{ event.sport }}</td>
+              <td class="d-none d-md-table-cell">{{ event.sofaScoreEventId }}</td>
+              <td class="d-none d-lg-table-cell">{{ event.league?.name || "-" }}</td>
+              <td class="d-none d-lg-table-cell">{{ event.sport }}</td>
               <td>
-                <img
-                  :src="event.teamHome?.logoUrl"
-                  :alt="event.teamHome?.name ?? 'Home Team'"
-                  class="me-2"
-                  width="40px"
-                />
-                {{ event.teamHome?.name ?? 'Home Team' }} vs {{ event.teamAway?.name ?? 'Away Team' }}
-                <img
-                  :src="event.teamAway?.logoUrl"
-                  :alt="event.teamAway?.name ?? 'Away Team'"
-                  class="me-2"
-                  width="40px"
-                />
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <img
+                    :src="event.teamHome?.logoUrl"
+                    :alt="event.teamHome?.name ?? 'Home Team'"
+                    class="me-1"
+                    width="30px"
+                    height="30px"
+                    style="object-fit: contain"
+                  />
+                  <span class="text-nowrap">{{ event.teamHome?.name ?? 'Home' }}</span>
+                  <span class="mx-1">vs</span>
+                  <span class="text-nowrap">{{ event.teamAway?.name ?? 'Away' }}</span>
+                  <img
+                    :src="event.teamAway?.logoUrl"
+                    :alt="event.teamAway?.name ?? 'Away Team'"
+                    class="ms-1"
+                    width="30px"
+                    height="30px"
+                    style="object-fit: contain"
+                  />
+                </div>
+                <small class="d-md-none text-body-secondary d-block mt-1">
+                  {{ event.league?.name || "-" }} | {{ event.sport }}
+                </small>
               </td>
-              <td>{{ event.homeScore }} - {{ event.awayScore }}</td>
-              <td>{{ formatTimestamp(event.startTimestamp) }}</td>
+              <td class="text-center">
+                <strong>{{ event.homeScore }} - {{ event.awayScore }}</strong>
+              </td>
+              <td class="d-none d-md-table-cell">{{ formatTimestamp(event.startTimestamp) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div v-if="state.data" class="d-flex gap-2 mt-3 align-items-center">
-        <button
-          class="btn btn-outline-secondary btn-sm"
-          @click="prevPage"
-          :disabled="state.page <= 1 || state.loading"
-        >
-          Anterior
-        </button>
-        <button
-          class="btn btn-outline-secondary btn-sm"
-          @click="nextPage"
-          :disabled="state.loading || state.page >= state.data.totalPages"
-        >
-          Siguiente
-        </button>
+      <div v-if="state.data" class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between">
+        <div class="d-flex gap-2">
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            @click="prevPage"
+            :disabled="state.page <= 1 || state.loading"
+          >
+            <span class="d-none d-sm-inline">Anterior</span>
+            <span class="d-inline d-sm-none">&lt;</span>
+          </button>
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            @click="nextPage"
+            :disabled="state.loading || state.page >= state.data.totalPages"
+          >
+            <span class="d-none d-sm-inline">Siguiente</span>
+            <span class="d-inline d-sm-none">&gt;</span>
+          </button>
+        </div>
         <span class="text-body-secondary small">
-          Pagina {{ state.page }} / {{ state.data.totalPages }} - Total
-          {{ state.data.total }}
+          Pág. {{ state.page }} / {{ state.data.totalPages }} ({{ state.data.total }})
         </span>
       </div>
     </div>

@@ -1,14 +1,17 @@
 <script lang="ts" setup>
+import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../store/pinia";
 import leftNavBar from "./leftNavBar.vue";
 import themeSelector from "./themeSelector.vue";
+import { initializeLayout, cleanupLayout } from "../assets/js/init";
 
 import "../assets/vendor/fonts/iconify-icons.css";
 import "../assets/vendor/css/core.css";
 import "../assets/css/demo.css";
 import "../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css";
 import "../assets/css/layout_override.css";
+import "../assets/css/responsive.css";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -19,6 +22,17 @@ function logout() {
     router.push({ name: "Login" });
   });
 }
+
+onMounted(() => {
+  // Initialize layout helpers and menu after component is mounted
+  setTimeout(() => {
+    initializeLayout();
+  }, 100);
+});
+
+onUnmounted(() => {
+  cleanupLayout();
+});
 </script>
 
 <template>
