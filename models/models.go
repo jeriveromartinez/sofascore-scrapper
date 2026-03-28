@@ -20,6 +20,7 @@ func Migrate() {
 		&DeviceTournament{},
 		&GlobalTournamentConfig{},
 		&ContentStat{},
+		&CrashReport{},
 	); err != nil {
 		panic(err)
 	}

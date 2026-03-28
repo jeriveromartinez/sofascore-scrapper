@@ -20,6 +20,7 @@ func Start(addr string) {
 	(&app.CurrentEventsController{Group: appV1}).LoadRoutes()
 	(&app.DeviceRegistrationController{Group: appV1}).LoadRoutes()
 	(&app.TeamController{Group: appV1}).LoadRoutes()
+	(&app.ReportController{Group: appV1}).LoadRoutes()
 
 	(&web.EventController{Group: webV1}).LoadRoutes()
 	(&web.UserController{Group: webV1}).LoadRoutes()
