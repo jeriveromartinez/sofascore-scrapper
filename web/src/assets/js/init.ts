@@ -59,21 +59,29 @@ export function initializeLayout() {
  * Initialize layout menu toggle button for mobile devices
  */
 function initLayoutMenuToggle() {
-  const togglers = document.querySelectorAll('.layout-menu-toggle');
+  // Use a specific selector that excludes the overlay element
+  const togglers = document.querySelectorAll('.layout-menu-toggle:not(.layout-overlay)');
 
   togglers.forEach((toggler) => {
-    toggler.addEventListener('click', (e) => {
+    const element = toggler as HTMLElement;
+    if (element.dataset.layoutToggleInitialized === 'true') {
+      return;
+    }
+
+    element.addEventListener('click', (e) => {
       e.preventDefault();
 
       if (window.Helpers) {
         window.Helpers.toggleCollapsed();
       }
     });
+
+    element.dataset.layoutToggleInitialized = 'true';
   });
 
   // Close menu when clicking overlay on mobile
-  const overlay = document.querySelector('.layout-overlay');
-  if (overlay) {
+  const overlay = document.querySelector('.layout-overlay') as HTMLElement | null;
+  if (overlay && overlay.dataset.layoutOverlayInitialized !== 'true') {
     overlay.addEventListener('click', (e) => {
       e.preventDefault();
 
@@ -81,6 +89,8 @@ function initLayoutMenuToggle() {
         window.Helpers.setCollapsed(true);
       }
     });
+
+    overlay.dataset.layoutOverlayInitialized = 'true';
   }
 }
 

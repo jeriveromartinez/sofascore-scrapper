@@ -16,7 +16,7 @@ type DeviceReport struct {
 }
 
 type CrashReport struct {
-	*gorm.Model
+	gorm.Model
 	Fatal      bool         `json:"fatal"`
 	Error      string       `json:"error"`
 	StackTrace string       `json:"stackTrace"`

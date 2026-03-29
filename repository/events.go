@@ -156,33 +156,51 @@ func GenerateDailyEventStats() error {
 		TimePlayed int
 	}
 	ctx := db.Begin()
-	ctx.Model(&models.PlaybackLog{}).
+	if ctx.Error != nil {
+		return ctx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			ctx.Rollback()
+		}
+	}()
+
+	if err := ctx.Model(&models.PlaybackLog{}).
 		Select("content, COUNT(id) as total_views, COALESCE(SUM(CAST(ended_at AS SIGNED) - CAST(started_at AS SIGNED)) DIV 1000, 0) as time_played").
 		Group("content").
-		Where("ended_at <= ? AND ended_at > 0", end.UnixMilli()).
-		Find(&stats)
-
-	if len(stats) > 0 {
-		dayStat := make([]models.ContentStat, 0)
-		for _, daily := range stats {
-			dayStat = append(dayStat, models.ContentStat{
-				ContentHash: daily.Content,
-				PeriodType:  models.PeriodTypeDay,
-				Seconds:     daily.TimePlayed,
-				Views:       daily.TotalViews,
-			})
-		}
-
-		if ctx.Save(&dayStat).Error != nil {
-			ctx.Rollback()
-			return err
-		}
-
-		ctx.Unscoped().Delete(&models.PlaybackLog{}, "ended_at <= ? AND ended_at > 0", end.UnixMilli())
-		ctx.Commit()
+		Where("ended_at <= ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).
+		Find(&stats).Error; err != nil {
+		ctx.Rollback()
+		return err
 	}
 
-	return nil
+	if len(stats) == 0 {
+		ctx.Rollback()
+		return nil
+	}
+
+	dayStat := make([]models.ContentStat, 0, len(stats))
+	for _, daily := range stats {
+		dayStat = append(dayStat, models.ContentStat{
+			ContentHash: daily.Content,
+			PeriodType:  models.PeriodTypeDay,
+			PeriodStart: begin,
+			Seconds:     daily.TimePlayed,
+			Views:       daily.TotalViews,
+		})
+	}
+
+	if err := ctx.Save(&dayStat).Error; err != nil {
+		ctx.Rollback()
+		return err
+	}
+
+	if err := ctx.Unscoped().Delete(&models.PlaybackLog{}, "ended_at <= ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).Error; err != nil {
+		ctx.Rollback()
+		return err
+	}
+
+	return ctx.Commit().Error
 }
 
 func GenerateMonthlyEventStats() error {
@@ -195,36 +213,54 @@ func GenerateMonthlyEventStats() error {
 	begin := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).AddDate(0, -1, 0)
 	end := begin.AddDate(0, 1, 0).Add(-time.Second)
 	var stats []struct {
-		ContentHash    string
-		TotalViews int
-		TimePlayed int
+		ContentHash string
+		TotalViews  int
+		TimePlayed  int
 	}
 	ctx := db.Begin()
-	ctx.Model(&models.ContentStat{}).Debug().
+	if ctx.Error != nil {
+		return ctx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			ctx.Rollback()
+		}
+	}()
+
+	if err := ctx.Model(&models.ContentStat{}).
 		Select("content_hash, SUM(views) as total_views, SUM(seconds) as time_played").
 		Group("content_hash").
-		Where("created_at <= ? AND created_at >= ? AND period_type = ?", end.Format(time.DateOnly), begin.Format(time.DateOnly), models.PeriodTypeDay).
-		Find(&stats)
-
-	if len(stats) > 0 {
-		monthStat := make([]models.ContentStat, 0)
-		for _, daily := range stats {
-			monthStat = append(monthStat, models.ContentStat{
-				ContentHash: daily.ContentHash,
-				PeriodType:  models.PeriodTypeMonth,
-				Seconds:     daily.TimePlayed,
-				Views:       daily.TotalViews,
-			})
-		}
-
-		if ctx.Save(&monthStat).Error != nil {
-			ctx.Rollback()
-			return err
-		}
-
-		ctx.Unscoped().Delete(&models.ContentStat{}, "created_at <= ? AND created_at >= ? AND period_type = ?", end.Format(time.DateOnly), begin.Format(time.DateOnly), models.PeriodTypeDay)
-		ctx.Commit()
+		Where("created_at >= ? AND created_at <= ? AND period_type = ?", begin, end, models.PeriodTypeDay).
+		Find(&stats).Error; err != nil {
+		ctx.Rollback()
+		return err
 	}
 
-	return nil
+	if len(stats) == 0 {
+		ctx.Rollback()
+		return nil
+	}
+
+	monthStat := make([]models.ContentStat, 0, len(stats))
+	for _, daily := range stats {
+		monthStat = append(monthStat, models.ContentStat{
+			ContentHash: daily.ContentHash,
+			PeriodType:  models.PeriodTypeMonth,
+			PeriodStart: begin,
+			Seconds:     daily.TimePlayed,
+			Views:       daily.TotalViews,
+		})
+	}
+
+	if err := ctx.Save(&monthStat).Error; err != nil {
+		ctx.Rollback()
+		return err
+	}
+
+	if err := ctx.Unscoped().Delete(&models.ContentStat{}, "created_at >= ? AND created_at <= ? AND period_type = ?", begin, end, models.PeriodTypeDay).Error; err != nil {
+		ctx.Rollback()
+		return err
+	}
+
+	return ctx.Commit().Error
 }

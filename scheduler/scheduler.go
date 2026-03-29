@@ -1,6 +1,6 @@
 package scheduler
 
-func Begin(){
-	startScrape();
-	startStats();
+func Begin() {
+	startScrape()
+	startStats()
 }
