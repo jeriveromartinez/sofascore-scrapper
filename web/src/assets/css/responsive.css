@@ -82,12 +82,12 @@
     padding-left: 1rem;
     padding-right: 1rem;
   }
+}
 
-  /* Hide search on very small screens */
-  @media (max-width: 767px) {
-    .navbar-nav .d-md-block {
-      display: none !important;
-    }
+/* Hide search on very small screens */
+@media (max-width: 767px) {
+  .navbar-nav .d-md-block {
+    display: none !important;
   }
 }
 

@@ -23,14 +23,20 @@ function logout() {
   });
 }
 
+let layoutTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
 onMounted(() => {
   // Initialize layout helpers and menu after component is mounted
-  setTimeout(() => {
+  layoutTimeoutId = setTimeout(() => {
     initializeLayout();
   }, 100);
 });
 
 onUnmounted(() => {
+  if (layoutTimeoutId !== null) {
+    clearTimeout(layoutTimeoutId);
+    layoutTimeoutId = null;
+  }
   cleanupLayout();
 });
 </script>
