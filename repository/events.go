@@ -184,3 +184,47 @@ func GenerateDailyEventStats() error {
 
 	return nil
 }
+
+func GenerateMonthlyEventStats() error {
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	begin := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).AddDate(0, -1, 0)
+	end := begin.AddDate(0, 1, 0).Add(-time.Second)
+	var stats []struct {
+		ContentHash    string
+		TotalViews int
+		TimePlayed int
+	}
+	ctx := db.Begin()
+	ctx.Model(&models.ContentStat{}).Debug().
+		Select("content_hash, SUM(views) as total_views, SUM(seconds) as time_played").
+		Group("content_hash").
+		Where("created_at <= ? AND created_at >= ? AND period_type = ?", end.Format(time.DateOnly), begin.Format(time.DateOnly), models.PeriodTypeDay).
+		Find(&stats)
+
+	if len(stats) > 0 {
+		monthStat := make([]models.ContentStat, 0)
+		for _, daily := range stats {
+			monthStat = append(monthStat, models.ContentStat{
+				ContentHash: daily.ContentHash,
+				PeriodType:  models.PeriodTypeMonth,
+				Seconds:     daily.TimePlayed,
+				Views:       daily.TotalViews,
+			})
+		}
+
+		if ctx.Save(&monthStat).Error != nil {
+			ctx.Rollback()
+			return err
+		}
+
+		ctx.Unscoped().Delete(&models.ContentStat{}, "created_at <= ? AND created_at >= ? AND period_type = ?", end.Format(time.DateOnly), begin.Format(time.DateOnly), models.PeriodTypeDay)
+		ctx.Commit()
+	}
+
+	return nil
+}
