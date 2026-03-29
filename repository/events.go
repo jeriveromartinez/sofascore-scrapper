@@ -179,9 +179,9 @@ func GenerateDailyEventStats() error {
 		return nil
 	}
 
-	dayStat := make([]models.ContentStat, 0, len(stats))
+	dayStats := make([]models.ContentStat, 0, len(stats))
 	for _, daily := range stats {
-		dayStat = append(dayStat, models.ContentStat{
+		dayStats = append(dayStats, models.ContentStat{
 			ContentHash: daily.Content,
 			PeriodType:  models.PeriodTypeDay,
 			PeriodStart: begin,
@@ -190,7 +190,7 @@ func GenerateDailyEventStats() error {
 		})
 	}
 
-	if err := ctx.Save(&dayStat).Error; err != nil {
+	if err := ctx.Save(&dayStats).Error; err != nil {
 		ctx.Rollback()
 		return err
 	}
@@ -241,9 +241,9 @@ func GenerateMonthlyEventStats() error {
 		return nil
 	}
 
-	monthStat := make([]models.ContentStat, 0, len(stats))
+	monthStats := make([]models.ContentStat, 0, len(stats))
 	for _, daily := range stats {
-		monthStat = append(monthStat, models.ContentStat{
+		monthStats = append(monthStats, models.ContentStat{
 			ContentHash: daily.ContentHash,
 			PeriodType:  models.PeriodTypeMonth,
 			PeriodStart: begin,
@@ -252,7 +252,7 @@ func GenerateMonthlyEventStats() error {
 		})
 	}
 
-	if err := ctx.Save(&monthStat).Error; err != nil {
+	if err := ctx.Save(&monthStats).Error; err != nil {
 		ctx.Rollback()
 		return err
 	}
