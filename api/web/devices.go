@@ -17,6 +17,7 @@ type DeviceController struct {
 func (c *DeviceController) LoadRoutes() {
 	c.Group.GET("/devices", common.AuthMiddleware(), handleGetDevices)
 	c.Group.GET("/devices/all", common.AuthMiddleware(), handleGetAllDevices)
+	c.Group.PUT("/devices", common.AuthMiddleware(), handleUpdateDevice)
 }
 
 func handleGetDevices(c *gin.Context) {
@@ -66,4 +67,25 @@ func handleGetAllDevices(c *gin.Context) {
 		return
 	}
 	common.RespondProto(c, http.StatusOK, &pb.DeviceList{Data: common.DevicesToProto(devices)})
+}
+
+func handleUpdateDevice(c *gin.Context) {
+	var req pb.DeviceRegisterRequest
+	if err := common.ParseProtoBody(c, &req); err != nil || req.Name == "" {
+		common.RespondError(c, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	if req.Token == "" {
+		common.RespondError(c, http.StatusBadRequest, "device token is required")
+		return
+	}
+
+	updatedDevice, err := repository.UpdateDevice(req.Token, req.Platform, req.Name)
+	if err != nil {
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	common.RespondProto(c, http.StatusOK, common.DeviceToProto(*updatedDevice))
 }

@@ -55,3 +55,23 @@ func GetAllDevices() ([]models.Device, error) {
 	result := db.Preload("Manager").Find(&devices)
 	return devices, result.Error
 }
+
+func UpdateDevice(token, platform, name string) (*models.Device, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+
+	var device models.Device
+	if err := db.Where("token = ?", token).First(&device).Error; err != nil {
+		return nil, err
+	}
+
+	device.Platform = platform
+	device.Name = name
+	if err := db.Save(&device).Error; err != nil {
+		return nil, err
+	}
+
+	return &device, nil
+}

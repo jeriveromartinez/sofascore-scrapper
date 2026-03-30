@@ -78,7 +78,7 @@ async function closePlayback(method: PlaybackUpdateMethod): Promise<void> {
 </script>
 
 <template>
-  <div class="row g-4">
+  <!-- <div class="row g-4">
     <div class="col-12 col-xl-6">
       <div class="card h-100">
         <div class="card-header">
@@ -188,5 +188,5 @@ async function closePlayback(method: PlaybackUpdateMethod): Promise<void> {
         </div>
       </div>
     </div>
-  </div>
+  </div> -->
 </template>

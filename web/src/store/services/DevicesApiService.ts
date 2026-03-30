@@ -11,8 +11,8 @@ export class DevicesApiService extends BaseApiService {
     super("/devices");
   }
 
-  async registerDevice(payload: RegisterDevicePayload): Promise<Device> {
-    return this.post<Device, RegisterDevicePayload>(
+  async updateDevice(payload: RegisterDevicePayload): Promise<Device> {
+    return this.put<Device, RegisterDevicePayload>(
       "",
       payload,
       DeviceRegisterRequest,

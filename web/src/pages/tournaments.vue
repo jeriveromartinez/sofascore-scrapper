@@ -120,10 +120,9 @@ onMounted(() => {
       </div>
 
       <form
+        v-if="state.editingId"
         class="row g-3 mb-4"
-        @submit.prevent="
-          state.editingId ? updateTournament() : createTournament()
-        "
+        @submit.prevent="state.editingId ? updateTournament() : createTournament()"
       >
         <div class="col-md-5">
           <label class="form-label">Nombre *</label>
