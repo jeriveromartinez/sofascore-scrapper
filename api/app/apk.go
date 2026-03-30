@@ -83,5 +83,6 @@ func handleDownloadApk(c *gin.Context) {
 		return
 	}
 
+	_ = repository.UpdateDownloadCount(apk.ID)
 	c.FileAttachment(absPath, apk.FileName)
 }

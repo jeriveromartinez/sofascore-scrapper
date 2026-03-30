@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	"gorm.io/gorm"
 )
 
 // CreateApkVersion persists a new APK version record.
@@ -101,6 +102,15 @@ func ListApkVersions() ([]models.ApkVersion, error) {
 		return nil, err
 	}
 	return versions, nil
+}
+
+func UpdateDownloadCount(id uint) error {
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+
+	return db.Model(&models.ApkVersion{}).Where("id = ?", id).UpdateColumn("total_downloads", gorm.Expr("total_downloads + ?", 1)).Error
 }
 
 // IsNewerVersion returns true when candidate is strictly newer than current.

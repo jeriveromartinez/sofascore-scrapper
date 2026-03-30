@@ -15,4 +15,5 @@ type ApkVersion struct {
 	MinSDKVersion    int32
 	TargetSDKVersion int32
 	DownloadToken    string `gorm:"uniqueIndex;not null"`
+	TotalDownloads   int64  `gorm:"default:0"`
 }
