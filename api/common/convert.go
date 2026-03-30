@@ -123,6 +123,14 @@ func PlaybackToProto(p *models.PlaybackLog) *pb.PlaybackLog {
 	}
 }
 
+func PlaybackListToProto(pl []*models.PlaybackLog, total int64) *pb.PlaybackLogList {
+	result := make([]*pb.PlaybackLog, 0, len(pl))
+	for _, p := range pl {
+		result = append(result, PlaybackToProto(p))
+	}
+	return &pb.PlaybackLogList{List: result, Total: uint32(total)}
+}
+
 func GlobalConfigToProto(g models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {
 	return &pb.GlobalTournamentConfig{
 		Id:           uint32(g.ID),

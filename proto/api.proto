@@ -181,6 +181,11 @@ message PlaybackLog {
   int64 ended_at = 7;
 }
 
+message PlaybackLogList {
+    repeated PlaybackLog list = 1;
+    uint32 total = 2;
+}
+
 // ========== Stats ==========
 
 message EventStats {

@@ -149,8 +149,12 @@ onMounted(() => fetchEvents());
           </thead>
           <tbody>
             <tr v-for="event in state.data.data" :key="event.id">
-              <td class="d-none d-md-table-cell">{{ event.sofaScoreEventId }}</td>
-              <td class="d-none d-lg-table-cell">{{ event.league?.name || "-" }}</td>
+              <td class="d-none d-md-table-cell">
+                {{ event.sofaScoreEventId }}
+              </td>
+              <td class="d-none d-lg-table-cell">
+                {{ event.league?.name || "-" }}
+              </td>
               <td class="d-none d-lg-table-cell">{{ event.sport }}</td>
               <td>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -162,9 +166,13 @@ onMounted(() => fetchEvents());
                     height="30px"
                     style="object-fit: contain"
                   />
-                  <span class="text-nowrap">{{ event.teamHome?.name ?? 'Home' }}</span>
+                  <span class="text-nowrap">{{
+                    event.teamHome?.name ?? "Home"
+                  }}</span>
                   <span class="mx-1">vs</span>
-                  <span class="text-nowrap">{{ event.teamAway?.name ?? 'Away' }}</span>
+                  <span class="text-nowrap">{{
+                    event.teamAway?.name ?? "Away"
+                  }}</span>
                   <img
                     :src="event.teamAway?.logoUrl"
                     :alt="event.teamAway?.name ?? 'Away Team'"
@@ -181,13 +189,18 @@ onMounted(() => fetchEvents());
               <td class="text-center">
                 <strong>{{ event.homeScore }} - {{ event.awayScore }}</strong>
               </td>
-              <td class="d-none d-md-table-cell">{{ formatTimestamp(event.startTimestamp) }}</td>
+              <td class="d-none d-md-table-cell">
+                {{ formatTimestamp(event.startTimestamp) }}
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div v-if="state.data" class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between">
+      <div
+        v-if="state.data"
+        class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between"
+      >
         <div class="d-flex gap-2">
           <button
             class="btn btn-outline-secondary btn-sm"
@@ -207,7 +220,9 @@ onMounted(() => fetchEvents());
           </button>
         </div>
         <span class="text-body-secondary small">
-          Pág. {{ state.page }} / {{ state.data.totalPages }} ({{ state.data.total }})
+          Pág. {{ state.page }} / {{ state.data.totalPages }} ({{
+            state.data.total
+          }})
         </span>
       </div>
     </div>

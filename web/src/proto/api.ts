@@ -150,7 +150,7 @@ export interface EventsList {
 
 export interface LogPlaybackRequest {
   deviceToken: string;
-  sofaScoreEventId: number;
+  content: string;
   startedAt: number;
 }
 
@@ -163,9 +163,14 @@ export interface PlaybackLog {
   createdAt: string;
   updatedAt: string;
   deviceId: number;
-  sofaScoreEventId: number;
+  content: string;
   startedAt: number;
   endedAt: number;
+}
+
+export interface PlaybackLogList {
+  list: PlaybackLog[];
+  total: number;
 }
 
 export interface EventStats {
@@ -2561,7 +2566,7 @@ export const EventsList: MessageFns<EventsList> = {
 };
 
 function createBaseLogPlaybackRequest(): LogPlaybackRequest {
-  return { deviceToken: "", sofaScoreEventId: 0, startedAt: 0 };
+  return { deviceToken: "", content: "", startedAt: 0 };
 }
 
 export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
@@ -2569,8 +2574,8 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
     if (message.deviceToken !== "") {
       writer.uint32(10).string(message.deviceToken);
     }
-    if (message.sofaScoreEventId !== 0) {
-      writer.uint32(16).int64(message.sofaScoreEventId);
+    if (message.content !== "") {
+      writer.uint32(18).string(message.content);
     }
     if (message.startedAt !== 0) {
       writer.uint32(24).int64(message.startedAt);
@@ -2594,11 +2599,11 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
           continue;
         }
         case 2: {
-          if (tag !== 16) {
+          if (tag !== 18) {
             break;
           }
 
-          message.sofaScoreEventId = longToNumber(reader.int64());
+          message.content = reader.string();
           continue;
         }
         case 3: {
@@ -2625,11 +2630,7 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
         : isSet(object.device_token)
         ? globalThis.String(object.device_token)
         : "",
-      sofaScoreEventId: isSet(object.sofaScoreEventId)
-        ? globalThis.Number(object.sofaScoreEventId)
-        : isSet(object.sofa_score_event_id)
-        ? globalThis.Number(object.sofa_score_event_id)
-        : 0,
+      content: isSet(object.content) ? globalThis.String(object.content) : "",
       startedAt: isSet(object.startedAt)
         ? globalThis.Number(object.startedAt)
         : isSet(object.started_at)
@@ -2643,8 +2644,8 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
     if (message.deviceToken !== "") {
       obj.deviceToken = message.deviceToken;
     }
-    if (message.sofaScoreEventId !== 0) {
-      obj.sofaScoreEventId = Math.round(message.sofaScoreEventId);
+    if (message.content !== "") {
+      obj.content = message.content;
     }
     if (message.startedAt !== 0) {
       obj.startedAt = Math.round(message.startedAt);
@@ -2658,7 +2659,7 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
   fromPartial<I extends Exact<DeepPartial<LogPlaybackRequest>, I>>(object: I): LogPlaybackRequest {
     const message = createBaseLogPlaybackRequest();
     message.deviceToken = object.deviceToken ?? "";
-    message.sofaScoreEventId = object.sofaScoreEventId ?? 0;
+    message.content = object.content ?? "";
     message.startedAt = object.startedAt ?? 0;
     return message;
   },
@@ -2729,7 +2730,7 @@ export const UpdatePlaybackRequest: MessageFns<UpdatePlaybackRequest> = {
 };
 
 function createBasePlaybackLog(): PlaybackLog {
-  return { id: 0, createdAt: "", updatedAt: "", deviceId: 0, sofaScoreEventId: 0, startedAt: 0, endedAt: 0 };
+  return { id: 0, createdAt: "", updatedAt: "", deviceId: 0, content: "", startedAt: 0, endedAt: 0 };
 }
 
 export const PlaybackLog: MessageFns<PlaybackLog> = {
@@ -2746,8 +2747,8 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
     if (message.deviceId !== 0) {
       writer.uint32(32).uint32(message.deviceId);
     }
-    if (message.sofaScoreEventId !== 0) {
-      writer.uint32(40).int64(message.sofaScoreEventId);
+    if (message.content !== "") {
+      writer.uint32(42).string(message.content);
     }
     if (message.startedAt !== 0) {
       writer.uint32(48).int64(message.startedAt);
@@ -2798,11 +2799,11 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
           continue;
         }
         case 5: {
-          if (tag !== 40) {
+          if (tag !== 42) {
             break;
           }
 
-          message.sofaScoreEventId = longToNumber(reader.int64());
+          message.content = reader.string();
           continue;
         }
         case 6: {
@@ -2848,11 +2849,7 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
         : isSet(object.device_id)
         ? globalThis.Number(object.device_id)
         : 0,
-      sofaScoreEventId: isSet(object.sofaScoreEventId)
-        ? globalThis.Number(object.sofaScoreEventId)
-        : isSet(object.sofa_score_event_id)
-        ? globalThis.Number(object.sofa_score_event_id)
-        : 0,
+      content: isSet(object.content) ? globalThis.String(object.content) : "",
       startedAt: isSet(object.startedAt)
         ? globalThis.Number(object.startedAt)
         : isSet(object.started_at)
@@ -2880,8 +2877,8 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
     if (message.deviceId !== 0) {
       obj.deviceId = Math.round(message.deviceId);
     }
-    if (message.sofaScoreEventId !== 0) {
-      obj.sofaScoreEventId = Math.round(message.sofaScoreEventId);
+    if (message.content !== "") {
+      obj.content = message.content;
     }
     if (message.startedAt !== 0) {
       obj.startedAt = Math.round(message.startedAt);
@@ -2901,9 +2898,85 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
     message.createdAt = object.createdAt ?? "";
     message.updatedAt = object.updatedAt ?? "";
     message.deviceId = object.deviceId ?? 0;
-    message.sofaScoreEventId = object.sofaScoreEventId ?? 0;
+    message.content = object.content ?? "";
     message.startedAt = object.startedAt ?? 0;
     message.endedAt = object.endedAt ?? 0;
+    return message;
+  },
+};
+
+function createBasePlaybackLogList(): PlaybackLogList {
+  return { list: [], total: 0 };
+}
+
+export const PlaybackLogList: MessageFns<PlaybackLogList> = {
+  encode(message: PlaybackLogList, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.list) {
+      PlaybackLog.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.total !== 0) {
+      writer.uint32(16).uint32(message.total);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlaybackLogList {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePlaybackLogList();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.list.push(PlaybackLog.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.total = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PlaybackLogList {
+    return {
+      list: globalThis.Array.isArray(object?.list) ? object.list.map((e: any) => PlaybackLog.fromJSON(e)) : [],
+      total: isSet(object.total) ? globalThis.Number(object.total) : 0,
+    };
+  },
+
+  toJSON(message: PlaybackLogList): unknown {
+    const obj: any = {};
+    if (message.list?.length) {
+      obj.list = message.list.map((e) => PlaybackLog.toJSON(e));
+    }
+    if (message.total !== 0) {
+      obj.total = Math.round(message.total);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PlaybackLogList>, I>>(base?: I): PlaybackLogList {
+    return PlaybackLogList.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PlaybackLogList>, I>>(object: I): PlaybackLogList {
+    const message = createBasePlaybackLogList();
+    message.list = object.list?.map((e) => PlaybackLog.fromPartial(e)) || [];
+    message.total = object.total ?? 0;
     return message;
   },
 };

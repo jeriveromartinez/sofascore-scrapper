@@ -1,192 +1,143 @@
 <script setup lang="ts">
-import { reactive } from "vue";
+import { onMounted, reactive } from "vue";
 import { playbackApiService } from "../store/services";
-import type {
-  PlaybackLog,
-  PlaybackUpdateMethod,
-} from "../store/services/models";
+import type { PlaybackLog } from "../store/services/models";
 
-const createState = reactive({
-  deviceToken: "",
-  eventId: 0,
-  startedAt: "",
+const state = reactive({
+  page: 1,
+  limit: 10,
+  total: 0,
+  data: [] as PlaybackLog[],
   loading: false,
   error: "",
-  result: null as PlaybackLog | null,
 });
 
-const updateState = reactive({
-  playbackId: "",
-  endedAt: "",
-  loading: false,
-  error: "",
-  success: "",
-});
-
-function parseUnix(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
-
-  return Math.trunc(parsed);
+function parseUnix(value: number): string {
+  return new Date(value).toLocaleString("en-UK");
 }
 
-async function createPlayback(): Promise<void> {
-  createState.loading = true;
-  createState.error = "";
+async function load() {
+  state.error = "";
+  state.data = [];
+  state.loading = true;
 
   try {
-    createState.result = await playbackApiService.createPlayback({
-      deviceToken: createState.deviceToken,
-      sofaScoreEventId: createState.eventId,
-      startedAt: parseUnix(createState.startedAt) ?? 0,
-    });
-
-    if (!updateState.playbackId) {
-      updateState.playbackId = String(createState.result.id);
-    }
-  } catch (error) {
-    createState.error =
-      error instanceof Error ? error.message : "No se pudo crear playback";
-  } finally {
-    createState.loading = false;
-  }
-}
-
-async function closePlayback(method: PlaybackUpdateMethod): Promise<void> {
-  updateState.loading = true;
-  updateState.error = "";
-  updateState.success = "";
-
-  try {
-    const id = Number(updateState.playbackId);
-    await playbackApiService.updatePlayback(
-      id,
-      { endedAt: parseUnix(updateState.endedAt) ?? 0 },
-      method,
+    const { list, total } = await playbackApiService.getPlayingNow(
+      state.page,
+      state.limit,
     );
-    updateState.success = `Playback actualizado con ${method}`;
+    state.data = list;
+    state.total = total;
   } catch (error) {
-    updateState.error =
-      error instanceof Error ? error.message : "No se pudo actualizar playback";
+    console.error("Error fetching playback data:", error);
+    state.error =
+      "Ocurrió un error al cargar los datos. Por favor, inténtalo de nuevo.";
   } finally {
-    updateState.loading = false;
+    state.loading = false;
   }
 }
+
+function nextPage(): void {
+  if (!state.data) return;
+  if (state.page >= Math.ceil(state.total / state.limit)) return;
+  state.page += 1;
+  void load();
+}
+
+function prevPage(): void {
+  if (state.page <= 1) return;
+  state.page -= 1;
+  void load();
+}
+
+onMounted(() => {
+  load();
+});
 </script>
 
 <template>
-  <!-- <div class="row g-4">
-    <div class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <h5 class="mb-0">Crear Playback</h5>
-        </div>
-
-        <div class="card-body">
-          <form class="row g-3" @submit.prevent="createPlayback">
-            <div class="col-12">
-              <label class="form-label">Device Token *</label>
-              <input
-                v-model="createState.deviceToken"
-                class="form-control"
-                type="text"
-                required
-              />
-            </div>
-            <div class="col-12">
-              <label class="form-label">SofaScore Event ID *</label>
-              <input
-                v-model.number="createState.eventId"
-                class="form-control"
-                type="number"
-                min="1"
-                required
-              />
-            </div>
-            <div class="col-12">
-              <label class="form-label">Started At (unix, opcional)</label>
-              <input
-                v-model="createState.startedAt"
-                class="form-control"
-                type="text"
-                placeholder="1772782000"
-              />
-            </div>
-            <div class="col-12">
-              <button class="btn btn-primary" :disabled="createState.loading">
-                Crear
-              </button>
-            </div>
-          </form>
-
-          <div v-if="createState.error" class="alert alert-danger mt-3">
-            {{ createState.error }}
-          </div>
-
-          <div v-if="createState.result" class="alert alert-success mt-3 mb-0">
-            Playback creado con ID {{ createState.result.id }}
-          </div>
-        </div>
+  <div class="card">
+    <div
+      class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center"
+    >
+      <div>
+        <h5 class="mb-0">Playing Now</h5>
+      </div>
+      <div class="d-flex gap-2">
+        <input
+          v-model.number="state.limit"
+          type="number"
+          min="1"
+          class="form-control"
+          style="width: 120px"
+        />
+        <button class="btn btn-primary" :disabled="state.loading" @click="load">
+          Consultar
+        </button>
       </div>
     </div>
 
-    <div class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <h5 class="mb-0">Cerrar Playback</h5>
-        </div>
+    <div class="card-body">
+      <div v-if="state.error" class="alert alert-danger">{{ state.error }}</div>
+      <div v-if="state.loading" class="alert alert-info">
+        Cargando estadisticas...
+      </div>
 
-        <div class="card-body">
-          <form class="row g-3" @submit.prevent="closePlayback('PUT')">
-            <div class="col-12">
-              <label class="form-label">Playback ID *</label>
-              <input
-                v-model="updateState.playbackId"
-                class="form-control"
-                type="number"
-                min="1"
-                required
-              />
-            </div>
-            <div class="col-12">
-              <label class="form-label">Ended At (unix, opcional)</label>
-              <input
-                v-model="updateState.endedAt"
-                class="form-control"
-                type="text"
-                placeholder="1772782600"
-              />
-            </div>
-            <div class="col-12 d-flex gap-2">
-              <button
-                class="btn btn-warning"
-                type="submit"
-                :disabled="updateState.loading"
-              >
-                Cerrar con PUT
-              </button>
-              <button
-                class="btn btn-outline-warning"
-                type="button"
-                :disabled="updateState.loading"
-                @click="closePlayback('PATCH')"
-              >
-                Cerrar con PATCH
-              </button>
-            </div>
-          </form>
+      <div class="table-responsive text-nowrap" v-if="state.data.length">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Content</th>
+              <th>Started At</th>
+              <th>Ended At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, index) in state.data" :key="row.id">
+              <td>{{ index + 1 }}</td>
+              <td>{{ row.content }}</td>
+              <td>{{ parseUnix(row.startedAt) }}</td>
+              <td>{{ row.endedAt > 0 ? parseUnix(row.endedAt) : "" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-body-secondary mb-0" v-else-if="!state.loading">
+        Sin resultados.
+      </p>
 
-          <div v-if="updateState.error" class="alert alert-danger mt-3">
-            {{ updateState.error }}
-          </div>
-          <div v-if="updateState.success" class="alert alert-success mt-3 mb-0">
-            {{ updateState.success }}
-          </div>
+      <div
+        v-if="state.data.length"
+        class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between"
+      >
+        <div class="d-flex gap-2">
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            @click="prevPage"
+            :disabled="state.page <= 1 || state.loading"
+          >
+            <span class="d-none d-sm-inline">Anterior</span>
+            <span class="d-inline d-sm-none">&lt;</span>
+          </button>
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            @click="nextPage"
+            :disabled="
+              state.loading ||
+              state.page >= Math.ceil(state.total / state.limit)
+            "
+          >
+            <span class="d-none d-sm-inline">Siguiente</span>
+            <span class="d-inline d-sm-none">&gt;</span>
+          </button>
         </div>
+        <span class="text-body-secondary small">
+          Pág. {{ state.page }} / {{ Math.ceil(state.total / state.limit) }} ({{
+            state.total
+          }})
+        </span>
       </div>
     </div>
-  </div> -->
+  </div>
 </template>

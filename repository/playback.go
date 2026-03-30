@@ -48,3 +48,26 @@ func GetTopEvents(limit int) ([]EventStats, error) {
 		Scan(&stats)
 	return stats, result.Error
 }
+
+func GetList(page, limit int) ([]*models.PlaybackLog, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+
+	offset := (page - 1) * limit
+	var stats []*models.PlaybackLog
+	result := db.Offset(offset).Limit(limit).Order("created_at DESC").Find(&stats)
+	return stats, result.Error
+}
+
+func TotalCount() int64 {
+	db, err := database.GetDB()
+	if err != nil {
+		return 0
+	}
+
+	var count int64
+	_ = db.Model(&models.PlaybackLog{}).Count(&count)
+	return count
+}
