@@ -17,7 +17,7 @@ type ApkController struct {
 }
 
 func (c *ApkController) LoadRoutes() {
-	c.Group.GET("/apk/check", handleCheckApkUpdate)
+	c.Group.GET("/update", handleCheckApkUpdate)
 	c.Group.GET("/apk/download/:token", handleDownloadApk)
 }
 
