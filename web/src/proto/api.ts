@@ -37,6 +37,7 @@ export interface DeviceRegisterRequest {
   token: string;
   platform: string;
   name: string;
+  version: string;
 }
 
 export interface Device {
@@ -47,6 +48,7 @@ export interface Device {
   platform: string;
   name: string;
   lastSeen: number;
+  version: string;
 }
 
 export interface DeviceList {
@@ -592,7 +594,7 @@ export const AuthResponse: MessageFns<AuthResponse> = {
 };
 
 function createBaseDeviceRegisterRequest(): DeviceRegisterRequest {
-  return { token: "", platform: "", name: "" };
+  return { token: "", platform: "", name: "", version: "" };
 }
 
 export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
@@ -605,6 +607,9 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     }
     if (message.name !== "") {
       writer.uint32(26).string(message.name);
+    }
+    if (message.version !== "") {
+      writer.uint32(34).string(message.version);
     }
     return writer;
   },
@@ -640,6 +645,14 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
           message.name = reader.string();
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.version = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -654,6 +667,7 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
       token: isSet(object.token) ? globalThis.String(object.token) : "",
       platform: isSet(object.platform) ? globalThis.String(object.platform) : "",
       name: isSet(object.name) ? globalThis.String(object.name) : "",
+      version: isSet(object.version) ? globalThis.String(object.version) : "",
     };
   },
 
@@ -668,6 +682,9 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     if (message.name !== "") {
       obj.name = message.name;
     }
+    if (message.version !== "") {
+      obj.version = message.version;
+    }
     return obj;
   },
 
@@ -679,12 +696,13 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     message.token = object.token ?? "";
     message.platform = object.platform ?? "";
     message.name = object.name ?? "";
+    message.version = object.version ?? "";
     return message;
   },
 };
 
 function createBaseDevice(): Device {
-  return { id: 0, createdAt: "", updatedAt: "", token: "", platform: "", name: "", lastSeen: 0 };
+  return { id: 0, createdAt: "", updatedAt: "", token: "", platform: "", name: "", lastSeen: 0, version: "" };
 }
 
 export const Device: MessageFns<Device> = {
@@ -709,6 +727,9 @@ export const Device: MessageFns<Device> = {
     }
     if (message.lastSeen !== 0) {
       writer.uint32(56).int64(message.lastSeen);
+    }
+    if (message.version !== "") {
+      writer.uint32(66).string(message.version);
     }
     return writer;
   },
@@ -776,6 +797,14 @@ export const Device: MessageFns<Device> = {
           message.lastSeen = longToNumber(reader.int64());
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.version = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -806,6 +835,7 @@ export const Device: MessageFns<Device> = {
         : isSet(object.last_seen)
         ? globalThis.Number(object.last_seen)
         : 0,
+      version: isSet(object.version) ? globalThis.String(object.version) : "",
     };
   },
 
@@ -832,6 +862,9 @@ export const Device: MessageFns<Device> = {
     if (message.lastSeen !== 0) {
       obj.lastSeen = Math.round(message.lastSeen);
     }
+    if (message.version !== "") {
+      obj.version = message.version;
+    }
     return obj;
   },
 
@@ -847,6 +880,7 @@ export const Device: MessageFns<Device> = {
     message.platform = object.platform ?? "";
     message.name = object.name ?? "";
     message.lastSeen = object.lastSeen ?? 0;
+    message.version = object.version ?? "";
     return message;
   },
 };

@@ -24,6 +24,7 @@ func DeviceToProto(d models.Device) *pb.Device {
 		Token:     d.Token,
 		Platform:  d.Platform,
 		Name:      d.Name,
+		Version:   d.Version,
 		LastSeen:  d.LastSeen,
 	}
 }

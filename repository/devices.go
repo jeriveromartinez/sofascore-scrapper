@@ -7,7 +7,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 
-func RegisterDevice(userID *uint, token, platform, name string) (*models.Device, error) {
+func RegisterDevice(userID *uint, token, platform, name, version string) (*models.Device, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
@@ -17,9 +17,10 @@ func RegisterDevice(userID *uint, token, platform, name string) (*models.Device,
 		Token:    token,
 		Platform: platform,
 		Name:     name,
+		Version:  version,
 		LastSeen: time.Now().Unix(),
 	}
-	result := db.Where(models.Device{Token: token}).Assign(models.Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen}).FirstOrCreate(device)
+	result := db.Where(models.Device{Token: token}).Assign(models.Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version}).FirstOrCreate(device)
 	return device, result.Error
 }
 

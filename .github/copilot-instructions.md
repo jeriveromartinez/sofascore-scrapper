@@ -44,6 +44,7 @@ The protobuf definitions are the source of truth for cross-service and client-se
 - Respect existing error handling style.
 - For refactors, prefer minimal diffs over broad cleanup.
 - Do not change transport or serialization behavior unless explicitly requested.
+- Do not change api urls/endpoints unless explicitly requested.
 
 ## Vue frontend rules
 - Follow the existing Vue style already present in the repository.

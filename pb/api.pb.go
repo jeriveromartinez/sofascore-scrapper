@@ -278,6 +278,7 @@ type DeviceRegisterRequest struct {
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	Platform      string                 `protobuf:"bytes,2,opt,name=platform,proto3" json:"platform,omitempty"`
 	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -333,6 +334,13 @@ func (x *DeviceRegisterRequest) GetName() string {
 	return ""
 }
 
+func (x *DeviceRegisterRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
 type Device struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -342,6 +350,7 @@ type Device struct {
 	Platform      string                 `protobuf:"bytes,5,opt,name=platform,proto3" json:"platform,omitempty"`
 	Name          string                 `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
 	LastSeen      int64                  `protobuf:"varint,7,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	Version       string                 `protobuf:"bytes,8,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -423,6 +432,13 @@ func (x *Device) GetLastSeen() int64 {
 		return x.LastSeen
 	}
 	return 0
+}
+
+func (x *Device) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
 }
 
 type DeviceList struct {
@@ -2159,11 +2175,12 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x14\n" +
 	"\x05token\x18\x03 \x01(\tR\x05token\x12#\n" +
-	"\rrefresh_token\x18\x04 \x01(\tR\frefreshToken\"]\n" +
+	"\rrefresh_token\x18\x04 \x01(\tR\frefreshToken\"w\n" +
 	"\x15DeviceRegisterRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1a\n" +
 	"\bplatform\x18\x02 \x01(\tR\bplatform\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\"\xb9\x01\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"\xd3\x01\n" +
 	"\x06Device\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2173,7 +2190,8 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x05token\x18\x04 \x01(\tR\x05token\x12\x1a\n" +
 	"\bplatform\x18\x05 \x01(\tR\bplatform\x12\x12\n" +
 	"\x04name\x18\x06 \x01(\tR\x04name\x12\x1b\n" +
-	"\tlast_seen\x18\a \x01(\x03R\blastSeen\"\x94\x01\n" +
+	"\tlast_seen\x18\a \x01(\x03R\blastSeen\x12\x18\n" +
+	"\aversion\x18\b \x01(\tR\aversion\"\x94\x01\n" +
 	"\n" +
 	"DeviceList\x12%\n" +
 	"\x04data\x18\x01 \x03(\v2\x11.sofascore.DeviceR\x04data\x12\x12\n" +

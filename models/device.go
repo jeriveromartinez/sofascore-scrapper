@@ -9,5 +9,6 @@ type Device struct {
 	Platform string
 	Name     string
 	LastSeen int64
+	Version  string
 	Manager  *User `gorm:"foreignKey:UserID"`
 }

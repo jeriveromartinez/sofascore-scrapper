@@ -27,7 +27,8 @@ func handleRegisterDevice(c *gin.Context) {
 		common.RespondError(c, http.StatusBadRequest, "token is required")
 		return
 	}
-	device, err := repository.RegisterDevice(nil, req.Token, req.Platform, req.Name)
+
+	device, err := repository.RegisterDevice(nil, req.Token, req.Platform, req.Name, req.Version)
 	if err != nil {
 		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
