@@ -216,6 +216,8 @@ func ApkToProto(v models.ApkVersion, downloadURL string) *pb.ApkInfo {
 		DownloadToken:    v.DownloadToken,
 		DownloadUrl:      downloadURL,
 		CreatedAt:        FormatTime(v.CreatedAt),
+		Downloads:        int32(v.TotalDownloads),
+		PanelUrl:         v.IPTVUrl,
 	}
 }
 

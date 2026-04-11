@@ -6,9 +6,7 @@ const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
   autoCloseModal: true,
 });
 
-const emit = defineEmits<{
-  uploaded: [version: string];
-}>();
+const emit = defineEmits<{ uploaded: [version: string] }>();
 
 const upload = reactive({
   file: null as File | null,
@@ -19,9 +17,7 @@ const upload = reactive({
   error: "",
 });
 
-const modal = reactive({
-  open: false,
-});
+const modal = reactive({ open: false });
 
 function resetUploadForm(): void {
   upload.file = null;
@@ -72,7 +68,8 @@ async function submitUpload(): Promise<void> {
     closeUploadModal();
     emit("uploaded", response.version);
   } catch (error) {
-    upload.error = error instanceof Error ? error.message : "No se pudo subir el APK";
+    upload.error =
+      error instanceof Error ? error.message : "No se pudo subir el APK";
   } finally {
     upload.loading = false;
   }

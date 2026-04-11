@@ -31,9 +31,16 @@ func CreateApkVersion(version, fileName, filePath, description, packageName stri
 		TargetSDKVersion: targetSDK,
 		DownloadToken:    uuid.New().String(),
 	}
+
+	lastVersion, err := GetLatestApkVersion(apk.PackageName)
+	if strings.TrimSpace(apk.IPTVUrl) == "" && err == nil && lastVersion != nil {
+		apk.IPTVUrl = lastVersion.IPTVUrl
+	}
+
 	if err := db.Create(apk).Error; err != nil {
 		return nil, err
 	}
+
 	return apk, nil
 }
 
@@ -102,6 +109,15 @@ func ListApkVersions() ([]models.ApkVersion, error) {
 		return nil, err
 	}
 	return versions, nil
+}
+
+func UpdateApkUrl(id uint, url string) error {
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+
+	return db.Model(&models.ApkVersion{}).Where("id = ?", id).Update("ip_tv_url", url).Error
 }
 
 func UpdateDownloadCount(id uint) error {

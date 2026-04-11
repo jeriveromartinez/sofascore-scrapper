@@ -10,3 +10,4 @@ apk_storage/
 image_storage/
 web/node_modules/
 web/dist/
+web/pkg/

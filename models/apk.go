@@ -16,4 +16,5 @@ type ApkVersion struct {
 	TargetSDKVersion int32
 	DownloadToken    string `gorm:"uniqueIndex;not null"`
 	TotalDownloads   int64  `gorm:"default:0"`
+	IPTVUrl          string `gorm:"default:'http://5.mdtv.me'"`
 }

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { onMounted, reactive } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import apkUploadModal from "./apkUploadModal.vue";
+import apkEditUrlModal from "./apkEditUrl.vue";
 import { apkApiService } from "../../store/services";
 import type { ApkVersionInfo } from "../../store/services/models";
+
+const editModal = ref<typeof apkEditUrlModal>();
 
 const listState = reactive({
   loading: false,
@@ -26,6 +29,10 @@ async function loadVersions(): Promise<void> {
 
 function getDownloadUrl(appKey: string): string {
   return apkApiService.getDownloadUrl(appKey);
+}
+
+function openEditModal(version: ApkVersionInfo): void {
+  editModal.value?.openModal(version);
 }
 
 onMounted(() => loadVersions());
@@ -74,6 +81,8 @@ onMounted(() => loadVersions());
                 <th>Package</th>
                 <th>Download Token</th>
                 <th>Size</th>
+                <th>Downloads</th>
+                <th>Panel URL</th>
                 <th>Accion</th>
               </tr>
             </thead>
@@ -83,6 +92,8 @@ onMounted(() => loadVersions());
                 <td>{{ version.packageName }}</td>
                 <td>{{ version.downloadToken }}</td>
                 <td>{{ version.fileSize }}</td>
+                <td>{{ version.downloads }}</td>
+                <td>{{ version.panelUrl }}</td>
                 <td>
                   <a
                     class="btn btn-sm btn-outline-success"
@@ -90,6 +101,12 @@ onMounted(() => loadVersions());
                   >
                     Descargar
                   </a>
+                  <button
+                    class="ms-2 btn btn-sm btn-outline-warning"
+                    @click.prevent="() => openEditModal(version)"
+                  >
+                    Editar
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -101,4 +118,10 @@ onMounted(() => loadVersions());
       </div>
     </div>
   </div>
+
+  <apk-edit-url-modal
+    ref="editModal"
+    @updated="loadVersions"
+    :auto-close-modal="false"
+  />
 </template>

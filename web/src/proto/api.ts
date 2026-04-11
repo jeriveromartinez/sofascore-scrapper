@@ -49,6 +49,7 @@ export interface Device {
   name: string;
   lastSeen: number;
   version: string;
+  iptvUrl: string;
 }
 
 export interface DeviceList {
@@ -57,6 +58,10 @@ export interface DeviceList {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+export interface DeviceUrl {
+  url: string;
 }
 
 export interface TournamentRequest {
@@ -198,6 +203,8 @@ export interface ApkInfo {
   downloadUrl: string;
   createdAt: string;
   isActive: boolean;
+  downloads: number;
+  panelUrl: string;
 }
 
 export interface ApkList {
@@ -229,6 +236,11 @@ export interface ApkUpdateCheckResponse {
   fileSize: number;
   minSdkVersion: number;
   targetSdkVersion: number;
+}
+
+export interface ApkVersion {
+  id: number;
+  url: string;
 }
 
 function createBaseErrorResponse(): ErrorResponse {
@@ -702,7 +714,17 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
 };
 
 function createBaseDevice(): Device {
-  return { id: 0, createdAt: "", updatedAt: "", token: "", platform: "", name: "", lastSeen: 0, version: "" };
+  return {
+    id: 0,
+    createdAt: "",
+    updatedAt: "",
+    token: "",
+    platform: "",
+    name: "",
+    lastSeen: 0,
+    version: "",
+    iptvUrl: "",
+  };
 }
 
 export const Device: MessageFns<Device> = {
@@ -730,6 +752,9 @@ export const Device: MessageFns<Device> = {
     }
     if (message.version !== "") {
       writer.uint32(66).string(message.version);
+    }
+    if (message.iptvUrl !== "") {
+      writer.uint32(74).string(message.iptvUrl);
     }
     return writer;
   },
@@ -805,6 +830,14 @@ export const Device: MessageFns<Device> = {
           message.version = reader.string();
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.iptvUrl = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -836,6 +869,11 @@ export const Device: MessageFns<Device> = {
         ? globalThis.Number(object.last_seen)
         : 0,
       version: isSet(object.version) ? globalThis.String(object.version) : "",
+      iptvUrl: isSet(object.iptvUrl)
+        ? globalThis.String(object.iptvUrl)
+        : isSet(object.iptv_url)
+        ? globalThis.String(object.iptv_url)
+        : "",
     };
   },
 
@@ -865,6 +903,9 @@ export const Device: MessageFns<Device> = {
     if (message.version !== "") {
       obj.version = message.version;
     }
+    if (message.iptvUrl !== "") {
+      obj.iptvUrl = message.iptvUrl;
+    }
     return obj;
   },
 
@@ -881,6 +922,7 @@ export const Device: MessageFns<Device> = {
     message.name = object.name ?? "";
     message.lastSeen = object.lastSeen ?? 0;
     message.version = object.version ?? "";
+    message.iptvUrl = object.iptvUrl ?? "";
     return message;
   },
 };
@@ -1009,6 +1051,64 @@ export const DeviceList: MessageFns<DeviceList> = {
     message.limit = object.limit ?? 0;
     message.total = object.total ?? 0;
     message.totalPages = object.totalPages ?? 0;
+    return message;
+  },
+};
+
+function createBaseDeviceUrl(): DeviceUrl {
+  return { url: "" };
+}
+
+export const DeviceUrl: MessageFns<DeviceUrl> = {
+  encode(message: DeviceUrl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.url !== "") {
+      writer.uint32(10).string(message.url);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeviceUrl {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeviceUrl();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.url = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeviceUrl {
+    return { url: isSet(object.url) ? globalThis.String(object.url) : "" };
+  },
+
+  toJSON(message: DeviceUrl): unknown {
+    const obj: any = {};
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeviceUrl>, I>>(base?: I): DeviceUrl {
+    return DeviceUrl.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeviceUrl>, I>>(object: I): DeviceUrl {
+    const message = createBaseDeviceUrl();
+    message.url = object.url ?? "";
     return message;
   },
 };
@@ -3174,6 +3274,8 @@ function createBaseApkInfo(): ApkInfo {
     downloadUrl: "",
     createdAt: "",
     isActive: false,
+    downloads: 0,
+    panelUrl: "",
   };
 }
 
@@ -3217,6 +3319,12 @@ export const ApkInfo: MessageFns<ApkInfo> = {
     }
     if (message.isActive !== false) {
       writer.uint32(104).bool(message.isActive);
+    }
+    if (message.downloads !== 0) {
+      writer.uint32(112).int32(message.downloads);
+    }
+    if (message.panelUrl !== "") {
+      writer.uint32(122).string(message.panelUrl);
     }
     return writer;
   },
@@ -3332,6 +3440,22 @@ export const ApkInfo: MessageFns<ApkInfo> = {
           message.isActive = reader.bool();
           continue;
         }
+        case 14: {
+          if (tag !== 112) {
+            break;
+          }
+
+          message.downloads = reader.int32();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.panelUrl = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3396,6 +3520,12 @@ export const ApkInfo: MessageFns<ApkInfo> = {
         : isSet(object.is_active)
         ? globalThis.Boolean(object.is_active)
         : false,
+      downloads: isSet(object.downloads) ? globalThis.Number(object.downloads) : 0,
+      panelUrl: isSet(object.panelUrl)
+        ? globalThis.String(object.panelUrl)
+        : isSet(object.panel_url)
+        ? globalThis.String(object.panel_url)
+        : "",
     };
   },
 
@@ -3440,6 +3570,12 @@ export const ApkInfo: MessageFns<ApkInfo> = {
     if (message.isActive !== false) {
       obj.isActive = message.isActive;
     }
+    if (message.downloads !== 0) {
+      obj.downloads = Math.round(message.downloads);
+    }
+    if (message.panelUrl !== "") {
+      obj.panelUrl = message.panelUrl;
+    }
     return obj;
   },
 
@@ -3461,6 +3597,8 @@ export const ApkInfo: MessageFns<ApkInfo> = {
     message.downloadUrl = object.downloadUrl ?? "";
     message.createdAt = object.createdAt ?? "";
     message.isActive = object.isActive ?? false;
+    message.downloads = object.downloads ?? 0;
+    message.panelUrl = object.panelUrl ?? "";
     return message;
   },
 };
@@ -4036,6 +4174,82 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
     message.fileSize = object.fileSize ?? 0;
     message.minSdkVersion = object.minSdkVersion ?? 0;
     message.targetSdkVersion = object.targetSdkVersion ?? 0;
+    return message;
+  },
+};
+
+function createBaseApkVersion(): ApkVersion {
+  return { id: 0, url: "" };
+}
+
+export const ApkVersion: MessageFns<ApkVersion> = {
+  encode(message: ApkVersion, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== 0) {
+      writer.uint32(8).uint32(message.id);
+    }
+    if (message.url !== "") {
+      writer.uint32(18).string(message.url);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ApkVersion {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseApkVersion();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.id = reader.uint32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.url = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ApkVersion {
+    return {
+      id: isSet(object.id) ? globalThis.Number(object.id) : 0,
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+    };
+  },
+
+  toJSON(message: ApkVersion): unknown {
+    const obj: any = {};
+    if (message.id !== 0) {
+      obj.id = Math.round(message.id);
+    }
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ApkVersion>, I>>(base?: I): ApkVersion {
+    return ApkVersion.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ApkVersion>, I>>(object: I): ApkVersion {
+    const message = createBaseApkVersion();
+    message.id = object.id ?? 0;
+    message.url = object.url ?? "";
     return message;
   },
 };

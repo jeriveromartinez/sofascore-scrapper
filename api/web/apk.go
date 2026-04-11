@@ -42,6 +42,7 @@ func (c *ApkController) LoadRoutes() {
 	c.Group.POST("/apk/upload/chunk", common.AuthMiddleware(), handleUploadChunk)
 	c.Group.POST("/apk/upload/assemble", common.AuthMiddleware(), handleAssembleChunks)
 	c.Group.GET("/apk/versions", common.AuthMiddleware(), handleListApkVersions)
+	c.Group.PUT("/apk/:id", common.AuthMiddleware(), handleUpdateApkVersion)
 }
 
 func handleUploadApk(c *gin.Context) {
@@ -315,4 +316,28 @@ func handleListApkVersions(c *gin.Context) {
 	}
 
 	common.RespondProto(c, http.StatusOK, &pb.ApkList{Versions: common.ApksToProto(versions)})
+}
+
+func handleUpdateApkVersion(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil || id <= 0 {
+		common.RespondError(c, http.StatusBadRequest, "invalid APK ID")
+		return
+	}
+
+	akpData := pb.DeviceUrl{}
+	err = common.ParseProtoBody(c, &akpData)
+	if err != nil {
+		common.RespondError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	err = repository.UpdateApkUrl(uint(id), akpData.Url)
+	if err != nil {
+		common.RespondError(c, http.StatusInternalServerError, "could not update APK URL: "+err.Error())
+		return
+	}
+
+	common.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "ok"})
 }

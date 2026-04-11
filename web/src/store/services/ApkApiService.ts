@@ -3,6 +3,8 @@ import {
   ApkList,
   ApkUpdateCheckResponse,
   ApkUploadResponse,
+  DeviceUrl,
+  StatusMessage,
 } from "../../proto/api";
 import type {
   ApkCheckResponse,
@@ -140,6 +142,10 @@ export class ApkApiService extends BaseApiService {
 
   async downloadByToken(token: string): Promise<Blob> {
     return this.getBinary(`/download/${token}`);
+  }
+
+  async updateApkUrl(id: number, url: string): Promise<StatusMessage> {
+    return this.put(`/${id}`, { url }, DeviceUrl, StatusMessage);
   }
 }
 

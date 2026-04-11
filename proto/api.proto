@@ -50,6 +50,7 @@ message Device {
   string name = 6;
   int64 last_seen = 7;
   string version = 8;
+  string iptv_url = 9;
 }
 
 message DeviceList {
@@ -58,6 +59,10 @@ message DeviceList {
   int32 limit = 3;
   int64 total = 4;
   int32 total_pages = 5;
+}
+
+message DeviceUrl {
+  string url = 1;
 }
 
 // ========== Tournaments ==========
@@ -215,6 +220,8 @@ message ApkInfo {
   string download_url = 11;
   string created_at = 12;
   bool is_active = 13;
+  int32 downloads = 14;
+  string panel_url = 15;
 }
 
 message ApkList {
@@ -246,4 +253,9 @@ message ApkUpdateCheckResponse {
   int64 file_size = 7;
   int32 min_sdk_version = 8;
   int32 target_sdk_version = 9;
+}
+
+message ApkVersion {
+    uint32 id = 1;
+    string url = 2;
 }
