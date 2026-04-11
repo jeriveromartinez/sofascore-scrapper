@@ -71,7 +71,6 @@ defineExpose({ openModal });
     style="display: block"
     aria-modal="true"
     role="dialog"
-    @click.self="autoCloseModal"
   >
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
