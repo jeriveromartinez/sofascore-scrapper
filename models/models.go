@@ -13,6 +13,7 @@ func Migrate() {
 		&Tournament{},
 		&Team{},
 		&User{},
+		&Domain{},
 		&RefreshToken{},
 		&Device{},
 		&PlaybackLog{},

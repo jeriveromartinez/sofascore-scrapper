@@ -2,6 +2,18 @@ import type { CustomRouteRecordRaw } from "./customRoute";
 
 export const managerRoutes: CustomRouteRecordRaw[] = [
   {
+    name: "Users",
+    path: "users",
+    component: () => import("../pages/users.vue"),
+    icon: "bx-user",
+  },
+  {
+    name: "Domains",
+    path: "domains",
+    component: () => import("../pages/domains.vue"),
+    icon: "bx-globe",
+  },
+  {
     name: "Devices",
     path: "devices",
     component: () => import("../pages/devices.vue"),

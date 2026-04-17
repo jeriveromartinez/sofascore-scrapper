@@ -6,14 +6,26 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
+
+func GetAllUsers() ([]models.User, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+
+	var users []models.User
+	result := db.Order("email ASC").Find(&users)
+	return users, result.Error
+}
 
 func CreateUser(email, password string) (*models.User, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := hashPassword(password)
 	if err != nil {
 		return nil, err
 	}
@@ -40,6 +52,59 @@ func GetUserByID(id uint) (*models.User, error) {
 	var user models.User
 	result := db.First(&user, id)
 	return &user, result.Error
+}
+
+func UpdateUser(id uint, email, password string) (*models.User, error) {
+	db, err := database.GetDB()
+	if err != nil {
+		return nil, err
+	}
+
+	var user models.User
+	if err := db.First(&user, id).Error; err != nil {
+		return nil, err
+	}
+
+	user.Email = email
+	if password != "" {
+		hash, err := hashPassword(password)
+		if err != nil {
+			return nil, err
+		}
+		user.Password = hash
+	}
+
+	result := db.Save(&user)
+	return &user, result.Error
+}
+
+func DeleteUser(id uint) error {
+	db, err := database.GetDB()
+	if err != nil {
+		return err
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&models.User{}, id).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&models.Device{}).
+			Where("user_id = ?", id).
+			Updates(map[string]any{"user_id": nil}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("user_id = ?", id).Delete(&models.Domain{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("user_id = ?", id).Delete(&models.RefreshToken{}).Error; err != nil {
+			return err
+		}
+
+		return tx.Delete(&models.User{}, id).Error
+	})
 }
 
 func SaveRefreshToken(userID uint, tokenID string, expiresAt time.Time) error {
@@ -98,4 +163,13 @@ func RevokeAllRefreshTokens(userID uint) error {
 
 func CheckPassword(user *models.User, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) == nil
+}
+
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+
+	return string(hash), nil
 }

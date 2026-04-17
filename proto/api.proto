@@ -32,6 +32,42 @@ message AuthResponse {
   string refresh_token = 4;
 }
 
+message User {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  string email = 4;
+}
+
+message UserList {
+  repeated User users = 1;
+}
+
+message UserWriteRequest {
+  string email = 1;
+  string password = 2;
+}
+
+// ========== Domains ==========
+
+message Domain {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  string domain = 4;
+  uint32 user_id = 5;
+  User user = 6;
+}
+
+message DomainList {
+  repeated Domain domains = 1;
+}
+
+message DomainRequest {
+  string domain = 1;
+  uint32 user_id = 2;
+}
+
 // ========== Devices ==========
 
 message DeviceRegisterRequest {

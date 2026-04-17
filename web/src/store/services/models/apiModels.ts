@@ -2,6 +2,9 @@ import type {
   ApkInfo as ProtoApkInfo,
   ApkUploadResponse as ProtoApkUploadResponse,
   ApkUpdateCheckResponse as ProtoApkUpdateCheckResponse,
+  Domain as ProtoDomain,
+  DomainList,
+  DomainRequest,
   Device as ProtoDevice,
   DeviceList,
   DeviceRegisterRequest,
@@ -17,12 +20,17 @@ import type {
   SetTournamentIdsRequest,
   AssignTournamentRequest,
   EventStats as ProtoEventStats,
+  User as ProtoUser,
+  UserList,
+  UserWriteRequest,
 } from "../../../proto/api";
 
 export type Team = ProtoTeam;
 export type SofaScoreEvent = ProtoSofaScoreEvent;
 export type EventsResponse = EventsList;
 export type DeviceResponse = DeviceList;
+export type UsersResponse = UserList;
+export type DomainsResponse = DomainList;
 
 export interface EventsQuery {
   date?: string;
@@ -45,9 +53,15 @@ export interface StatusResponse {
 }
 
 export type EventStats = ProtoEventStats;
+export type User = ProtoUser;
+export type Domain = ProtoDomain;
 export type Tournament = ProtoTournament;
 export type DeviceTournament = ProtoDeviceTournament;
 export type GlobalTournamentConfig = ProtoGlobalTournamentConfig;
+export type CreateUserPayload = UserWriteRequest;
+export type UpdateUserPayload = UserWriteRequest;
+export type CreateDomainPayload = DomainRequest;
+export type UpdateDomainPayload = DomainRequest;
 export type CreateTournamentPayload = TournamentRequest;
 export type UpdateTournamentPayload = TournamentRequest;
 export type AssignTournamentPayload = AssignTournamentRequest;

@@ -1,12 +1,14 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
+	"gorm.io/gorm"
 )
 
 type UserController struct {
@@ -18,6 +20,100 @@ func (c *UserController) LoadRoutes() {
 	c.Group.POST("/users/login", handleLogin)
 	c.Group.POST("/users/refresh", handleRefresh)
 	c.Group.POST("/users/logout", common.AuthMiddleware(), handleLogout)
+	c.Group.GET("/users", common.AuthMiddleware(), handleGetUsers)
+	c.Group.GET("/users/:id", common.AuthMiddleware(), handleGetUser)
+	c.Group.POST("/users", common.AuthMiddleware(), handleCreateManagedUser)
+	c.Group.PUT("/users/:id", common.AuthMiddleware(), handleUpdateUser)
+	c.Group.DELETE("/users/:id", common.AuthMiddleware(), handleDeleteUser)
+}
+
+func handleGetUsers(c *gin.Context) {
+	users, err := repository.GetAllUsers()
+	if err != nil {
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	common.RespondProto(c, http.StatusOK, &pb.UserList{Users: common.UsersToProto(users)})
+}
+
+func handleGetUser(c *gin.Context) {
+	id, err := common.ParseID(c.Param("id"))
+	if err != nil {
+		common.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	user, err := repository.GetUserByID(id)
+	if err != nil {
+		common.RespondError(c, http.StatusNotFound, "user not found")
+		return
+	}
+
+	common.RespondProto(c, http.StatusOK, common.UserToProto(*user))
+}
+
+func handleCreateManagedUser(c *gin.Context) {
+	var req pb.UserWriteRequest
+	if err := common.ParseProtoBody(c, &req); err != nil || req.Email == "" || req.Password == "" {
+		common.RespondError(c, http.StatusBadRequest, "email and password are required")
+		return
+	}
+
+	user, err := repository.CreateUser(req.Email, req.Password)
+	if err != nil {
+		common.RespondError(c, http.StatusConflict, "could not create user")
+		return
+	}
+
+	common.RespondProto(c, http.StatusCreated, common.UserToProto(*user))
+}
+
+func handleUpdateUser(c *gin.Context) {
+	id, err := common.ParseID(c.Param("id"))
+	if err != nil {
+		common.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	var req pb.UserWriteRequest
+	if err := common.ParseProtoBody(c, &req); err != nil || req.Email == "" {
+		common.RespondError(c, http.StatusBadRequest, "email is required")
+		return
+	}
+
+	user, err := repository.UpdateUser(id, req.Email, req.Password)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.RespondError(c, http.StatusNotFound, "user not found")
+			return
+		}
+
+		common.RespondError(c, http.StatusConflict, "could not update user")
+		return
+	}
+
+	common.RespondProto(c, http.StatusOK, common.UserToProto(*user))
+}
+
+func handleDeleteUser(c *gin.Context) {
+	id, err := common.ParseID(c.Param("id"))
+	if err != nil {
+		common.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	if err := repository.DeleteUser(id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.RespondError(c, http.StatusNotFound, "user not found")
+			return
+		}
+
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	common.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "user deleted"})
 }
 
 func handleRegister(c *gin.Context) {

@@ -1,5 +1,7 @@
 export * from "./BaseApiService";
 export * from "./AuthApiService";
+export * from "./UsersApiService";
+export * from "./DomainsApiService";
 export * from "./EventsApiService";
 export * from "./DevicesApiService";
 export * from "./PlaybackApiService";

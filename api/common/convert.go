@@ -16,6 +16,45 @@ func FormatTime(t time.Time) string {
 	return t.Format(time.RFC3339)
 }
 
+func UserToProto(u models.User) *pb.User {
+	return &pb.User{
+		Id:        uint32(u.ID),
+		CreatedAt: FormatTime(u.CreatedAt),
+		UpdatedAt: FormatTime(u.UpdatedAt),
+		Email:     u.Email,
+	}
+}
+
+func UsersToProto(users []models.User) []*pb.User {
+	result := make([]*pb.User, 0, len(users))
+	for _, user := range users {
+		result = append(result, UserToProto(user))
+	}
+	return result
+}
+
+func DomainToProto(d models.Domain) *pb.Domain {
+	p := &pb.Domain{
+		Id:        uint32(d.ID),
+		CreatedAt: FormatTime(d.CreatedAt),
+		UpdatedAt: FormatTime(d.UpdatedAt),
+		Domain:    d.Domain,
+		UserId:    uint32(d.UserID),
+	}
+	if d.User != nil {
+		p.User = UserToProto(*d.User)
+	}
+	return p
+}
+
+func DomainsToProto(domains []models.Domain) []*pb.Domain {
+	result := make([]*pb.Domain, 0, len(domains))
+	for _, domain := range domains {
+		result = append(result, DomainToProto(domain))
+	}
+	return result
+}
+
 func DeviceToProto(d models.Device) *pb.Device {
 	return &pb.Device{
 		Id:        uint32(d.ID),

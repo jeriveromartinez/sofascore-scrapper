@@ -31,6 +31,7 @@ func Start(addr string) {
 	(&web.TournamentController{Group: webV1}).LoadRoutes()
 	(&web.DeviceTournamentController{Group: webV1}).LoadRoutes()
 	(&web.GlobalConfigController{Group: webV1}).LoadRoutes()
+	(&web.DomainController{Group: webV1}).LoadRoutes()
 
 	web.RegisterDashboardRoutes(router)
 
