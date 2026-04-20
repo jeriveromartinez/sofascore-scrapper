@@ -35,6 +35,16 @@ function openEditModal(version: ApkVersionInfo): void {
   editModal.value?.openModal(version);
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "0 B";
+
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const k = 1024;
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
 onMounted(() => loadVersions());
 </script>
 
@@ -91,7 +101,7 @@ onMounted(() => loadVersions());
                 <td>{{ version.version }}</td>
                 <td>{{ version.packageName }}</td>
                 <td>{{ version.downloadToken }}</td>
-                <td>{{ version.fileSize }}</td>
+                <td>{{ formatFileSize(version.fileSize) }}</td>
                 <td>{{ version.downloads }}</td>
                 <td>{{ version.panelUrl }}</td>
                 <td>
