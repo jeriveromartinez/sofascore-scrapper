@@ -99,6 +99,11 @@ async function deleteUser(id: number): Promise<void> {
   }
 }
 
+function formatTimestamp(date?: string): string {
+  if (!date) return "-";
+  return new Date(date).toLocaleString();
+}
+
 onMounted(() => {
   void loadUsers();
 });
@@ -177,7 +182,7 @@ onMounted(() => {
             <tr v-for="user in state.users" :key="user.id">
               <td>{{ user.id }}</td>
               <td>{{ user.email }}</td>
-              <td>{{ user.createdAt || "-" }}</td>
+              <td>{{ formatTimestamp(user.createdAt) }}</td>
               <td>
                 <button
                   class="btn btn-sm btn-warning me-2"

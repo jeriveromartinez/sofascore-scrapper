@@ -110,6 +110,11 @@ async function deleteDomain(id: number): Promise<void> {
   }
 }
 
+function formatTimestamp(date?: string): string {
+  if (!date) return "-";
+  return new Date(date).toLocaleString();
+}
+
 onMounted(() => {
   void loadData();
 });
@@ -202,7 +207,7 @@ onMounted(() => {
               <td>{{ domain.id }}</td>
               <td>{{ domain.domain }}</td>
               <td>{{ domain.user?.email || "-" }}</td>
-              <td>{{ domain.createdAt || "-" }}</td>
+              <td>{{ formatTimestamp(domain.createdAt) }}</td>
               <td>
                 <button
                   class="btn btn-sm btn-warning me-2"

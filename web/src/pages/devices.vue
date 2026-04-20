@@ -41,6 +41,11 @@ function prevPage(): void {
   void loadDevices();
 }
 
+function formatTimestamp(unix: number): string {
+  if (!unix) return "-";
+  return new Date(unix * 1000).toLocaleString();
+}
+
 onMounted(() => {
   void loadDevices();
 });
@@ -81,7 +86,7 @@ onMounted(() => {
               <td class="d-none d-md-table-cell">{{ device.platform }}</td>
               <td>{{ device.name }}</td>
               <td>{{ device.version }}</td>
-              <td class="d-none d-lg-table-cell">{{ device.lastSeen }}</td>
+              <td class="d-none d-lg-table-cell">{{ formatTimestamp(device.lastSeen) }}</td>
             </tr>
           </tbody>
         </table>
