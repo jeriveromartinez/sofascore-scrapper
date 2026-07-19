@@ -7,6 +7,7 @@ import {
   checkStatus200,
   makeAuthHeaders,
   encodeLoginRequest,
+  encodeAuthRequest,
 } from "./common.js";
 
 export { thresholds };
@@ -22,12 +23,29 @@ export const options = {
 
 const LOGIN_EMAIL = __ENV.TEST_EMAIL || "admin@example.com";
 const LOGIN_PASSWORD = __ENV.TEST_PASSWORD || "admin123";
+const INVITE_TOKEN = __ENV.INVITE_TOKEN || "";
 
 export function setup() {
-  const body = encodeLoginRequest(LOGIN_EMAIL, LOGIN_PASSWORD);
-  const loginRes = http.post(`${BASE_URL}/api/web/v1/users/login`, body, {
+  const loginURL = `${BASE_URL}/api/web/v1/users/login`;
+  let loginRes = http.post(loginURL, encodeLoginRequest(LOGIN_EMAIL, LOGIN_PASSWORD), {
     headers: HEADERS_PROTOBUF,
   });
+
+  // On a fresh stack the operator does not exist yet; register it with the
+  // bootstrap invitation. The first account is promoted to admin server-side,
+  // which is required for the admin endpoints exercised below.
+  if (loginRes.status !== 200 && INVITE_TOKEN) {
+    const regRes = http.post(
+      `${BASE_URL}/api/web/v1/users/register`,
+      encodeAuthRequest(LOGIN_EMAIL, LOGIN_PASSWORD, INVITE_TOKEN),
+      { headers: HEADERS_PROTOBUF },
+    );
+    if (regRes.status === 201) {
+      return { token: regRes.json("token") };
+    }
+    throw new Error(`setup register failed: ${regRes.status} ${regRes.body}`);
+  }
+
   if (loginRes.status !== 200) {
     throw new Error(`setup login failed: ${loginRes.status} ${loginRes.body}`);
   }

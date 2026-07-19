@@ -50,6 +50,12 @@ jobs:
           echo "Server not ready"
           exit 1
 
+      - name: Extract bootstrap invitation
+        id: invite
+        run: |
+          token=$(docker compose -f deployments/docker/compose.test.yml exec -T backend cat /shared/invite.txt)
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
       - name: Install k6
         run: |
           sudo apt-get update -qq
@@ -63,6 +69,7 @@ jobs:
         run: k6 run --summary-export=k6-smoke-summary.json tests/load/smoke.js
         env:
           BASE_URL: http://localhost:8080
+          INVITE_TOKEN: ${{ steps.invite.outputs.token }}
 
       - name: Upload k6 summary
         if: always()
