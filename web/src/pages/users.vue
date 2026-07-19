@@ -3,6 +3,8 @@ import { onMounted, reactive } from "vue";
 import { usersApiService } from "../store/services";
 import type { User } from "../store/services/models";
 
+const PAGE_LIMIT = 20;
+
 const state = reactive({
   users: [] as User[],
   loading: false,
@@ -12,6 +14,11 @@ const state = reactive({
     email: "",
     password: "",
   },
+  currentCursor: "" as string,
+  nextCursor: "" as string,
+  prevCursors: [] as string[],
+  hasNext: false,
+  hasPrev: false,
 });
 
 function resetForm(): void {
@@ -20,12 +27,17 @@ function resetForm(): void {
   state.form.password = "";
 }
 
-async function loadUsers(): Promise<void> {
+async function loadPage(cursor?: string): Promise<void> {
   state.loading = true;
   state.error = "";
 
   try {
-    state.users = await usersApiService.getAllUsers();
+    const page = await usersApiService.getUserPage(cursor, PAGE_LIMIT);
+    state.users = page.data;
+    state.nextCursor = page.page?.nextCursor ?? "";
+    state.hasNext = page.page?.hasMore ?? false;
+    state.currentCursor = cursor ?? "";
+    state.hasPrev = state.prevCursors.length > 0;
   } catch (error) {
     state.error =
       error instanceof Error
@@ -34,6 +46,19 @@ async function loadUsers(): Promise<void> {
   } finally {
     state.loading = false;
   }
+}
+
+async function goNext(): Promise<void> {
+  if (!state.hasNext || !state.nextCursor) return;
+  state.prevCursors = [...state.prevCursors, state.currentCursor];
+  await loadPage(state.nextCursor);
+}
+
+async function goPrev(): Promise<void> {
+  if (state.prevCursors.length === 0) return;
+  const prev = state.prevCursors[state.prevCursors.length - 1];
+  state.prevCursors = state.prevCursors.slice(0, -1);
+  await loadPage(prev || undefined);
 }
 
 function startEdit(user: User): void {
@@ -70,7 +95,7 @@ async function submitForm(): Promise<void> {
     }
 
     resetForm();
-    await loadUsers();
+    await loadPage(state.currentCursor || undefined);
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "No se pudo guardar el usuario";
@@ -90,7 +115,7 @@ async function deleteUser(id: number): Promise<void> {
     if (state.editingId === id) {
       resetForm();
     }
-    await loadUsers();
+    await loadPage(state.currentCursor || undefined);
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "No se pudo eliminar el usuario";
@@ -105,7 +130,7 @@ function formatTimestamp(date?: string): string {
 }
 
 onMounted(() => {
-  void loadUsers();
+  void loadPage();
 });
 </script>
 
@@ -202,6 +227,23 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <button
+            class="btn btn-outline-secondary"
+            :disabled="!state.hasPrev || state.loading"
+            @click="goPrev"
+          >
+            Anterior
+          </button>
+          <button
+            class="btn btn-outline-secondary"
+            :disabled="!state.hasNext || state.loading"
+            @click="goNext"
+          >
+            Siguiente
+          </button>
+        </div>
       </div>
 
       <div v-else-if="!state.loading" class="text-center text-muted">

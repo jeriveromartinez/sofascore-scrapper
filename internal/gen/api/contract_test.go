@@ -59,6 +59,8 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"UpdatePlaybackRequest":      false,
 		"PlaybackLog":                false,
 		"PlaybackLogList":            false,
+		"CursorPageInfo":             false,
+		"UserPage":                   false,
 		"EventsList":                 false,
 		"EventStats":                 false,
 		"TopEventsResponse":          false,

@@ -58,6 +58,16 @@ message UserWriteRequest {
   string password = 2;
 }
 
+message CursorPageInfo {
+  string next_cursor = 1;
+  bool has_more = 2;
+}
+
+message UserPage {
+  repeated User data = 1;
+  CursorPageInfo page = 2;
+}
+
 // ========== Domains ==========
 
 message Domain {

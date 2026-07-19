@@ -2,7 +2,7 @@
 // versions:
 //   protoc-gen-ts_proto  v2.11.5
 //   protoc               v4.24.3
-// source: api.proto
+// source: proto/api.proto
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
@@ -57,6 +57,16 @@ export interface UserList {
 export interface UserWriteRequest {
   email: string;
   password: string;
+}
+
+export interface CursorPageInfo {
+  nextCursor: string;
+  hasMore: boolean;
+}
+
+export interface UserPage {
+  data: User[];
+  page: CursorPageInfo | undefined;
 }
 
 export interface Domain {
@@ -1060,6 +1070,168 @@ export const UserWriteRequest: MessageFns<UserWriteRequest> = {
     const message = createBaseUserWriteRequest();
     message.email = object.email ?? "";
     message.password = object.password ?? "";
+    return message;
+  },
+};
+
+function createBaseCursorPageInfo(): CursorPageInfo {
+  return { nextCursor: "", hasMore: false };
+}
+
+export const CursorPageInfo: MessageFns<CursorPageInfo> = {
+  encode(message: CursorPageInfo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.nextCursor !== "") {
+      writer.uint32(10).string(message.nextCursor);
+    }
+    if (message.hasMore !== false) {
+      writer.uint32(16).bool(message.hasMore);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CursorPageInfo {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCursorPageInfo();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.nextCursor = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.hasMore = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CursorPageInfo {
+    return {
+      nextCursor: isSet(object.nextCursor)
+        ? globalThis.String(object.nextCursor)
+        : isSet(object.next_cursor)
+        ? globalThis.String(object.next_cursor)
+        : "",
+      hasMore: isSet(object.hasMore)
+        ? globalThis.Boolean(object.hasMore)
+        : isSet(object.has_more)
+        ? globalThis.Boolean(object.has_more)
+        : false,
+    };
+  },
+
+  toJSON(message: CursorPageInfo): unknown {
+    const obj: any = {};
+    if (message.nextCursor !== "") {
+      obj.nextCursor = message.nextCursor;
+    }
+    if (message.hasMore !== false) {
+      obj.hasMore = message.hasMore;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CursorPageInfo>, I>>(base?: I): CursorPageInfo {
+    return CursorPageInfo.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CursorPageInfo>, I>>(object: I): CursorPageInfo {
+    const message = createBaseCursorPageInfo();
+    message.nextCursor = object.nextCursor ?? "";
+    message.hasMore = object.hasMore ?? false;
+    return message;
+  },
+};
+
+function createBaseUserPage(): UserPage {
+  return { data: [], page: undefined };
+}
+
+export const UserPage: MessageFns<UserPage> = {
+  encode(message: UserPage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      User.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UserPage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUserPage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(User.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UserPage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => User.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: UserPage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => User.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UserPage>, I>>(base?: I): UserPage {
+    return UserPage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UserPage>, I>>(object: I): UserPage {
+    const message = createBaseUserPage();
+    message.data = object.data?.map((e) => User.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
     return message;
   },
 };

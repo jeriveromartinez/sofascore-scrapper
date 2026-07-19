@@ -3,6 +3,7 @@ import {
   StatusMessage,
   User as ProtoUserMessage,
   UserList,
+  UserPage,
   UserWriteRequest,
 } from "../../proto/api";
 import type {
@@ -10,6 +11,7 @@ import type {
   StatusResponse,
   UpdateUserPayload,
   User,
+  UserPageResponse,
 } from "./models";
 
 export class UsersApiService extends BaseApiService {
@@ -20,6 +22,18 @@ export class UsersApiService extends BaseApiService {
   async getAllUsers(): Promise<User[]> {
     const response = await this.get("", UserList);
     return response.users;
+  }
+
+  async getUserPage(
+    cursor?: string,
+    limit?: number,
+  ): Promise<UserPageResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    const url = qs ? `/page?${qs}` : "/page";
+    return this.get(url, UserPage);
   }
 
   async getUser(id: number): Promise<User> {
