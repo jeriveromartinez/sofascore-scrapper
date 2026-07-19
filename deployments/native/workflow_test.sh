@@ -17,17 +17,56 @@ reject() {
   fi
 }
 
+require_immutable_actions() {
+  local line
+  local reference
+  while IFS= read -r line; do
+    reference=${line#*uses: }
+    reference=${reference%% *}
+    [[ "$reference" =~ @[0-9a-f]{40}$ ]] || {
+      echo "mutable deploy workflow action: $reference" >&2
+      exit 1
+    }
+  done < <(grep -E 'uses: [^[:space:]]+@' "$workflow")
+}
+
 require 'workflow_run:'
 require 'workflows: [CI]'
 require 'branches: [main]'
 require "github.event.workflow_run.conclusion == 'success'"
+require "github.event.workflow_run.event == 'push'"
+require 'github.event.workflow_run.head_repository.full_name == github.repository'
 require 'github.event.workflow_run.head_sha'
+require 'actions: read'
+require 'verify:'
+require 'name: Verify deployment eligibility'
+require 'runs-on: ubuntu-latest'
+require 'sha: ${{ steps.revision.outputs.sha }}'
+require 'GH_TOKEN: ${{ github.token }}'
+require '[[ "$GITHUB_REF" == "refs/heads/main" ]]'
+require 'Authorization: Bearer $GH_TOKEN'
+require 'actions/workflows/ci.yml/runs'
+require 'head_sha=$sha'
+require 'branch=main'
+require 'event=push'
+require 'status=success'
+require '.head_sha == $sha'
+require '.status == "completed"'
+require '.conclusion == "success"'
+require 'needs: verify'
+require "needs.verify.result == 'success'"
+require 'ref: ${{ needs.verify.outputs.sha }}'
 require 'runs-on: [self-hosted, iptv]'
 require 'cancel-in-progress: false'
 require 'deployments/native/deploy.sh build/iptv web/dist'
 require 'systemctl --user show iptv.service'
+require 'uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4'
+require 'uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5'
+require 'uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4'
+require_immutable_actions
 reject 'docker/'
 reject 'CONTAINER_REGISTRY'
 reject 'REGISTRY_PASSWORD'
+reject 'ref: ${{ steps.revision.outputs.sha }}'
 
 echo 'deploy workflow contract passed'

@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -15,22 +16,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy to production
+  verify:
+    name: Verify deployment eligibility
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
-    runs-on: [self-hosted, iptv]
-    environment:
-      name: production
-    timeout-minutes: 30
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
 
     steps:
       - name: Select validated revision
         id: revision
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
@@ -46,9 +49,39 @@ jobs:
             echo "Invalid deployment SHA: $sha" >&2
             exit 1
           }
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            runs=$(curl --fail-with-body --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&branch=main&event=push&status=success&per_page=100")
+            jq -e --arg sha "$sha" '
+              any(.workflow_runs[];
+                .head_sha == $sha and
+                .event == "push" and
+                .status == "completed" and
+                .conclusion == "success"
+              )
+            ' <<<"$runs" >/dev/null || {
+              echo "No successful completed CI push run found for main SHA $sha" >&2
+              exit 1
+            }
+          fi
+
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Deploying validated revision $sha"
 
+  deploy:
+    name: Deploy to production
+    needs: verify
+    if: needs.verify.result == 'success' && needs.verify.outputs.sha != ''
+    runs-on: [self-hosted, iptv]
+    environment:
+      name: production
+    timeout-minutes: 30
+
+    steps:
       - name: Install base dependencies
         shell: bash
         run: |
@@ -69,17 +102,17 @@ jobs:
             sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ steps.revision.outputs.sha }}
+          ref: ${{ needs.verify.outputs.sha }}
           clean: true
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
