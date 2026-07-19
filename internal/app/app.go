@@ -27,6 +27,7 @@ type App struct {
 	Redis     *goredis.Client
 	ready     atomic.Bool
 	batchSize int
+	concur    int
 }
 
 func (a *App) IsReady() bool {
@@ -61,6 +62,7 @@ func New(cfg config.Config) (*App, error) {
 		SQL:       sqlDB,
 		Redis:     redisClient,
 		batchSize: cfg.ScrapeBatchSize,
+		concur:    cfg.ScrapeConcurrency,
 	}
 	app.ready.Store(true)
 
@@ -81,7 +83,7 @@ func New(cfg config.Config) (*App, error) {
 }
 
 func (a *App) Run(ctx context.Context) error {
-	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize)
+	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur)
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo)
 
 	group, ctx := errgroup.WithContext(ctx)

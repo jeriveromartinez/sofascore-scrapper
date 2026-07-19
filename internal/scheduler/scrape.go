@@ -8,48 +8,17 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 )
 
-func scrape(svc *scraper.Service, sport string, date time.Time) {
-	svc.Scrape(sport, date)
-}
-
-func scrapeCountry(svc *scraper.Service, countryCode string) {
-	svc.ScrapeCountry(countryCode)
-}
-
-func scrapeToday(svc *scraper.Service, date time.Time) {
-	for _, sport := range scraper.GET_SPORTS() {
-		scrape(svc, sport, date)
-	}
-	for _, country := range scraper.GET_COUNTRIES() {
-		scrapeCountry(svc, country)
-	}
-}
-
-func scrapeNext7Days(svc *scraper.Service) {
-	now := time.Now()
-	for _, sport := range scraper.GET_SPORTS() {
-		for i := 1; i <= 7; i++ {
-			scrape(svc, sport, now.Add(time.Duration(i)*24*time.Hour))
-		}
-	}
-}
-
-func startScrape(ctx context.Context, scrapeSvc interface{}, wg *sync.WaitGroup) {
-	svc, ok := scrapeSvc.(*scraper.Service)
-	if !ok || svc == nil {
-		return
-	}
-
+func startScrape(ctx context.Context, svc *scraper.Service, wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		scrapeToday(svc, time.Now())
+		svc.ScrapeToday(ctx, time.Now())
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		scrapeNext7Days(svc)
+		svc.ScrapeNext7Days(ctx)
 	}()
 
 	wg.Add(1)
@@ -62,7 +31,7 @@ func startScrape(ctx context.Context, scrapeSvc interface{}, wg *sync.WaitGroup)
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				scrape(svc, scraper.FOOTBALL, time.Now())
+				svc.Scrape(ctx, scraper.FOOTBALL, time.Now())
 			}
 		}
 	}()
@@ -89,7 +58,7 @@ func startScrape(ctx context.Context, scrapeSvc interface{}, wg *sync.WaitGroup)
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Until(next)):
-				scrapeNext7Days(svc)
+				svc.ScrapeNext7Days(ctx)
 			}
 		}
 	}()

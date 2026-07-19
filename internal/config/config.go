@@ -38,14 +38,15 @@ type HTTP struct {
 }
 
 type Config struct {
-	APIAddr          string
-	JWTSecret        string
-	APKStoragePath   string
-	ImageStoragePath string
-	Database         Database
-	Redis            Redis
-	HTTP             HTTP
-	ScrapeBatchSize  int
+	APIAddr           string
+	JWTSecret         string
+	APKStoragePath    string
+	ImageStoragePath  string
+	Database          Database
+	Redis             Redis
+	HTTP              HTTP
+	ScrapeBatchSize   int
+	ScrapeConcurrency int
 }
 
 func Load() (Config, error) {
@@ -59,7 +60,8 @@ func Load() (Config, error) {
 		JWTSecret:        secret,
 		APKStoragePath:   getEnv("APK_STORAGE_PATH", "./apk_storage"),
 		ImageStoragePath: getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
-		ScrapeBatchSize:  getInt("SCRAPE_BATCH_SIZE", 500),
+		ScrapeBatchSize:   getInt("SCRAPE_BATCH_SIZE", 500),
+		ScrapeConcurrency: getInt("SCRAPE_CONCURRENCY", 8),
 		Database: Database{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "3306"),
