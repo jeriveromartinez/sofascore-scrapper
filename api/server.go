@@ -9,7 +9,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/api/web"
 )
 
-func Start(addr string) {
+func NewRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(common.CorsMiddleware(), gin.Logger(), gin.Recovery())
 
@@ -35,8 +35,12 @@ func Start(addr string) {
 
 	web.RegisterDashboardRoutes(router)
 
+	return router
+}
+
+func Start(addr string) {
 	log.Printf("API server listening on %s", addr)
-	if err := router.Run(addr); err != nil {
+	if err := NewRouter().Run(addr); err != nil {
 		log.Fatalf("API server error: %v", err)
 	}
 }
