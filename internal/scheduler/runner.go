@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -13,10 +14,11 @@ type Job func(context.Context) error
 
 type Runner struct {
 	locker redisplatform.Locker
+	logger *slog.Logger
 }
 
-func NewRunner(locker redisplatform.Locker) *Runner {
-	return &Runner{locker: locker}
+func NewRunner(locker redisplatform.Locker, logger *slog.Logger) *Runner {
+	return &Runner{locker: locker, logger: logger}
 }
 
 func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, job Job) error {

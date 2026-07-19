@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
@@ -21,17 +21,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func requestID() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id := c.GetHeader("X-Request-ID")
-		if id == "" {
-			id = uuid.New().String()
-		}
-		c.Header("X-Request-ID", id)
-		c.Next()
-	}
-}
-
 func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService) *gin.Engine {
 	if cfg.ScrapeBatchSize <= 0 {
 		cfg.ScrapeBatchSize = 500
@@ -39,10 +28,17 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	router := gin.New()
 
 	router.Use(gin.Recovery())
-	router.Use(requestID())
+	router.Use(server.RequestID())
 	router.Use(server.BodyLimit())
 	router.Use(server.CORS())
-	router.Use(gin.Logger())
+	router.Use(server.SlogLogger())
+
+	healthChecker := server.NewHealthChecker()
+	healthChecker.Register("database", func(ctx context.Context) error { return db.WithContext(ctx).Exec("SELECT 1").Error })
+	healthChecker.Register("redis", func(ctx context.Context) error { return redisClient.Ping(ctx).Err() })
+
+	router.GET("/health/live", healthChecker.LivenessHandler())
+	router.GET("/health/ready", healthChecker.ReadinessHandler())
 
 	rl := server.RateLimit(redisClient)
 
@@ -146,13 +142,13 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logger *slog.Logger) (*scraper.Service, *reporting.AggregationRepository) {
 	client, err := scraper.NewClient(scraper.ClientConfig{})
 	if err != nil {
 		panic("scraper: failed to create client: " + err.Error())
 	}
 	eventsRepo := events.NewRepository(db)
-	scrapeSvc, err := scraper.NewService(eventsRepo, client, batchSize, concurrency)
+	scrapeSvc, err := scraper.NewService(eventsRepo, client, batchSize, concurrency, logger)
 	if err != nil {
 		panic("scraper: failed to create service: " + err.Error())
 	}

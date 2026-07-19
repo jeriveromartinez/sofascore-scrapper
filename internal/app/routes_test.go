@@ -19,6 +19,8 @@ func TestRouteCompatibility(t *testing.T) {
 		got[route.Method+" "+route.Path] = true
 	}
 	for _, want := range []string{
+		"GET /health/live",
+		"GET /health/ready",
 		"GET /api/app/v1/update",
 		"GET /api/app/v1/apk/download/:token",
 		"GET /api/app/v1/current-events",
@@ -84,7 +86,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 60 {
-		t.Fatalf("got %d routes, want 60", len(got))
+	if len(got) != 62 {
+		t.Fatalf("got %d routes, want 62", len(got))
 	}
 }
