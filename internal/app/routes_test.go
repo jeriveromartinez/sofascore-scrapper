@@ -39,22 +39,28 @@ func TestRouteCompatibility(t *testing.T) {
 		"PUT /api/web/v1/users/:id",
 		"DELETE /api/web/v1/users/:id",
 		"GET /api/web/v1/events",
+		"GET /api/web/v1/events/page",
 		"GET /api/web/v1/devices",
+		"GET /api/web/v1/devices/page",
 		"GET /api/web/v1/devices/all",
 		"PUT /api/web/v1/devices",
 		"GET /api/web/v1/playback",
+		"GET /api/web/v1/playback/page",
 		"GET /api/web/v1/stats/top-events",
 		"POST /api/web/v1/apk/upload",
 		"POST /api/web/v1/apk/upload/chunk",
 		"POST /api/web/v1/apk/upload/assemble",
 		"GET /api/web/v1/apk/versions",
+		"GET /api/web/v1/apk/versions/page",
 		"PUT /api/web/v1/apk/:id",
 		"GET /api/web/v1/tournaments",
+		"GET /api/web/v1/tournaments/page",
 		"GET /api/web/v1/tournaments/:id",
 		"POST /api/web/v1/tournaments",
 		"PUT /api/web/v1/tournaments/:id",
 		"DELETE /api/web/v1/tournaments/:id",
 		"GET /api/web/v1/device-tournaments",
+		"GET /api/web/v1/device-tournaments/page",
 		"GET /api/web/v1/device-tournaments/:deviceId",
 		"POST /api/web/v1/device-tournaments",
 		"DELETE /api/web/v1/device-tournaments",
@@ -63,6 +69,7 @@ func TestRouteCompatibility(t *testing.T) {
 		"POST /api/web/v1/global-tournament-config",
 		"DELETE /api/web/v1/global-tournament-config/:tournamentId",
 		"GET /api/web/v1/domains",
+		"GET /api/web/v1/domains/page",
 		"GET /api/web/v1/domains/:id",
 		"POST /api/web/v1/domains",
 		"PUT /api/web/v1/domains/:id",
@@ -72,7 +79,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 48 {
-		t.Fatalf("got %d routes, want 48", len(got))
+	if len(got) != 55 {
+		t.Fatalf("got %d routes, want 55", len(got))
 	}
 }
