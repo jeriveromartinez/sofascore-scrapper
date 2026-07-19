@@ -39,7 +39,8 @@ make_fixture() {
   cat > "$bin/systemctl" <<'SYSTEMCTL'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$SYSTEMCTL_LOG"
-if [[ "$*" == "--user restart iptv.service" && -n "${SERVICE_STATE_LOG:-}" ]]; then
+if [[ ("$*" == "--user restart iptv.service" || "$*" == "--user --no-block restart iptv.service") \
+  && -n "${SERVICE_STATE_LOG:-}" ]]; then
   printf '%s|%s\n' \
     "$(<"$DEPLOY_ROOT/iptv")" \
     "$(<"$DEPLOY_ROOT/web/dist/index.html")" >> "$SERVICE_STATE_LOG"
@@ -164,6 +165,140 @@ test_interruptions_restore_previous_release() {
   done
 }
 
+test_signal_after_exchange_syscall_restores_previous_release() {
+  make_fixture exchange-signal-race
+  local case_dir="$tmp/exchange-signal-race"
+  local output
+  local output_file="$case_dir/output.log"
+  local status
+
+  cat > "$case_dir/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+printf '200'
+CURL
+  chmod +x "$case_dir/bin/curl"
+
+  cat > "$case_dir/bin/python-exchange-signal" <<'PYTHON'
+#!/usr/bin/env python3
+import os
+import runpy
+import signal
+import sys
+import time
+
+helper = sys.argv[1]
+sys.argv = sys.argv[1:]
+try:
+    runpy.run_path(helper, run_name="__main__")
+except SystemExit as error:
+    if error.code not in (None, 0):
+        raise
+
+signal_file = os.environ["SIGNAL_SENT_FILE"]
+if not os.path.exists(signal_file):
+    open(signal_file, "w", encoding="utf-8").close()
+    os.kill(os.getppid(), signal.SIGTERM)
+    time.sleep(0.2)
+PYTHON
+  chmod +x "$case_dir/bin/python-exchange-signal"
+
+  set +e
+  DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    SERVICE_STATE_LOG="$case_dir/service-state.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
+    PYTHON_BIN="$case_dir/bin/python-exchange-signal" \
+    SIGNAL_SENT_FILE="$case_dir/signal.sent" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha" >"$output_file" 2>&1
+  status=$?
+  set -e
+  output=$(<"$output_file")
+
+  [[ "$status" -eq 143 ]] || fail "post-exchange TERM exited $status instead of 143: $output"
+  grep -Fq 'deployment interrupted by TERM; restoring previous release' <<<"$output" || fail "post-exchange TERM did not report rollback"
+  assert_content old-binary "$case_dir/root/iptv"
+  assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ $(tail -n 1 "$case_dir/service-state.log") == 'old-binary|old-dashboard' ]] || fail "post-exchange TERM did not restore service state"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "post-exchange TERM left unsafe exchange state"
+}
+
+test_signal_rollback_is_fast_nonblocking_and_skips_health() {
+  make_fixture fast-signal
+  local case_dir="$tmp/fast-signal"
+  local output
+  local output_file="$case_dir/output.log"
+  local status
+  local elapsed
+
+  cat > "$case_dir/bin/systemctl" <<'SYSTEMCTL'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$SYSTEMCTL_LOG"
+if [[ "$*" == "--user restart iptv.service" && ! -e "$SIGNAL_SENT_FILE" ]]; then
+  touch "$SIGNAL_SENT_FILE"
+  kill -TERM "$PPID"
+  exit 0
+fi
+if [[ "$*" == "--user --no-block restart iptv.service" ]]; then
+  printf '%s|%s\n' \
+    "$(<"$DEPLOY_ROOT/iptv")" \
+    "$(<"$DEPLOY_ROOT/web/dist/index.html")" >> "$SERVICE_STATE_LOG"
+  kill -INT "$PPID"
+  kill -TERM "$PPID"
+  exit 0
+fi
+if [[ "$*" == "--user is-active --quiet iptv.service" ]]; then
+  exit 0
+fi
+exit 0
+SYSTEMCTL
+  chmod +x "$case_dir/bin/systemctl"
+
+  cat > "$case_dir/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+touch "$CURL_CALLED_FILE"
+sleep 11
+exit 1
+CURL
+  chmod +x "$case_dir/bin/curl"
+
+  SECONDS=0
+  set +e
+  timeout --signal=TERM --kill-after=1s 9s env \
+    DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    SERVICE_STATE_LOG="$case_dir/service-state.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    CURL_CALLED_FILE="$case_dir/curl.called" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
+    SIGNAL_SENT_FILE="$case_dir/signal.sent" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha" >"$output_file" 2>&1
+  status=$?
+  set -e
+  elapsed=$SECONDS
+  output=$(<"$output_file")
+
+  [[ "$status" -eq 143 ]] || fail "fast signal rollback exited $status instead of 143 after ${elapsed}s: $output"
+  ((elapsed < 9)) || fail "signal rollback exceeded runner grace window"
+  grep -Fq -- '--user --no-block restart iptv.service' "$case_dir/systemctl.log" || fail "signal rollback did not queue a no-block restart"
+  [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 1 ]] || fail "signal rollback performed a blocking recovery restart"
+  [[ ! -e "$case_dir/curl.called" ]] || fail "signal rollback waited for readiness"
+  assert_content old-binary "$case_dir/root/iptv"
+  assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ $(<"$case_dir/service-state.log") == 'old-binary|old-dashboard' ]] || fail "fast signal rollback did not restore service state"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "fast signal rollback left exchanged state"
+}
+
 test_stale_before_mutation_does_not_change_production() {
   make_fixture stale-before
   local case_dir="$tmp/stale-before"
@@ -252,6 +387,7 @@ CURL
 
   assert_content new-binary "$case_dir/root/iptv"
   assert_content new-dashboard "$case_dir/root/web/dist/index.html"
+  [[ $(<"$case_dir/root/web/dist/.iptv-release-sha") == "$expected_sha:"* ]] || fail "published dashboard marker is not unique and tied to the selected SHA"
   assert_content old-binary "$case_dir/root/.deploy/previous/iptv"
   assert_content old-dashboard "$case_dir/root/.deploy/previous/web-dist/index.html"
   grep -Fq -- '--user restart iptv.service' "$case_dir/systemctl.log" || fail "service was not restarted"
@@ -423,6 +559,8 @@ tests=(
   test_failed_health_restores_previous_release
   test_rollback_operation_failure_is_reported
   test_interruptions_restore_previous_release
+  test_signal_after_exchange_syscall_restores_previous_release
+  test_signal_rollback_is_fast_nonblocking_and_skips_health
   test_stale_before_mutation_does_not_change_production
   test_main_advance_during_publication_restores_previous_release
 )

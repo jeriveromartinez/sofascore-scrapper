@@ -26,13 +26,19 @@ previous_dir="$state_dir/previous"
 current_binary="$deploy_root/iptv"
 current_dashboard="$deploy_root/web/dist"
 atomic_exchange="$script_dir/atomic_exchange.py"
+release_marker=.iptv-release-sha
+release_id=
 rollback_required=false
-dashboard_exchanged=false
+
+live_dashboard_is_selected() {
+  [[ -f "$current_dashboard/$release_marker" ]] \
+    && [[ $(<"$current_dashboard/$release_marker") == "$release_id" ]]
+}
 
 cleanup() {
   rm -rf "$stage_dir" "$state_dir/previous.new"
   rm -f "$deploy_root/.iptv.new" "$deploy_root/.iptv.rollback"
-  if [[ "$dashboard_exchanged" == false ]]; then
+  if [[ "$rollback_required" == false ]] || ! live_dashboard_is_selected; then
     rm -rf "$deploy_root/web/.dist.new"
   fi
   rm -rf "$deploy_root/web/.dist.rollback"
@@ -66,21 +72,25 @@ require_current_main() {
   }
 }
 
-restore_previous() {
+restore_artifacts() {
   [[ -f "$previous_dir/iptv" ]] || return 1
   [[ -d "$previous_dir/web-dist" ]] || return 1
 
-  if [[ "$dashboard_exchanged" == true ]]; then
+  if live_dashboard_is_selected; then
+    [[ -d "$deploy_root/web/.dist.new" ]] || return 1
     "$python_bin" "$atomic_exchange" "$current_dashboard" "$deploy_root/web/.dist.new" || return
-    dashboard_exchanged=false
   fi
   install -m 0755 "$previous_dir/iptv" "$deploy_root/.iptv.rollback" || return
   mv -f "$deploy_root/.iptv.rollback" "$current_binary" || return
+}
+
+restore_previous() {
+  restore_artifacts || return
   "$systemctl_bin" --user restart "$service_name" || return
   wait_for_health || return
 }
 
-finish_failure() {
+finish_error() {
   local status=$1
   local reason=$2
   trap - ERR
@@ -100,15 +110,36 @@ finish_failure() {
   exit "$status"
 }
 
+finish_signal() {
+  local signal=$1
+  local status=$2
+  trap - ERR
+  trap '' INT TERM
+
+  if [[ "$rollback_required" == true ]]; then
+    echo "deployment interrupted by $signal; restoring previous release" >&2
+    if restore_artifacts \
+      && "$systemctl_bin" --user --no-block restart "$service_name"; then
+      echo "previous release restored; service restart queued" >&2
+    else
+      echo "rollback failed; inspect $service_name immediately" >&2
+    fi
+  else
+    echo "deployment interrupted by $signal" >&2
+  fi
+
+  exit "$status"
+}
+
 handle_error() {
   local status=$?
-  finish_failure "$status" "deployment failed"
+  finish_error "$status" "deployment failed"
 }
 
 handle_signal() {
   local signal=$1
   local status=$2
-  finish_failure "$status" "deployment interrupted by $signal"
+  finish_signal "$signal" "$status"
 }
 
 trap cleanup EXIT
@@ -128,12 +159,15 @@ command -v "$git_bin" >/dev/null || { echo "missing required command: $git_bin" 
 [[ -d "$deploy_root/image_storage" && -w "$deploy_root/image_storage" ]] || { echo "image storage is not writable" >&2; exit 1; }
 [[ -f "$current_binary" ]] || { echo "current executable is missing" >&2; exit 1; }
 [[ -d "$current_dashboard" ]] || { echo "current dashboard is missing" >&2; exit 1; }
+IFS= read -r release_nonce < /proc/sys/kernel/random/uuid || { echo "cannot generate release marker" >&2; exit 1; }
+release_id="$expected_sha:$release_nonce"
 
 mkdir -p "$state_dir" "$deploy_root/web"
 rm -rf "$stage_dir" "$state_dir/previous.new"
 mkdir -p "$stage_dir" "$state_dir/previous.new"
 install -m 0755 "$source_binary" "$stage_dir/iptv"
 cp -a "$source_dashboard" "$stage_dir/web-dist"
+printf '%s\n' "$release_id" > "$stage_dir/web-dist/$release_marker"
 cp -a "$current_binary" "$state_dir/previous.new/iptv"
 cp -a "$current_dashboard" "$state_dir/previous.new/web-dist"
 rm -rf "$previous_dir"
@@ -146,11 +180,9 @@ require_current_main
 rollback_required=true
 mv -f "$deploy_root/.iptv.new" "$current_binary"
 "$python_bin" "$atomic_exchange" "$current_dashboard" "$deploy_root/web/.dist.new"
-dashboard_exchanged=true
 "$systemctl_bin" --user restart "$service_name"
 wait_for_health
 require_current_main
 rollback_required=false
-dashboard_exchanged=false
 
 echo "native deployment completed"

@@ -78,6 +78,12 @@ require '[[ "$remote_main_sha" == "$EXPECTED_SHA" ]]'
 require 'deployments/native/deploy.sh build/iptv web/dist "$EXPECTED_SHA"'
 require_deploy 'expected_sha=$3'
 require_deploy '"$git_bin" ls-remote --exit-code origin refs/heads/main'
+require_deploy 'release_marker='
+require_deploy '"$systemctl_bin" --user --no-block restart "$service_name"'
+if grep -Fq 'dashboard_exchanged=' "$deploy_script"; then
+  echo 'deploy script must observe dashboard publication from the filesystem' >&2
+  exit 1
+fi
 [[ $(grep -Ec '^require_current_main$' "$deploy_script") -eq 2 ]] || {
   echo 'deploy script must guard immediately before mutation and after readiness' >&2
   exit 1
