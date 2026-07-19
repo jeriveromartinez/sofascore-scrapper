@@ -3,13 +3,7 @@ package repository
 import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
-
-type EventStats struct {
-	SofaScoreEventId int64
-	ViewCount        int64
-}
 
 func playbackRepo() (*playback.Repository, error) {
 	db, err := database.GetDB()
@@ -49,19 +43,4 @@ func TotalCount() int64 {
 		return 0
 	}
 	return repo.TotalCount()
-}
-
-func GetTopEvents(limit int) ([]EventStats, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-	var stats []EventStats
-	result := db.Model(&models.PlaybackLog{}).
-		Select("content, count(*) as view_count").
-		Group("content").
-		Order("view_count desc").
-		Limit(limit).
-		Scan(&stats)
-	return stats, result.Error
 }

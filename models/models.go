@@ -3,6 +3,7 @@ package models
 import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 )
 
@@ -24,8 +25,8 @@ func Migrate() {
 		&apk.ApkVersion{},
 		&DeviceTournament{},
 		&GlobalTournamentConfig{},
-		&ContentStat{},
-		&CrashReport{},
+		&reporting.ContentStat{},
+		&reporting.CrashReport{},
 	); err != nil {
 		panic(err)
 	}

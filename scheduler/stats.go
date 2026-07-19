@@ -3,7 +3,8 @@ package scheduler
 import (
 	"log"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/repository"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"github.com/robfig/cron/v3"
 )
 
@@ -11,7 +12,12 @@ func startStats() {
 	c := cron.New()
 
 	_, err := c.AddFunc("1 0 * * *", func() {
-		if err := repository.GenerateDailyEventStats(); err != nil {
+		db, dbErr := database.GetDB()
+		if dbErr != nil {
+			log.Printf("failed to get DB for daily stats: %v", dbErr)
+			return
+		}
+		if err := reporting.NewAggregationRepository(db).GenerateDaily(); err != nil {
 			log.Printf("failed to generate daily event stats: %v", err)
 		}
 	})
@@ -20,7 +26,12 @@ func startStats() {
 	}
 
 	_, err = c.AddFunc("10 0 1 * *", func() {
-		if err := repository.GenerateMonthlyEventStats(); err != nil {
+		db, dbErr := database.GetDB()
+		if dbErr != nil {
+			log.Printf("failed to get DB for monthly stats: %v", dbErr)
+			return
+		}
+		if err := reporting.NewAggregationRepository(db).GenerateMonthly(); err != nil {
 			log.Printf("failed to generate monthly event stats: %v", err)
 		}
 	})

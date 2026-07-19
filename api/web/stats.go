@@ -7,7 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/repository"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 )
 
 type StatsController struct {
@@ -24,10 +25,16 @@ func handleTopEvents(c *gin.Context) {
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 		limit = l
 	}
-	stats, err := repository.GetTopEvents(limit)
+	db, err := database.GetDB()
 	if err != nil {
 		common.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	common.RespondProto(c, http.StatusOK, &pb.TopEventsResponse{Stats: common.EventStatsToProto(stats)})
+	stats, err := reporting.NewRepository(db).GetTopEvents(limit)
+	if err != nil {
+		common.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	common.RespondProto(c, http.StatusOK, &pb.TopEventsResponse{Stats: reporting.EventStatsToProto(stats)})
 }
+
