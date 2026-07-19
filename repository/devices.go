@@ -1,78 +1,54 @@
 package repository
 
 import (
-	"time"
-
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	internalDevices "github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 )
 
-func RegisterDevice(userID *uint, token, platform, name, version string) (*models.Device, error) {
+func devicesRepo() (*internalDevices.Repository, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	device := &models.Device{
-		UserID:   userID,
-		Token:    token,
-		Platform: platform,
-		Name:     name,
-		Version:  version,
-		LastSeen: time.Now().Unix(),
+	return internalDevices.NewRepository(db), nil
+}
+
+func RegisterDevice(userID *uint, token, platform, name, version string) (*internalDevices.Device, error) {
+	repo, err := devicesRepo()
+	if err != nil {
+		return nil, err
 	}
-	result := db.Where(models.Device{Token: token}).Assign(models.Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version}).FirstOrCreate(device)
-	return device, result.Error
+	return repo.Register(userID, token, platform, name, version)
 }
 
 func UpdateDeviceLastSeen(token string) error {
-	db, err := database.GetDB()
+	repo, err := devicesRepo()
 	if err != nil {
 		return err
 	}
-	return db.Model(&models.Device{}).Where("token = ?", token).Update("last_seen", time.Now().Unix()).Error
+	return repo.UpdateLastSeen(token)
 }
 
-func GetDevices(page, limit uint) ([]models.Device, int64, error) {
-	db, err := database.GetDB()
+func GetDevices(page, limit uint) ([]internalDevices.Device, int64, error) {
+	repo, err := devicesRepo()
 	if err != nil {
 		return nil, 0, err
 	}
-	var devices []models.Device
-	var total int64
-	if err := db.Model(&models.Device{}).Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	offset := (page - 1) * limit
-	result := db.Offset(int(offset)).Limit(int(limit)).Preload("Manager").Find(&devices)
-	return devices, total, result.Error
+	return repo.GetDevices(page, limit)
 }
 
-func GetAllDevices() ([]models.Device, error) {
-	db, err := database.GetDB()
+func GetAllDevices() ([]internalDevices.Device, error) {
+	repo, err := devicesRepo()
 	if err != nil {
 		return nil, err
 	}
-	var devices []models.Device
-	result := db.Preload("Manager").Find(&devices)
-	return devices, result.Error
+	return repo.GetAll()
 }
 
-func UpdateDevice(token, platform, name string) (*models.Device, error) {
-	db, err := database.GetDB()
+func UpdateDevice(token, platform, name string) (*internalDevices.Device, error) {
+	repo, err := devicesRepo()
 	if err != nil {
 		return nil, err
 	}
-
-	var device models.Device
-	if err := db.Where("token = ?", token).First(&device).Error; err != nil {
-		return nil, err
-	}
-
-	device.Platform = platform
-	device.Name = name
-	if err := db.Save(&device).Error; err != nil {
-		return nil, err
-	}
-
-	return &device, nil
+	return repo.Update(token, platform, name)
 }

@@ -2,66 +2,53 @@ package repository
 
 import (
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	internalTournaments "github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 )
 
-// GetAllTournaments retrieves all tournaments
-func GetAllTournaments() ([]models.Tournament, error) {
+func tournamentsRepo() (*internalTournaments.Repository, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	var tournaments []models.Tournament
-	result := db.Order("slug ASC").Find(&tournaments)
-	return tournaments, result.Error
+	return internalTournaments.NewRepository(db), nil
 }
 
-// GetTournamentByID retrieves a tournament by ID
-func GetTournamentByID(id uint) (*models.Tournament, error) {
-	db, err := database.GetDB()
+func GetAllTournaments() ([]internalTournaments.Tournament, error) {
+	repo, err := tournamentsRepo()
 	if err != nil {
 		return nil, err
 	}
-	var tournament models.Tournament
-	result := db.First(&tournament, id)
-	return &tournament, result.Error
+	return repo.GetAll()
 }
 
-// CreateTournament creates a new tournament
-func CreateTournament(name, slug string) (*models.Tournament, error) {
-	db, err := database.GetDB()
+func GetTournamentByID(id uint) (*internalTournaments.Tournament, error) {
+	repo, err := tournamentsRepo()
 	if err != nil {
 		return nil, err
 	}
-	tournament := &models.Tournament{
-		Name: name,
-		Slug: slug,
-	}
-	result := db.Create(tournament)
-	return tournament, result.Error
+	return repo.GetByID(id)
 }
 
-// UpdateTournament updates an existing tournament
-func UpdateTournament(id uint, name, slug string) (*models.Tournament, error) {
-	db, err := database.GetDB()
+func CreateTournament(name, slug string) (*internalTournaments.Tournament, error) {
+	repo, err := tournamentsRepo()
 	if err != nil {
 		return nil, err
 	}
-	var tournament models.Tournament
-	if err := db.First(&tournament, id).Error; err != nil {
-		return nil, err
-	}
-	tournament.Name = name
-	tournament.Slug = slug
-	result := db.Save(&tournament)
-	return &tournament, result.Error
+	return repo.Create(name, slug)
 }
 
-// DeleteTournament deletes a tournament
+func UpdateTournament(id uint, name, slug string) (*internalTournaments.Tournament, error) {
+	repo, err := tournamentsRepo()
+	if err != nil {
+		return nil, err
+	}
+	return repo.Update(id, name, slug)
+}
+
 func DeleteTournament(id uint) error {
-	db, err := database.GetDB()
+	repo, err := tournamentsRepo()
 	if err != nil {
 		return err
 	}
-	return db.Delete(&models.Tournament{}, id).Error
+	return repo.Delete(id)
 }
