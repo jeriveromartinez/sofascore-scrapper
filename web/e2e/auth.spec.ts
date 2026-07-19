@@ -87,7 +87,9 @@ test.describe("Auth flow", () => {
     accessToken = resp.data!.token;
   });
 
-  test("authenticated user can create invitation", async ({ request }) => {
+  test("non-admin user cannot create invitation", async ({ request }) => {
+    // accessToken belongs to a regular (non-bootstrap) account; invitation
+    // creation is admin-only, so it must be rejected with 403.
     expect(accessToken).toBeTruthy();
     const resp = await api.post<InvitationResponse, CreateInvitationRequest>(
       request,
@@ -97,9 +99,7 @@ test.describe("Auth flow", () => {
       InvitationResponse,
       { Authorization: `Bearer ${accessToken}` },
     );
-    expect(resp.status, `invite error: ${resp.error}`).toBe(201);
-    expect(resp.data!.token).toBeTruthy();
-    expect(resp.data!.expiresAt).toBeGreaterThan(Date.now() / 1000);
+    expect(resp.status).toBe(403);
   });
 
   test("unauth cannot create invitation", async ({ request }) => {
