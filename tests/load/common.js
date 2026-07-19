@@ -185,6 +185,52 @@ export function decodeProtoStringField(buffer, targetField) {
   return "";
 }
 
+// Reads a varint (int/uint) field by number from a binary protobuf body.
+export function decodeProtoVarintField(buffer, targetField) {
+  const bytes = new Uint8Array(buffer);
+  let i = 0;
+  while (i < bytes.length) {
+    let tag = 0;
+    let shift = 0;
+    while (i < bytes.length) {
+      const b = bytes[i++];
+      tag |= (b & 0x7f) << shift;
+      if ((b & 0x80) === 0) break;
+      shift += 7;
+    }
+    const fieldNum = tag >> 3;
+    const wireType = tag & 0x7;
+    if (wireType === 0) {
+      let val = 0;
+      shift = 0;
+      while (i < bytes.length) {
+        const b = bytes[i++];
+        val += (b & 0x7f) * Math.pow(2, shift);
+        if ((b & 0x80) === 0) break;
+        shift += 7;
+      }
+      if (fieldNum === targetField) return val;
+    } else if (wireType === 2) {
+      let len = 0;
+      shift = 0;
+      while (i < bytes.length) {
+        const b = bytes[i++];
+        len |= (b & 0x7f) << shift;
+        if ((b & 0x80) === 0) break;
+        shift += 7;
+      }
+      i += len;
+    } else if (wireType === 5) {
+      i += 4;
+    } else if (wireType === 1) {
+      i += 8;
+    } else {
+      break;
+    }
+  }
+  return 0;
+}
+
 export function encodeAuthRequest(email, password, invitationToken) {
   return toArrayBuffer(
     concatByteArrays(
@@ -193,6 +239,14 @@ export function encodeAuthRequest(email, password, invitationToken) {
       protoStringField(3, invitationToken)
     )
   );
+}
+
+export function encodeCreateInvitationRequest(ttlSeconds) {
+  return toArrayBuffer(protoVarintField(1, ttlSeconds));
+}
+
+export function encodeSetUserRoleRequest(role) {
+  return toArrayBuffer(protoStringField(1, role));
 }
 
 export function encodeRegisterRequest(token, platform, name, version) {

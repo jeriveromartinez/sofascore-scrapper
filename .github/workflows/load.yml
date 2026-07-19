@@ -21,7 +21,7 @@ on:
 
 jobs:
   smoke:
-    name: Smoke (2 min)
+    name: Load test (PR)
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'smoke')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -65,8 +65,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq k6
 
-      - name: Run smoke
-        run: k6 run --summary-export=k6-smoke-summary.json tests/load/smoke.js
+      - name: Run load test
+        run: k6 run --summary-export=k6-pr-load-summary.json tests/load/pr-load.js
         env:
           BASE_URL: http://localhost:8080
           INVITE_TOKEN: ${{ steps.invite.outputs.token }}
@@ -75,8 +75,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: k6-smoke-summary
-          path: k6-smoke-summary.json
+          name: k6-pr-load-summary
+          path: k6-pr-load-summary.json
           retention-days: 7
 
       - name: Stop test stack
