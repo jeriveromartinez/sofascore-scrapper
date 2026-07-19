@@ -3,6 +3,7 @@ package apk
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,11 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-)
-
-const (
-	maxChunkSize   = 20 * 1024 * 1024
-	maxTotalChunks = 1000
+	"gorm.io/gorm"
 )
 
 var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
@@ -58,6 +55,11 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 		return
 	}
 
+	if fileHeader.Size > MaxDirectUpload {
+		server.RespondError(c, http.StatusBadRequest, "file size exceeds maximum allowed size (200 MiB)")
+		return
+	}
+
 	storagePath := StoragePath()
 	if err := os.MkdirAll(storagePath, 0o755); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "could not create storage directory")
@@ -77,6 +79,12 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 		return
 	}
 
+	if err := ValidatePackageName(apkInfo.PackageName); err != nil {
+		_ = os.Remove(tmpPath)
+		server.RespondError(c, http.StatusBadRequest, "invalid package name: "+err.Error())
+		return
+	}
+
 	version := c.PostForm("version")
 	if version == "" {
 		version = apkInfo.VersionName
@@ -92,9 +100,19 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 	}
 
 	fileName := fmt.Sprintf("%s-%s.apk", apkInfo.PackageName, version)
-	destPath := filepath.Join(storagePath, fileName)
-	if err := os.Rename(tmpPath, destPath); err != nil {
+	destPath, err := SafeDestination(storagePath, fileName)
+	if err != nil {
 		_ = os.Remove(tmpPath)
+		server.RespondError(c, http.StatusBadRequest, "invalid destination path: "+err.Error())
+		return
+	}
+
+	if err := PublishNoReplace(tmpPath, destPath); err != nil {
+		_ = os.Remove(tmpPath)
+		if errors.Is(err, os.ErrExist) {
+			server.RespondError(c, http.StatusConflict, "APK version already exists")
+			return
+		}
 		server.RespondError(c, http.StatusInternalServerError, "could not finalize file")
 		return
 	}
@@ -140,7 +158,7 @@ func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
 	}
 
 	totalChunks, err := strconv.Atoi(c.PostForm("total_chunks"))
-	if err != nil || totalChunks <= 0 || totalChunks > maxTotalChunks {
+	if err != nil || totalChunks <= 0 || totalChunks > MaxTotalChunks {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
 		return
 	}
@@ -156,7 +174,7 @@ func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
 		return
 	}
 
-	if fileHeader.Size > maxChunkSize {
+	if fileHeader.Size > MaxChunkSize {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "chunk size exceeds maximum allowed size"})
 		return
 	}
@@ -195,7 +213,7 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	}
 
 	totalChunks, err := strconv.Atoi(c.PostForm("total_chunks"))
-	if err != nil || totalChunks <= 0 || totalChunks > maxTotalChunks {
+	if err != nil || totalChunks <= 0 || totalChunks > MaxTotalChunks {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid total_chunks"})
 		return
 	}
@@ -208,12 +226,24 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 		return
 	}
 
+	var aggregateSize int64
 	for i := 0; i < totalChunks; i++ {
 		chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", i))
-		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
+		info, err := os.Stat(chunkPath)
+		if os.IsNotExist(err) {
 			c.JSON(http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("chunk %d is missing", i)})
 			return
 		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("could not stat chunk %d", i)})
+			return
+		}
+		aggregateSize += info.Size()
+	}
+
+	if aggregateSize > MaxAggregate {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("aggregate chunk size %d exceeds maximum allowed size (200 MiB)", aggregateSize)})
+		return
 	}
 
 	storagePath := StoragePath()
@@ -263,6 +293,12 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 		return
 	}
 
+	if err := ValidatePackageName(apkInfo.PackageName); err != nil {
+		_ = os.Remove(tmpPath)
+		server.RespondError(c, http.StatusBadRequest, "invalid package name: "+err.Error())
+		return
+	}
+
 	version := c.PostForm("version")
 	if version == "" {
 		version = apkInfo.VersionName
@@ -280,10 +316,20 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	}
 
 	fileName := fmt.Sprintf("%s-%s.apk", apkInfo.PackageName, version)
-	destPath := filepath.Join(storagePath, fileName)
-	if err := os.Rename(tmpPath, destPath); err != nil {
+	destPath, err := SafeDestination(storagePath, fileName)
+	if err != nil {
 		_ = os.Remove(tmpPath)
-		server.RespondError(c, http.StatusInternalServerError, "could not finalize file")
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid destination path: " + err.Error()})
+		return
+	}
+
+	if err := PublishNoReplace(tmpPath, destPath); err != nil {
+		_ = os.Remove(tmpPath)
+		if errors.Is(err, os.ErrExist) {
+			c.JSON(http.StatusConflict, map[string]string{"error": "APK version already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not finalize file"})
 		return
 	}
 
@@ -341,6 +387,10 @@ func (h *AdminHandler) handleUpdateVersion(c *gin.Context) {
 
 	err = h.repo.UpdateURL(uint(id), akpData.Url)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			server.RespondError(c, http.StatusNotFound, "APK version not found")
+			return
+		}
 		server.RespondError(c, http.StatusInternalServerError, "could not update APK URL: "+err.Error())
 		return
 	}
