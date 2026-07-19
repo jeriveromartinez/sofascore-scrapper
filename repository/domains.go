@@ -2,90 +2,53 @@ package repository
 
 import (
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/models"
+	internalDomains "github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 )
 
-func GetAllDomains() ([]models.Domain, error) {
+func domainsRepo() (*internalDomains.Repository, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
-
-	domains := make([]models.Domain, 0)
-	result := db.Preload("User").Order("domain ASC").Find(&domains)
-	return domains, result.Error
+	return internalDomains.NewRepository(db), nil
 }
 
-func GetDomainByID(id uint) (*models.Domain, error) {
-	db, err := database.GetDB()
+func GetAllDomains() ([]internalDomains.Domain, error) {
+	repo, err := domainsRepo()
 	if err != nil {
 		return nil, err
 	}
-
-	var domain models.Domain
-	result := db.Preload("User").First(&domain, id)
-	return &domain, result.Error
+	return repo.GetAll()
 }
 
-func CreateDomain(domain string, userID uint) (*models.Domain, error) {
-	db, err := database.GetDB()
+func GetDomainByID(id uint) (*internalDomains.Domain, error) {
+	repo, err := domainsRepo()
 	if err != nil {
 		return nil, err
 	}
-
-	if err := db.First(&models.User{}, userID).Error; err != nil {
-		return nil, err
-	}
-
-	record := &models.Domain{Domain: domain, UserID: userID}
-	if err := db.Create(record).Error; err != nil {
-		return nil, err
-	}
-
-	if err := db.Preload("User").First(record, record.ID).Error; err != nil {
-		return nil, err
-	}
-
-	return record, nil
+	return repo.GetByID(id)
 }
 
-func UpdateDomain(id uint, domain string, userID uint) (*models.Domain, error) {
-	db, err := database.GetDB()
+func CreateDomain(domain string, userID uint) (*internalDomains.Domain, error) {
+	repo, err := domainsRepo()
 	if err != nil {
 		return nil, err
 	}
+	return repo.Create(domain, userID)
+}
 
-	var record models.Domain
-	if err := db.First(&record, id).Error; err != nil {
+func UpdateDomain(id uint, domain string, userID uint) (*internalDomains.Domain, error) {
+	repo, err := domainsRepo()
+	if err != nil {
 		return nil, err
 	}
-
-	if err := db.First(&models.User{}, userID).Error; err != nil {
-		return nil, err
-	}
-
-	record.Domain = domain
-	record.UserID = userID
-	if err := db.Save(&record).Error; err != nil {
-		return nil, err
-	}
-
-	if err := db.Preload("User").First(&record, record.ID).Error; err != nil {
-		return nil, err
-	}
-
-	return &record, nil
+	return repo.Update(id, domain, userID)
 }
 
 func DeleteDomain(id uint) error {
-	db, err := database.GetDB()
+	repo, err := domainsRepo()
 	if err != nil {
 		return err
 	}
-
-	if err := db.First(&models.Domain{}, id).Error; err != nil {
-		return err
-	}
-
-	return db.Delete(&models.Domain{}, id).Error
+	return repo.Delete(id)
 }

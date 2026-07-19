@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
@@ -17,89 +21,39 @@ func FormatTime(t time.Time) string {
 }
 
 func UserToProto(u models.User) *pb.User {
-	return &pb.User{
-		Id:        uint32(u.ID),
-		CreatedAt: FormatTime(u.CreatedAt),
-		UpdatedAt: FormatTime(u.UpdatedAt),
-		Email:     u.Email,
-	}
+	return users.UserToProto(u)
 }
 
-func UsersToProto(users []models.User) []*pb.User {
-	result := make([]*pb.User, 0, len(users))
-	for _, user := range users {
-		result = append(result, UserToProto(user))
-	}
-	return result
+func UsersToProto(us []models.User) []*pb.User {
+	return users.UsersToProto(us)
 }
 
 func DomainToProto(d models.Domain) *pb.Domain {
-	p := &pb.Domain{
-		Id:        uint32(d.ID),
-		CreatedAt: FormatTime(d.CreatedAt),
-		UpdatedAt: FormatTime(d.UpdatedAt),
-		Domain:    d.Domain,
-		UserId:    uint32(d.UserID),
-	}
-	if d.User != nil {
-		p.User = UserToProto(*d.User)
-	}
-	return p
+	return domains.DomainToProto(d)
 }
 
-func DomainsToProto(domains []models.Domain) []*pb.Domain {
-	result := make([]*pb.Domain, 0, len(domains))
-	for _, domain := range domains {
-		result = append(result, DomainToProto(domain))
-	}
-	return result
+func DomainsToProto(ds []models.Domain) []*pb.Domain {
+	return domains.DomainsToProto(ds)
 }
 
 func DeviceToProto(d models.Device) *pb.Device {
-	return &pb.Device{
-		Id:        uint32(d.ID),
-		CreatedAt: FormatTime(d.CreatedAt),
-		UpdatedAt: FormatTime(d.UpdatedAt),
-		Token:     d.Token,
-		Platform:  d.Platform,
-		Name:      d.Name,
-		Version:   d.Version,
-		LastSeen:  d.LastSeen,
-	}
+	return devices.DeviceToProto(d)
 }
 
-func DevicesToProto(devices []models.Device) []*pb.Device {
-	result := make([]*pb.Device, 0, len(devices))
-	for _, d := range devices {
-		result = append(result, DeviceToProto(d))
-	}
-	return result
+func DevicesToProto(ds []models.Device) []*pb.Device {
+	return devices.DevicesToProto(ds)
 }
 
 func TournamentToProto(t models.Tournament) *pb.Tournament {
-	return &pb.Tournament{
-		Id:        uint32(t.ID),
-		CreatedAt: FormatTime(t.CreatedAt),
-		UpdatedAt: FormatTime(t.UpdatedAt),
-		Name:      t.Name,
-		Slug:      t.Slug,
-		Region:    t.Region,
-	}
+	return tournaments.TournamentToProto(t)
 }
 
 func TournamentPtrToProto(t *models.Tournament) *pb.Tournament {
-	if t == nil {
-		return nil
-	}
-	return TournamentToProto(*t)
+	return tournaments.TournamentPtrToProto(t)
 }
 
 func TournamentsToProto(ts []models.Tournament) []*pb.Tournament {
-	result := make([]*pb.Tournament, 0, len(ts))
-	for _, t := range ts {
-		result = append(result, TournamentToProto(t))
-	}
-	return result
+	return tournaments.TournamentsToProto(ts)
 }
 
 func TeamPtrToProto(t *models.Team) *pb.Team {
@@ -172,61 +126,27 @@ func PlaybackListToProto(pl []*models.PlaybackLog, total int64) *pb.PlaybackLogL
 }
 
 func GlobalConfigToProto(g models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {
-	return &pb.GlobalTournamentConfig{
-		Id:           uint32(g.ID),
-		CreatedAt:    FormatTime(g.CreatedAt),
-		UpdatedAt:    FormatTime(g.UpdatedAt),
-		TournamentId: uint32(g.TournamentID),
-		Tournament:   TournamentPtrToProto(g.Tournament),
-	}
+	return tournaments.GlobalConfigToProto(g)
 }
 
 func GlobalConfigPtrToProto(g *models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {
-	if g == nil {
-		return nil
-	}
-	return GlobalConfigToProto(*g)
+	return tournaments.GlobalConfigPtrToProto(g)
 }
 
 func GlobalConfigsToProto(gs []models.GlobalTournamentConfig) []*pb.GlobalTournamentConfig {
-	result := make([]*pb.GlobalTournamentConfig, 0, len(gs))
-	for _, g := range gs {
-		result = append(result, GlobalConfigToProto(g))
-	}
-	return result
+	return tournaments.GlobalConfigsToProto(gs)
 }
 
 func GlobalConfigPtrsToProto(gs []*models.GlobalTournamentConfig) []*pb.GlobalTournamentConfig {
-	result := make([]*pb.GlobalTournamentConfig, 0, len(gs))
-	for _, g := range gs {
-		result = append(result, GlobalConfigPtrToProto(g))
-	}
-	return result
+	return tournaments.GlobalConfigPtrsToProto(gs)
 }
 
 func DeviceTournamentToProto(dt models.DeviceTournament) *pb.DeviceTournament {
-	p := &pb.DeviceTournament{
-		Id:           uint32(dt.ID),
-		CreatedAt:    FormatTime(dt.CreatedAt),
-		UpdatedAt:    FormatTime(dt.UpdatedAt),
-		DeviceId:     uint32(dt.DeviceID),
-		TournamentId: uint32(dt.TournamentID),
-	}
-	if dt.Tournament != nil {
-		p.Tournament = TournamentToProto(*dt.Tournament)
-	}
-	if dt.Device != nil {
-		p.Device = DeviceToProto(*dt.Device)
-	}
-	return p
+	return tournaments.DeviceTournamentToProto(dt)
 }
 
 func DeviceTournamentsToProto(dts []models.DeviceTournament) []*pb.DeviceTournament {
-	result := make([]*pb.DeviceTournament, 0, len(dts))
-	for _, dt := range dts {
-		result = append(result, DeviceTournamentToProto(dt))
-	}
-	return result
+	return tournaments.DeviceTournamentsToProto(dts)
 }
 
 func EventStatsToProto(stats []repository.EventStats) []*pb.EventStats {

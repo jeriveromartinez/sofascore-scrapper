@@ -3,173 +3,98 @@ package repository
 import (
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/models"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
+	internalUsers "github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	internalAuth "github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 )
 
-func GetAllUsers() ([]models.User, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-
-	var users []models.User
-	result := db.Order("email ASC").Find(&users)
-	return users, result.Error
+func usersRepo() (*internalUsers.Repository, error) {
+	return internalUsers.NewUserRepository()
 }
 
-func CreateUser(email, password string) (*models.User, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-	hash, err := hashPassword(password)
-	if err != nil {
-		return nil, err
-	}
-	user := &models.User{Email: email, Password: string(hash)}
-	result := db.Create(user)
-	return user, result.Error
+func authRepo() (*internalAuth.AuthRepository, error) {
+	return internalAuth.NewAuthRepositoryFromEnv()
 }
 
-func GetUserByEmail(email string) (*models.User, error) {
-	db, err := database.GetDB()
+func GetAllUsers() ([]internalUsers.User, error) {
+	repo, err := usersRepo()
 	if err != nil {
 		return nil, err
 	}
-	var user models.User
-	result := db.Where("email = ?", email).First(&user)
-	return &user, result.Error
+	return repo.GetAll()
 }
 
-func GetUserByID(id uint) (*models.User, error) {
-	db, err := database.GetDB()
+func CreateUser(email, password string) (*internalUsers.User, error) {
+	repo, err := usersRepo()
 	if err != nil {
 		return nil, err
 	}
-	var user models.User
-	result := db.First(&user, id)
-	return &user, result.Error
+	return repo.Create(email, password)
 }
 
-func UpdateUser(id uint, email, password string) (*models.User, error) {
-	db, err := database.GetDB()
+func GetUserByEmail(email string) (*internalUsers.User, error) {
+	repo, err := usersRepo()
 	if err != nil {
 		return nil, err
 	}
+	return repo.GetByEmail(email)
+}
 
-	var user models.User
-	if err := db.First(&user, id).Error; err != nil {
+func GetUserByID(id uint) (*internalUsers.User, error) {
+	repo, err := usersRepo()
+	if err != nil {
 		return nil, err
 	}
+	return repo.GetByID(id)
+}
 
-	user.Email = email
-	if password != "" {
-		hash, err := hashPassword(password)
-		if err != nil {
-			return nil, err
-		}
-		user.Password = hash
+func UpdateUser(id uint, email, password string) (*internalUsers.User, error) {
+	repo, err := usersRepo()
+	if err != nil {
+		return nil, err
 	}
-
-	result := db.Save(&user)
-	return &user, result.Error
+	return repo.Update(id, email, password)
 }
 
 func DeleteUser(id uint) error {
-	db, err := database.GetDB()
+	repo, err := usersRepo()
 	if err != nil {
 		return err
 	}
-
-	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&models.User{}, id).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Model(&models.Device{}).
-			Where("user_id = ?", id).
-			Updates(map[string]any{"user_id": nil}).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Where("user_id = ?", id).Delete(&models.Domain{}).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Where("user_id = ?", id).Delete(&models.RefreshToken{}).Error; err != nil {
-			return err
-		}
-
-		return tx.Delete(&models.User{}, id).Error
-	})
+	return repo.Delete(id)
 }
 
 func SaveRefreshToken(userID uint, tokenID string, expiresAt time.Time) error {
-	db, err := database.GetDB()
+	repo, err := authRepo()
 	if err != nil {
 		return err
 	}
-
-	refreshToken := &models.RefreshToken{
-		UserID:    userID,
-		TokenID:   tokenID,
-		ExpiresAt: expiresAt,
-	}
-
-	return db.Create(refreshToken).Error
+	return repo.SaveRefreshToken(userID, tokenID, expiresAt)
 }
 
 func IsRefreshTokenActive(userID uint, tokenID string) (bool, error) {
-	db, err := database.GetDB()
+	repo, err := authRepo()
 	if err != nil {
 		return false, err
 	}
-
-	var refreshToken models.RefreshToken
-	result := db.Where("user_id = ? AND token_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, tokenID, time.Now()).First(&refreshToken)
-	if result.Error != nil {
-		return false, result.Error
-	}
-
-	return true, nil
+	return repo.IsRefreshTokenActive(userID, tokenID)
 }
 
 func RevokeRefreshToken(userID uint, tokenID string) error {
-	db, err := database.GetDB()
+	repo, err := authRepo()
 	if err != nil {
 		return err
 	}
-
-	now := time.Now()
-	return db.Model(&models.RefreshToken{}).
-		Where("user_id = ? AND token_id = ? AND revoked_at IS NULL", userID, tokenID).
-		Update("revoked_at", &now).Error
+	return repo.RevokeRefreshToken(userID, tokenID)
 }
 
 func RevokeAllRefreshTokens(userID uint) error {
-	db, err := database.GetDB()
+	repo, err := authRepo()
 	if err != nil {
 		return err
 	}
-
-	now := time.Now()
-	return db.Model(&models.RefreshToken{}).
-		Where("user_id = ? AND revoked_at IS NULL", userID).
-		Update("revoked_at", &now).Error
+	return repo.RevokeAllRefreshTokens(userID)
 }
 
-func CheckPassword(user *models.User, password string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) == nil
-}
-
-func hashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-
-	return string(hash), nil
+func CheckPassword(user *internalUsers.User, password string) bool {
+	return internalAuth.CheckPassword(user.Password, password)
 }
