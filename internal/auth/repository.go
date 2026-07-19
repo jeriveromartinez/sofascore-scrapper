@@ -3,7 +3,6 @@ package auth
 import (
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"gorm.io/gorm"
 )
 
@@ -47,10 +46,4 @@ func (r *AuthRepository) RevokeAllRefreshTokens(userID uint) error {
 		Update("revoked_at", &now).Error
 }
 
-func NewAuthRepositoryFromEnv() (*AuthRepository, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-	return NewAuthRepository(db), nil
-}
+

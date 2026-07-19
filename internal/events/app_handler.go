@@ -10,6 +10,10 @@ import (
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 )
 
+type AppHandlerDeps struct {
+	AppMiddleware gin.HandlerFunc
+}
+
 type AppHandler struct {
 	repo *Repository
 }
@@ -18,8 +22,8 @@ func NewAppHandler(repo *Repository) *AppHandler {
 	return &AppHandler{repo: repo}
 }
 
-func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup) {
-	group.GET("/current-events", devices.AppMiddleware(), h.handleGetCurrentEvents)
+func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup, deps AppHandlerDeps) {
+	group.GET("/current-events", deps.AppMiddleware, h.handleGetCurrentEvents)
 }
 
 func (h *AppHandler) handleGetCurrentEvents(c *gin.Context) {

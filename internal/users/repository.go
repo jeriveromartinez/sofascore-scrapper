@@ -1,7 +1,6 @@
 package users
 
 import (
-	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -81,14 +80,6 @@ func (r *Repository) Delete(id uint) error {
 
 		return tx.Delete(&User{}, id).Error
 	})
-}
-
-func NewUserRepository() (*Repository, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-	return NewRepository(db), nil
 }
 
 func hashPassword(password string) (string, error) {
