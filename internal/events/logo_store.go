@@ -1,17 +1,51 @@
 package events
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	utls "github.com/refraction-networking/utls"
 )
 
 const defaultStoragePath = "./image_storage"
 
 const imageDownloadTimeout = 10 * time.Second
+
+const imageBrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+
+func newImageHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{DialTLSContext: dialImageTLS},
+		Timeout:   imageDownloadTimeout,
+	}
+}
+
+func dialImageTLS(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, _, _ := net.SplitHostPort(addr)
+	raw, err := (&net.Dialer{Timeout: imageDownloadTimeout}).DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn := utls.UClient(raw, &utls.Config{
+		ServerName: host,
+		MinVersion: tls.VersionTLS12,
+		MaxVersion: tls.VersionTLS12,
+		NextProtos: []string{"http/1.1"},
+	}, utls.HelloRandomized)
+	if err := conn.HandshakeContext(ctx); err != nil {
+		_ = raw.Close()
+		return nil, err
+	}
+	return conn, nil
+}
 
 func StoragePath() string {
 	if p := os.Getenv("IMAGE_STORAGE_PATH"); p != "" {
@@ -40,8 +74,16 @@ func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
 		return "", fmt.Errorf("could not create image storage directory: %w", err)
 	}
 
-	client := &http.Client{Timeout: imageDownloadTimeout}
-	resp, err := client.Get(sourceURL)
+	client := newImageHTTPClient()
+	req, err := http.NewRequest(http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("could not create image request: %w", err)
+	}
+	req.Header.Set("User-Agent", imageBrowserUserAgent)
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	req.Header.Set("Referer", "https://www.sofascore.com/")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("could not download image: %w", err)
 	}
