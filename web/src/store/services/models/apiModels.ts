@@ -17,6 +17,8 @@ import type {
   SofaScoreEvent as ProtoSofaScoreEvent,
   Team as ProtoTeam,
   Tournament as ProtoTournament,
+  TournamentList,
+  TournamentPage as ProtoTournamentPage,
   TournamentRequest,
   SetTournamentIdsRequest,
   AssignTournamentRequest,
@@ -34,6 +36,7 @@ export type DeviceResponse = DeviceList;
 export type UsersResponse = UserList;
 export type UserPageResponse = ProtoUserPage;
 export type DomainPageResponse = ProtoDomainPage;
+export type TournamentPageResponse = ProtoTournamentPage;
 export type DomainsResponse = DomainList;
 
 export interface EventsQuery {
