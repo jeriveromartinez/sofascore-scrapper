@@ -1,9 +1,5 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 
-type User struct {
-	gorm.Model
-	Email    string `gorm:"uniqueIndex;not null"`
-	Password string `gorm:"not null"`
-}
+type User = users.User
