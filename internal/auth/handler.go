@@ -126,29 +126,33 @@ func (h *AuthHandler) handleRefresh(c *gin.Context) {
 		return
 	}
 
-	active, err := h.authRepo.IsRefreshTokenActive(userID, claims.ID)
-	if err != nil || !active {
-		server.RespondError(c, http.StatusUnauthorized, "invalid token")
-		return
-	}
-
 	user, err := h.userRepo.GetByID(userID)
 	if err != nil {
 		server.RespondError(c, http.StatusUnauthorized, "user not found")
 		return
 	}
 
-	if err := h.authRepo.RevokeRefreshToken(userID, claims.ID); err != nil {
-		server.RespondError(c, http.StatusInternalServerError, "token refresh failed")
-		return
-	}
-
-	response, err := h.buildAuthResponse(user.ID, user.Email)
+	accessToken, newRefreshToken, newTokenID, expiresAt, err := h.tokens.GenerateTokenPair(user.ID, user.Email)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "token generation failed")
 		return
 	}
-	server.RespondProto(c, http.StatusOK, response)
+
+	if err := h.authRepo.RotateRefreshToken(c.Request.Context(), user.ID, claims.ID, newTokenID, expiresAt); err != nil {
+		if err == ErrInvalidRefreshToken {
+			server.RespondError(c, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		server.RespondError(c, http.StatusInternalServerError, "token refresh failed")
+		return
+	}
+
+	server.RespondProto(c, http.StatusOK, &pb.AuthResponse{
+		Id:           uint32(user.ID),
+		Email:        user.Email,
+		Token:        accessToken,
+		RefreshToken: newRefreshToken,
+	})
 }
 
 func (h *AuthHandler) handleLogout(c *gin.Context) {
