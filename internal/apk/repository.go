@@ -90,7 +90,14 @@ func (r *Repository) ListAll() ([]ApkVersion, error) {
 }
 
 func (r *Repository) UpdateURL(id uint, url string) error {
-	return r.db.Model(&ApkVersion{}).Where("id = ?", id).Update("ip_tv_url", url).Error
+	result := r.db.Model(&ApkVersion{}).Where("id = ?", id).Update("iptv_url", url)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *Repository) IncrementDownloadCount(id uint) error {
