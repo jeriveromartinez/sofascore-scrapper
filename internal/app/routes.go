@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
+func NewRouter(db *gorm.DB, cfg config.Config, tokens *auth.TokenService) *gin.Engine {
 	router := gin.New()
 	router.Use(server.CORS(), gin.Logger(), gin.Recovery())
 
@@ -25,7 +25,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	webV1 := router.Group("/api/web/v1")
 
 	appMw := devices.AppMiddleware(db)
-	authMw := auth.AuthMiddleware()
+	authMw := auth.AuthMiddleware(tokens)
 
 	apkRepo := apk.NewRepository(db)
 	apkAppHandler := apk.NewAppHandler(apkRepo)
@@ -71,7 +71,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	userHandler.RegisterUserRoutes(webV1, users.HandlerDeps{AuthMiddleware: authMw})
 
 	authRepo := auth.NewAuthRepository(db)
-	authHandler := auth.NewAuthHandler(authRepo, userRepo)
+	authHandler := auth.NewAuthHandler(authRepo, userRepo, tokens)
 	authHandler.RegisterAuthRoutes(webV1)
 
 	tournamentRepo := tournaments.NewRepository(db)

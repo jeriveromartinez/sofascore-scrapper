@@ -3,12 +3,17 @@ package app
 import (
 	"testing"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 )
 
 func TestRouteCompatibility(t *testing.T) {
+	tokens, err := auth.NewTokenService("test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Config{JWTSecret: "test-secret"}
-	router := NewRouter(nil, cfg)
+	router := NewRouter(nil, cfg, tokens)
 	got := make(map[string]bool)
 	for _, route := range router.Routes() {
 		got[route.Method+" "+route.Path] = true

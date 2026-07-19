@@ -10,19 +10,20 @@ import (
 )
 
 type AuthHandler struct {
-	authRepo  *AuthRepository
-	userRepo  *users.Repository
+	authRepo *AuthRepository
+	userRepo *users.Repository
+	tokens   *TokenService
 }
 
-func NewAuthHandler(authRepo *AuthRepository, userRepo *users.Repository) *AuthHandler {
-	return &AuthHandler{authRepo: authRepo, userRepo: userRepo}
+func NewAuthHandler(authRepo *AuthRepository, userRepo *users.Repository, tokens *TokenService) *AuthHandler {
+	return &AuthHandler{authRepo: authRepo, userRepo: userRepo, tokens: tokens}
 }
 
 func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup) {
 	group.POST("/users/register", h.handleRegister)
 	group.POST("/users/login", h.handleLogin)
 	group.POST("/users/refresh", h.handleRefresh)
-	group.POST("/users/logout", AuthMiddleware(), h.handleLogout)
+	group.POST("/users/logout", AuthMiddleware(h.tokens), h.handleLogout)
 }
 
 func (h *AuthHandler) handleRegister(c *gin.Context) {
@@ -70,7 +71,7 @@ func (h *AuthHandler) handleRefresh(c *gin.Context) {
 		return
 	}
 
-	claims, err := ParseRefreshToken(refreshToken)
+	claims, err := h.tokens.ParseRefreshToken(refreshToken)
 	if err != nil {
 		server.RespondError(c, http.StatusUnauthorized, "invalid token")
 		return
@@ -116,7 +117,7 @@ func (h *AuthHandler) handleLogout(c *gin.Context) {
 
 	refreshToken := c.GetHeader("X-Refresh-Token")
 	if refreshToken != "" {
-		claims, err := ParseRefreshToken(refreshToken)
+		claims, err := h.tokens.ParseRefreshToken(refreshToken)
 		if err == nil {
 			refreshUserID, userErr := claims.UserID()
 			if userErr == nil && refreshUserID == userID {
@@ -139,7 +140,7 @@ func (h *AuthHandler) handleLogout(c *gin.Context) {
 }
 
 func (h *AuthHandler) buildAuthResponse(userID uint, email string) (*pb.AuthResponse, error) {
-	accessToken, refreshToken, tokenID, expiresAt, err := GenerateTokenPair(userID, email)
+	accessToken, refreshToken, tokenID, expiresAt, err := h.tokens.GenerateTokenPair(userID, email)
 	if err != nil {
 		return nil, err
 	}

@@ -3,14 +3,13 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 )
 
 const userIDKey = "userID"
@@ -28,26 +27,30 @@ type TokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-func getJWTSecret() []byte {
-	if s := os.Getenv("JWT_SECRET"); s != "" {
-		return []byte(s)
+type TokenService struct {
+	secret []byte
+	now    func() time.Time
+}
+
+func NewTokenService(secret string) (*TokenService, error) {
+	if strings.TrimSpace(secret) == "" {
+		return nil, config.ErrJWTSecretRequired
 	}
-	log.Println("WARNING: JWT_SECRET env var is not set; using insecure default. Set JWT_SECRET in production.")
-	return []byte("changeme-please-set-JWT_SECRET-env")
+	return &TokenService{secret: []byte(secret), now: time.Now}, nil
 }
 
-func GenerateAccessToken(userID uint, username string) (string, error) {
-	return generateToken(userID, username, accessTokenType, accessTokenTTL, "")
+func (ts *TokenService) GenerateAccessToken(userID uint, username string) (string, error) {
+	return ts.generateToken(userID, username, accessTokenType, accessTokenTTL, "")
 }
 
-func GenerateRefreshToken(userID uint, username string) (string, string, time.Time, error) {
+func (ts *TokenService) GenerateRefreshToken(userID uint, username string) (string, string, time.Time, error) {
 	tokenID, err := randomTokenID()
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
 
-	expiresAt := time.Now().Add(refreshTokenTTL)
-	token, err := generateToken(userID, username, refreshTokenType, refreshTokenTTL, tokenID)
+	expiresAt := ts.now().Add(refreshTokenTTL)
+	token, err := ts.generateToken(userID, username, refreshTokenType, refreshTokenTTL, tokenID)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -55,13 +58,13 @@ func GenerateRefreshToken(userID uint, username string) (string, string, time.Ti
 	return token, tokenID, expiresAt, nil
 }
 
-func GenerateTokenPair(userID uint, username string) (string, string, string, time.Time, error) {
-	accessToken, err := GenerateAccessToken(userID, username)
+func (ts *TokenService) GenerateTokenPair(userID uint, username string) (string, string, string, time.Time, error) {
+	accessToken, err := ts.GenerateAccessToken(userID, username)
 	if err != nil {
 		return "", "", "", time.Time{}, err
 	}
 
-	refreshToken, tokenID, expiresAt, err := GenerateRefreshToken(userID, username)
+	refreshToken, tokenID, expiresAt, err := ts.GenerateRefreshToken(userID, username)
 	if err != nil {
 		return "", "", "", time.Time{}, err
 	}
@@ -69,8 +72,12 @@ func GenerateTokenPair(userID uint, username string) (string, string, string, ti
 	return accessToken, refreshToken, tokenID, expiresAt, nil
 }
 
-func ParseRefreshToken(tokenStr string) (*TokenClaims, error) {
-	return parseToken(tokenStr, refreshTokenType)
+func (ts *TokenService) ParseAccessToken(tokenStr string) (*TokenClaims, error) {
+	return ts.parseToken(tokenStr, accessTokenType)
+}
+
+func (ts *TokenService) ParseRefreshToken(tokenStr string) (*TokenClaims, error) {
+	return ts.parseToken(tokenStr, refreshTokenType)
 }
 
 func ExtractBearerToken(c *gin.Context) (string, bool) {
@@ -98,8 +105,8 @@ func GetUserID(c *gin.Context) (uint, bool) {
 	return id, ok
 }
 
-func generateToken(userID uint, username, tokenType string, ttl time.Duration, tokenID string) (string, error) {
-	now := time.Now()
+func (ts *TokenService) generateToken(userID uint, username, tokenType string, ttl time.Duration, tokenID string) (string, error) {
+	now := ts.now()
 	claims := TokenClaims{
 		Username: username,
 		Type:     tokenType,
@@ -112,16 +119,16 @@ func generateToken(userID uint, username, tokenType string, ttl time.Duration, t
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(getJWTSecret())
+	return token.SignedString(ts.secret)
 }
 
-func parseToken(tokenStr, expectedType string) (*TokenClaims, error) {
+func (ts *TokenService) parseToken(tokenStr, expectedType string) (*TokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &TokenClaims{}, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
 		}
-		return getJWTSecret(), nil
-	})
+		return ts.secret, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil || !token.Valid {
 		return nil, jwt.ErrTokenInvalidClaims
 	}
