@@ -3201,6 +3201,474 @@ func (x *ApkVersion) GetUrl() string {
 	return ""
 }
 
+type UploadBeginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FileName      string                 `protobuf:"bytes,1,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	FileSize      int64                  `protobuf:"varint,2,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"`
+	TotalChunks   int32                  `protobuf:"varint,3,opt,name=total_chunks,json=totalChunks,proto3" json:"total_chunks,omitempty"`
+	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	Description   string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadBeginRequest) Reset() {
+	*x = UploadBeginRequest{}
+	mi := &file_api_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadBeginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadBeginRequest) ProtoMessage() {}
+
+func (x *UploadBeginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadBeginRequest.ProtoReflect.Descriptor instead.
+func (*UploadBeginRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *UploadBeginRequest) GetFileName() string {
+	if x != nil {
+		return x.FileName
+	}
+	return ""
+}
+
+func (x *UploadBeginRequest) GetFileSize() int64 {
+	if x != nil {
+		return x.FileSize
+	}
+	return 0
+}
+
+func (x *UploadBeginRequest) GetTotalChunks() int32 {
+	if x != nil {
+		return x.TotalChunks
+	}
+	return 0
+}
+
+func (x *UploadBeginRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *UploadBeginRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type UploadBeginResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UploadId         string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	MaxChunkSize     int32                  `protobuf:"varint,2,opt,name=max_chunk_size,json=maxChunkSize,proto3" json:"max_chunk_size,omitempty"`
+	MaxTotalChunks   int32                  `protobuf:"varint,3,opt,name=max_total_chunks,json=maxTotalChunks,proto3" json:"max_total_chunks,omitempty"`
+	MaxAggregateSize int64                  `protobuf:"varint,4,opt,name=max_aggregate_size,json=maxAggregateSize,proto3" json:"max_aggregate_size,omitempty"`
+	ExpiresAt        int32                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	ChunksReceived   int32                  `protobuf:"varint,7,opt,name=chunks_received,json=chunksReceived,proto3" json:"chunks_received,omitempty"`
+	BytesReceived    int64                  `protobuf:"varint,8,opt,name=bytes_received,json=bytesReceived,proto3" json:"bytes_received,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UploadBeginResponse) Reset() {
+	*x = UploadBeginResponse{}
+	mi := &file_api_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadBeginResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadBeginResponse) ProtoMessage() {}
+
+func (x *UploadBeginResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadBeginResponse.ProtoReflect.Descriptor instead.
+func (*UploadBeginResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *UploadBeginResponse) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *UploadBeginResponse) GetMaxChunkSize() int32 {
+	if x != nil {
+		return x.MaxChunkSize
+	}
+	return 0
+}
+
+func (x *UploadBeginResponse) GetMaxTotalChunks() int32 {
+	if x != nil {
+		return x.MaxTotalChunks
+	}
+	return 0
+}
+
+func (x *UploadBeginResponse) GetMaxAggregateSize() int64 {
+	if x != nil {
+		return x.MaxAggregateSize
+	}
+	return 0
+}
+
+func (x *UploadBeginResponse) GetExpiresAt() int32 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *UploadBeginResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *UploadBeginResponse) GetChunksReceived() int32 {
+	if x != nil {
+		return x.ChunksReceived
+	}
+	return 0
+}
+
+func (x *UploadBeginResponse) GetBytesReceived() int64 {
+	if x != nil {
+		return x.BytesReceived
+	}
+	return 0
+}
+
+type UploadStatusResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	UploadId       string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	Status         string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	TotalChunks    int32                  `protobuf:"varint,3,opt,name=total_chunks,json=totalChunks,proto3" json:"total_chunks,omitempty"`
+	ChunksReceived int32                  `protobuf:"varint,4,opt,name=chunks_received,json=chunksReceived,proto3" json:"chunks_received,omitempty"`
+	BytesReceived  int64                  `protobuf:"varint,5,opt,name=bytes_received,json=bytesReceived,proto3" json:"bytes_received,omitempty"`
+	ExpiresAt      int32                  `protobuf:"varint,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	FileName       string                 `protobuf:"bytes,7,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	FileSize       int64                  `protobuf:"varint,8,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *UploadStatusResponse) Reset() {
+	*x = UploadStatusResponse{}
+	mi := &file_api_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadStatusResponse) ProtoMessage() {}
+
+func (x *UploadStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadStatusResponse.ProtoReflect.Descriptor instead.
+func (*UploadStatusResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *UploadStatusResponse) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *UploadStatusResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *UploadStatusResponse) GetTotalChunks() int32 {
+	if x != nil {
+		return x.TotalChunks
+	}
+	return 0
+}
+
+func (x *UploadStatusResponse) GetChunksReceived() int32 {
+	if x != nil {
+		return x.ChunksReceived
+	}
+	return 0
+}
+
+func (x *UploadStatusResponse) GetBytesReceived() int64 {
+	if x != nil {
+		return x.BytesReceived
+	}
+	return 0
+}
+
+func (x *UploadStatusResponse) GetExpiresAt() int32 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *UploadStatusResponse) GetFileName() string {
+	if x != nil {
+		return x.FileName
+	}
+	return ""
+}
+
+func (x *UploadStatusResponse) GetFileSize() int64 {
+	if x != nil {
+		return x.FileSize
+	}
+	return 0
+}
+
+type UploadChunkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	ChunkIndex    int32                  `protobuf:"varint,2,opt,name=chunk_index,json=chunkIndex,proto3" json:"chunk_index,omitempty"`
+	Ok            bool                   `protobuf:"varint,3,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadChunkResponse) Reset() {
+	*x = UploadChunkResponse{}
+	mi := &file_api_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadChunkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadChunkResponse) ProtoMessage() {}
+
+func (x *UploadChunkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadChunkResponse.ProtoReflect.Descriptor instead.
+func (*UploadChunkResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *UploadChunkResponse) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *UploadChunkResponse) GetChunkIndex() int32 {
+	if x != nil {
+		return x.ChunkIndex
+	}
+	return 0
+}
+
+func (x *UploadChunkResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+type UploadCompleteResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version          string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	FileName         string                 `protobuf:"bytes,3,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	FileSize         int64                  `protobuf:"varint,4,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"`
+	Description      string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	PackageName      string                 `protobuf:"bytes,6,opt,name=package_name,json=packageName,proto3" json:"package_name,omitempty"`
+	VersionCode      int32                  `protobuf:"varint,7,opt,name=version_code,json=versionCode,proto3" json:"version_code,omitempty"`
+	MinSdkVersion    int32                  `protobuf:"varint,8,opt,name=min_sdk_version,json=minSdkVersion,proto3" json:"min_sdk_version,omitempty"`
+	TargetSdkVersion int32                  `protobuf:"varint,9,opt,name=target_sdk_version,json=targetSdkVersion,proto3" json:"target_sdk_version,omitempty"`
+	DownloadToken    string                 `protobuf:"bytes,10,opt,name=download_token,json=downloadToken,proto3" json:"download_token,omitempty"`
+	DownloadUrl      string                 `protobuf:"bytes,11,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"`
+	CreatedAt        string                 `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UploadCompleteResponse) Reset() {
+	*x = UploadCompleteResponse{}
+	mi := &file_api_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadCompleteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadCompleteResponse) ProtoMessage() {}
+
+func (x *UploadCompleteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadCompleteResponse.ProtoReflect.Descriptor instead.
+func (*UploadCompleteResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *UploadCompleteResponse) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *UploadCompleteResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *UploadCompleteResponse) GetFileName() string {
+	if x != nil {
+		return x.FileName
+	}
+	return ""
+}
+
+func (x *UploadCompleteResponse) GetFileSize() int64 {
+	if x != nil {
+		return x.FileSize
+	}
+	return 0
+}
+
+func (x *UploadCompleteResponse) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *UploadCompleteResponse) GetPackageName() string {
+	if x != nil {
+		return x.PackageName
+	}
+	return ""
+}
+
+func (x *UploadCompleteResponse) GetVersionCode() int32 {
+	if x != nil {
+		return x.VersionCode
+	}
+	return 0
+}
+
+func (x *UploadCompleteResponse) GetMinSdkVersion() int32 {
+	if x != nil {
+		return x.MinSdkVersion
+	}
+	return 0
+}
+
+func (x *UploadCompleteResponse) GetTargetSdkVersion() int32 {
+	if x != nil {
+		return x.TargetSdkVersion
+	}
+	return 0
+}
+
+func (x *UploadCompleteResponse) GetDownloadToken() string {
+	if x != nil {
+		return x.DownloadToken
+	}
+	return ""
+}
+
+func (x *UploadCompleteResponse) GetDownloadUrl() string {
+	if x != nil {
+		return x.DownloadUrl
+	}
+	return ""
+}
+
+func (x *UploadCompleteResponse) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
 var File_api_proto protoreflect.FileDescriptor
 
 const file_api_proto_rawDesc = "" +
@@ -3479,7 +3947,53 @@ const file_api_proto_rawDesc = "" +
 	"\n" +
 	"ApkVersion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03urlBEZCgithub.com/jeriveromartinez/sofascore-scrapper/internal/gen/api;apib\x06proto3"
+	"\x03url\x18\x02 \x01(\tR\x03url\"\xad\x01\n" +
+	"\x12UploadBeginRequest\x12\x1b\n" +
+	"\tfile_name\x18\x01 \x01(\tR\bfileName\x12\x1b\n" +
+	"\tfile_size\x18\x02 \x01(\x03R\bfileSize\x12!\n" +
+	"\ftotal_chunks\x18\x03 \x01(\x05R\vtotalChunks\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\"\xb7\x02\n" +
+	"\x13UploadBeginResponse\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12$\n" +
+	"\x0emax_chunk_size\x18\x02 \x01(\x05R\fmaxChunkSize\x12(\n" +
+	"\x10max_total_chunks\x18\x03 \x01(\x05R\x0emaxTotalChunks\x12,\n" +
+	"\x12max_aggregate_size\x18\x04 \x01(\x03R\x10maxAggregateSize\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\x05R\texpiresAt\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\x12'\n" +
+	"\x0fchunks_received\x18\a \x01(\x05R\x0echunksReceived\x12%\n" +
+	"\x0ebytes_received\x18\b \x01(\x03R\rbytesReceived\"\x97\x02\n" +
+	"\x14UploadStatusResponse\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12!\n" +
+	"\ftotal_chunks\x18\x03 \x01(\x05R\vtotalChunks\x12'\n" +
+	"\x0fchunks_received\x18\x04 \x01(\x05R\x0echunksReceived\x12%\n" +
+	"\x0ebytes_received\x18\x05 \x01(\x03R\rbytesReceived\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x06 \x01(\x05R\texpiresAt\x12\x1b\n" +
+	"\tfile_name\x18\a \x01(\tR\bfileName\x12\x1b\n" +
+	"\tfile_size\x18\b \x01(\x03R\bfileSize\"c\n" +
+	"\x13UploadChunkResponse\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1f\n" +
+	"\vchunk_index\x18\x02 \x01(\x05R\n" +
+	"chunkIndex\x12\x0e\n" +
+	"\x02ok\x18\x03 \x01(\bR\x02ok\"\xa3\x03\n" +
+	"\x16UploadCompleteResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1b\n" +
+	"\tfile_name\x18\x03 \x01(\tR\bfileName\x12\x1b\n" +
+	"\tfile_size\x18\x04 \x01(\x03R\bfileSize\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12!\n" +
+	"\fpackage_name\x18\x06 \x01(\tR\vpackageName\x12!\n" +
+	"\fversion_code\x18\a \x01(\x05R\vversionCode\x12&\n" +
+	"\x0fmin_sdk_version\x18\b \x01(\x05R\rminSdkVersion\x12,\n" +
+	"\x12target_sdk_version\x18\t \x01(\x05R\x10targetSdkVersion\x12%\n" +
+	"\x0edownload_token\x18\n" +
+	" \x01(\tR\rdownloadToken\x12!\n" +
+	"\fdownload_url\x18\v \x01(\tR\vdownloadUrl\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\f \x01(\tR\tcreatedAtBEZCgithub.com/jeriveromartinez/sofascore-scrapper/internal/gen/api;apib\x06proto3"
 
 var (
 	file_api_proto_rawDescOnce sync.Once
@@ -3493,7 +4007,7 @@ func file_api_proto_rawDescGZIP() []byte {
 	return file_api_proto_rawDescData
 }
 
-var file_api_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_api_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_api_proto_goTypes = []any{
 	(*ErrorResponse)(nil),              // 0: sofascore.ErrorResponse
 	(*StatusMessage)(nil),              // 1: sofascore.StatusMessage
@@ -3544,6 +4058,11 @@ var file_api_proto_goTypes = []any{
 	(*ApkUploadResponse)(nil),          // 46: sofascore.ApkUploadResponse
 	(*ApkUpdateCheckResponse)(nil),     // 47: sofascore.ApkUpdateCheckResponse
 	(*ApkVersion)(nil),                 // 48: sofascore.ApkVersion
+	(*UploadBeginRequest)(nil),         // 49: sofascore.UploadBeginRequest
+	(*UploadBeginResponse)(nil),        // 50: sofascore.UploadBeginResponse
+	(*UploadStatusResponse)(nil),       // 51: sofascore.UploadStatusResponse
+	(*UploadChunkResponse)(nil),        // 52: sofascore.UploadChunkResponse
+	(*UploadCompleteResponse)(nil),     // 53: sofascore.UploadCompleteResponse
 }
 var file_api_proto_depIdxs = []int32{
 	7,  // 0: sofascore.UserList.users:type_name -> sofascore.User
@@ -3597,7 +4116,7 @@ func file_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_rawDesc), len(file_api_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   49,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

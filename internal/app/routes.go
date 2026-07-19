@@ -63,6 +63,12 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	apkAdminHandler := apk.NewAdminHandler(apkRepo)
 	apkAdminHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: authThenRl})
 
+	apkUploadStateStore := apk.NewUploadStateStore(redisClient)
+	apkChunkStore := apk.NewChunkStore(cfg.APKStoragePath)
+	apkUploadService := apk.NewUploadService(apkUploadStateStore, apkChunkStore, apkRepo, db)
+	apkUploadHandler := apk.NewUploadHandler(apkUploadService, apkUploadStateStore)
+	apkUploadHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: authThenRl})
+
 	devRepo := devices.NewRepository(db)
 	playbackRepo := playback.NewRepository(db)
 

@@ -6,6 +6,11 @@ import {
   ApkUploadResponse,
   DeviceUrl,
   StatusMessage,
+  UploadBeginRequest,
+  UploadBeginResponse,
+  UploadStatusResponse,
+  UploadChunkResponse,
+  UploadCompleteResponse,
 } from "../../proto/api";
 import type {
   ApkCheckResponse,
@@ -13,73 +18,149 @@ import type {
   ApkPageResponse,
   UploadApkResponse,
 } from "./models";
+import { readAuthStorage } from "../authStorage";
+import { API_BASE_URL } from "../../constants";
+import axios from "axios";
 
-/** Size of each chunk sent to the server (10 MB – each request stays well below Cloudflare's 50 MB POST limit). */
 const CHUNK_SIZE = 10 * 1024 * 1024;
+const PROTO_CONTENT_TYPE = "application/x-protobuf";
+const SESSION_STORAGE_KEY = "apk_upload_session";
+
+interface StoredSession {
+  uploadId: string;
+  file: { name: string; size: number; type: string };
+  totalChunks: number;
+  version?: string;
+  description?: string;
+}
 
 export class ApkApiService extends BaseApiService {
   constructor() {
     super("/apk");
   }
 
-  /**
-   * Upload a single chunk of a file as part of a chunked upload session.
-   * Uses plain JSON (not CBOR) for maximum throughput.
-   * @param uploadId  - UUID identifying the upload session.
-   * @param chunkIndex - 0-based index of this chunk.
-   * @param totalChunks - Total number of chunks for this upload.
-   * @param chunk - The chunk binary data.
-   */
-  private async uploadChunk(
-    uploadId: string,
-    chunkIndex: number,
-    totalChunks: number,
-    chunk: Blob,
-  ): Promise<void> {
-    const form = new FormData();
-    form.append("upload_id", uploadId);
-    form.append("chunk_index", String(chunkIndex));
-    form.append("total_chunks", String(totalChunks));
-    form.append("file", chunk, `chunk-${chunkIndex}`);
-    await this.postMultipartJSON<unknown>("/upload/chunk", form);
+  private saveSession(session: StoredSession): void {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
   }
 
-  /**
-   * Assemble all previously uploaded chunks into a final APK version.
-   * Uses plain JSON (not CBOR) to match the chunk upload endpoint.
-   * @param uploadId    - UUID identifying the upload session.
-   * @param totalChunks - Total number of chunks that were uploaded.
-   * @param version     - Optional version override (MAJOR.MINOR.PATCH).
-   * @param description - Optional release description.
-   */
-  private async assembleChunks(
-    uploadId: string,
+  private loadSession(): StoredSession | null {
+    try {
+      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (!raw) return null;
+      const session = JSON.parse(raw) as StoredSession;
+      if (!session.uploadId || !session.file) return null;
+      return session;
+    } catch {
+      return null;
+    }
+  }
+
+  clearSession(): void {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  }
+
+  async beginUpload(
+    fileName: string,
+    fileSize: number,
     totalChunks: number,
     version?: string,
     description?: string,
-  ): Promise<UploadApkResponse> {
-    const form = new FormData();
-    form.append("upload_id", uploadId);
-    form.append("total_chunks", String(totalChunks));
-    if (version) form.append("version", version);
-    if (description) form.append("description", description);
-    return this.postMultipart<UploadApkResponse>(
-      "/upload/assemble",
-      form,
-      ApkUploadResponse,
+  ): Promise<UploadBeginResponse> {
+    return this.post<UploadBeginResponse, UploadBeginRequest>(
+      "/uploads",
+      {
+        file_name: fileName,
+        file_size: fileSize,
+        total_chunks: totalChunks,
+        version: version ?? "",
+        description: description ?? "",
+      },
+      UploadBeginRequest,
+      UploadBeginResponse,
     );
   }
 
-  /**
-   * Upload an APK file.
-   * Files larger than CHUNK_SIZE are automatically split into chunks to bypass
-   * reverse-proxy body-size limits (e.g. Cloudflare's 100 MB POST limit).
-   *
-   * @param file        - The APK file to upload.
-   * @param version     - Optional version override (MAJOR.MINOR.PATCH).
-   * @param description - Optional release description.
-   * @param onProgress  - Optional callback receiving upload progress (0–100).
-   */
+  async getUploadStatus(uploadId: string): Promise<UploadStatusResponse> {
+    return this.get<UploadStatusResponse>(
+      `/uploads/${uploadId}`,
+      UploadStatusResponse,
+    );
+  }
+
+  async putChunk(
+    uploadId: string,
+    chunkIndex: number,
+    chunk: Blob,
+  ): Promise<UploadChunkResponse> {
+    const token = readAuthStorage().user?.token ?? "";
+    const headers: Record<string, string> = {
+      Accept: PROTO_CONTENT_TYPE,
+      "Content-Type": "application/octet-stream",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const arrayBuf = await chunk.arrayBuffer();
+    const { data, status } = await axios.put<ArrayBuffer>(
+      `${API_BASE_URL}/apk/uploads/${uploadId}/chunks/${chunkIndex}`,
+      arrayBuf,
+      {
+        headers,
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
+    );
+
+    if (status >= 400) {
+      const errBytes = new Uint8Array(data);
+      const text = new TextDecoder().decode(errBytes);
+      let errMsg = `HTTP ${status}`;
+      try {
+        const json = JSON.parse(text) as { error?: string };
+        if (json.error) errMsg = json.error;
+      } catch {
+        /* keep default */
+      }
+      throw new Error(errMsg);
+    }
+
+    return UploadChunkResponse.decode(new Uint8Array(data));
+  }
+
+  async completeUpload(uploadId: string): Promise<UploadCompleteResponse> {
+    return this.postWithoutBody<UploadCompleteResponse>(
+      `/uploads/${uploadId}/complete`,
+      UploadCompleteResponse,
+    );
+  }
+
+  async abortUpload(uploadId: string): Promise<void> {
+    await this.delete<StatusMessage>(`/uploads/${uploadId}`, StatusMessage);
+  }
+
+  async resumeSession(): Promise<{
+    session: StoredSession;
+    status: UploadStatusResponse;
+  } | null> {
+    const session = this.loadSession();
+    if (!session) return null;
+
+    try {
+      const status = await this.getUploadStatus(session.uploadId);
+      if (
+        status.status === "completed" ||
+        status.status === "failed" ||
+        status.status === "aborted"
+      ) {
+        this.clearSession();
+        return null;
+      }
+      return { session, status };
+    } catch {
+      this.clearSession();
+      return null;
+    }
+  }
+
   async uploadApk(
     file: File,
     version?: string,
@@ -87,7 +168,6 @@ export class ApkApiService extends BaseApiService {
     onProgress?: (percent: number) => void,
   ): Promise<UploadApkResponse> {
     if (file.size <= CHUNK_SIZE) {
-      // Small file – use the simple single-request upload.
       const form = new FormData();
       form.append("file", file);
       if (version) form.append("version", version);
@@ -100,27 +180,60 @@ export class ApkApiService extends BaseApiService {
       );
     }
 
-    // Large file – split into chunks and upload sequentially.
-    const uploadId = crypto.randomUUID();
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
-      await this.uploadChunk(uploadId, i, totalChunks, chunk);
-      // Reserve the last 5% of progress for the assemble step.
-      onProgress?.(Math.round(((i + 1) / totalChunks) * 95));
-    }
-
-    const result = await this.assembleChunks(
-      uploadId,
+    const beginResp = await this.beginUpload(
+      file.name,
+      file.size,
       totalChunks,
       version,
       description,
     );
-    onProgress?.(100);
-    return result;
+
+    try {
+      this.saveSession({
+        uploadId: beginResp.upload_id,
+        file: { name: file.name, size: file.size, type: file.type },
+        totalChunks,
+        version,
+        description,
+      });
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        await this.putChunk(beginResp.upload_id, i, chunk);
+        onProgress?.(Math.round(((i + 1) / totalChunks) * 90));
+      }
+
+      const completeResp = await this.completeUpload(beginResp.upload_id);
+      this.clearSession();
+      onProgress?.(100);
+
+      return {
+        id: completeResp.id,
+        version: completeResp.version,
+        fileName: completeResp.file_name,
+        fileSize: completeResp.file_size,
+        description: completeResp.description,
+        packageName: completeResp.package_name,
+        versionCode: completeResp.version_code,
+        minSdkVersion: completeResp.min_sdk_version,
+        targetSdkVersion: completeResp.target_sdk_version,
+        downloadToken: completeResp.download_token,
+        downloadUrl: completeResp.download_url,
+        createdAt: completeResp.created_at,
+      };
+    } catch (error) {
+      try {
+        await this.abortUpload(beginResp.upload_id);
+      } catch {
+        // best effort abort
+      }
+      this.clearSession();
+      throw error;
+    }
   }
 
   async listVersions(): Promise<ApkVersionInfo[]> {

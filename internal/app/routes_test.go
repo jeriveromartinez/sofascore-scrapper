@@ -53,6 +53,11 @@ func TestRouteCompatibility(t *testing.T) {
 		"GET /api/web/v1/apk/versions",
 		"GET /api/web/v1/apk/versions/page",
 		"PUT /api/web/v1/apk/:id",
+		"POST /api/web/v1/apk/uploads",
+		"GET /api/web/v1/apk/uploads/:id",
+		"PUT /api/web/v1/apk/uploads/:id/chunks/:index",
+		"POST /api/web/v1/apk/uploads/:id/complete",
+		"DELETE /api/web/v1/apk/uploads/:id",
 		"GET /api/web/v1/tournaments",
 		"GET /api/web/v1/tournaments/page",
 		"GET /api/web/v1/tournaments/:id",
@@ -79,7 +84,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 55 {
-		t.Fatalf("got %d routes, want 55", len(got))
+	if len(got) != 60 {
+		t.Fatalf("got %d routes, want 60", len(got))
 	}
 }

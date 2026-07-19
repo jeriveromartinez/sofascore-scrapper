@@ -20,14 +20,15 @@ import (
 )
 
 type App struct {
-	HTTP      *http.Server
-	Scheduler *scheduler.Scheduler
-	DB        *gorm.DB
-	SQL       *sql.DB
-	Redis     *goredis.Client
-	ready     atomic.Bool
-	batchSize int
-	concur    int
+	HTTP        *http.Server
+	Scheduler   *scheduler.Scheduler
+	DB          *gorm.DB
+	SQL         *sql.DB
+	Redis       *goredis.Client
+	ready       atomic.Bool
+	batchSize   int
+	concur      int
+	storagePath string
 }
 
 func (a *App) IsReady() bool {
@@ -57,12 +58,13 @@ func New(cfg config.Config) (*App, error) {
 	sched := scheduler.New()
 
 	app := &App{
-		Scheduler: sched,
-		DB:        db,
-		SQL:       sqlDB,
-		Redis:     redisClient,
-		batchSize: cfg.ScrapeBatchSize,
-		concur:    cfg.ScrapeConcurrency,
+		Scheduler:   sched,
+		DB:          db,
+		SQL:         sqlDB,
+		Redis:       redisClient,
+		batchSize:   cfg.ScrapeBatchSize,
+		concur:      cfg.ScrapeConcurrency,
+		storagePath: cfg.APKStoragePath,
 	}
 	app.ready.Store(true)
 
@@ -85,6 +87,7 @@ func New(cfg config.Config) (*App, error) {
 func (a *App) Run(ctx context.Context) error {
 	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur)
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
+	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {
