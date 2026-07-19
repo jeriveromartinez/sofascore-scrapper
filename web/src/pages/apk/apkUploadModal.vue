@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { onBeforeUnmount, onMounted, reactive, watch } from "vue";
 import { apkApiService } from "../../store/services";
 
 const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
@@ -15,6 +15,10 @@ const upload = reactive({
   loading: false,
   progress: 0,
   error: "",
+  resuming: false,
+  sessionResumed: false,
+  pendingChunks: 0,
+  uploadId: "",
 });
 
 const modal = reactive({ open: false });
@@ -25,11 +29,30 @@ function resetUploadForm(): void {
   upload.description = "";
   upload.error = "";
   upload.progress = 0;
+  upload.resuming = false;
+  upload.sessionResumed = false;
+  upload.pendingChunks = 0;
+  upload.uploadId = "";
 }
 
 function openUploadModal(): void {
   upload.error = "";
   modal.open = true;
+
+  apkApiService.resumeSession().then((resumed) => {
+    if (resumed) {
+      upload.resuming = true;
+      upload.sessionResumed = true;
+      const done = resumed.status.chunks_received;
+      const total = resumed.status.total_chunks;
+      upload.pendingChunks = total - done;
+      upload.progress = Math.round((done / total) * 90);
+      upload.uploadId = resumed.session.uploadId;
+      if (resumed.session.version) upload.version = resumed.session.version;
+      if (resumed.session.description)
+        upload.description = resumed.session.description;
+    }
+  });
 }
 
 function closeUploadModal(): void {
@@ -47,32 +70,85 @@ function onFileChange(event: Event): void {
 }
 
 async function submitUpload(): Promise<void> {
-  if (!upload.file) {
-    upload.error = "Selecciona un archivo APK";
-    return;
-  }
-
   upload.loading = true;
   upload.progress = 0;
   upload.error = "";
 
   try {
-    const response = await apkApiService.uploadApk(
-      upload.file,
-      upload.version || undefined,
-      upload.description || undefined,
-      (percent) => {
-        upload.progress = percent;
-      },
-    );
-    closeUploadModal();
-    emit("uploaded", response.version);
+    if (upload.sessionResumed) {
+      await resumeAndComplete();
+    } else {
+      if (!upload.file) {
+        upload.error = "Selecciona un archivo APK";
+        return;
+      }
+      const response = await apkApiService.uploadApk(
+        upload.file,
+        upload.version || undefined,
+        upload.description || undefined,
+        (percent) => {
+          upload.progress = percent;
+        },
+      );
+      closeUploadModal();
+      emit("uploaded", response.version);
+      return;
+    }
   } catch (error) {
     upload.error =
       error instanceof Error ? error.message : "No se pudo subir el APK";
   } finally {
     upload.loading = false;
   }
+}
+
+async function resumeAndComplete(): Promise<void> {
+  upload.resuming = false;
+
+  try {
+    const status = await apkApiService.getUploadStatus(upload.uploadId);
+    const totalChunks = status.total_chunks;
+    const received = status.chunks_received;
+
+    for (let i = received; i < totalChunks; i++) {
+      const start = i * (10 * 1024 * 1024);
+      const fileSize = status.file_size;
+      const end = Math.min(start + 10 * 1024 * 1024, fileSize);
+
+      const chunkReady = upload.file
+        ? upload.file.slice(start, end)
+        : undefined;
+
+      if (!chunkReady || chunkReady.size === 0) {
+        upload.error =
+          "Archivo no disponible; por favor selecciónelo nuevamente.";
+        upload.sessionResumed = true;
+        upload.file = null;
+        return;
+      }
+
+      await apkApiService.putChunk(upload.uploadId, i, chunkReady);
+      upload.progress = Math.round(((i + 1) / totalChunks) * 90);
+    }
+
+    const completeResp = await apkApiService.completeUpload(upload.uploadId);
+    apkApiService.clearSession();
+    closeUploadModal();
+    emit("uploaded", completeResp.version);
+  } catch (error) {
+    upload.sessionResumed = true;
+    throw error;
+  }
+}
+
+async function dismissResume(): Promise<void> {
+  try {
+    await apkApiService.abortUpload(upload.uploadId);
+  } catch {
+    // best effort
+  }
+  apkApiService.clearSession();
+  resetUploadForm();
 }
 
 watch(
@@ -115,13 +191,28 @@ onBeforeUnmount(() => {
           ></button>
         </div>
         <div class="modal-body">
+          <div
+            v-if="upload.sessionResumed"
+            class="alert alert-info d-flex align-items-center"
+          >
+            <div class="flex-grow-1">
+              Tienes una subida pendiente ({{ upload.pendingChunks }} chunk(s)
+              restantes). Selecciona el mismo archivo APK para continuar.
+            </div>
+            <button class="btn btn-sm btn-outline-secondary ms-2" @click="dismissResume">
+              Descartar
+            </button>
+          </div>
+
           <form
             id="upload-apk-form"
             class="row g-3"
             @submit.prevent="submitUpload"
           >
             <div class="col-12">
-              <label class="form-label">Archivo APK *</label>
+              <label class="form-label">Archivo APK *
+                <span v-if="upload.sessionResumed" class="text-muted">(selecciona el mismo archivo)</span>
+              </label>
               <input
                 class="form-control"
                 type="file"
@@ -179,7 +270,12 @@ onBeforeUnmount(() => {
             form="upload-apk-form"
             :disabled="upload.loading"
           >
-            {{ upload.loading ? `Subiendo... ${upload.progress}%` : "Subir" }}
+            <template v-if="upload.sessionResumed">
+              {{ upload.loading ? `Subiendo... ${upload.progress}%` : "Continuar subida" }}
+            </template>
+            <template v-else>
+              {{ upload.loading ? `Subiendo... ${upload.progress}%` : "Subir" }}
+            </template>
           </button>
         </div>
       </div>

@@ -4,19 +4,23 @@ import (
 	"context"
 	"sync"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Scheduler struct {
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-	db        *gorm.DB
-	scrapeSvc *scraper.Service
-	aggRepo   *reporting.AggregationRepository
-	runner    *Runner
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	db         *gorm.DB
+	scrapeSvc  *scraper.Service
+	aggRepo    *reporting.AggregationRepository
+	runner     *Runner
+	cleanupJob *apk.CleanupJob
+	redisClient *redis.Client
 }
 
 func New() *Scheduler {
@@ -30,12 +34,17 @@ func (s *Scheduler) Init(db *gorm.DB, scrapeSvc *scraper.Service, aggRepo *repor
 	s.runner = NewRunner(locker)
 }
 
+func (s *Scheduler) SetCleanupJob(job *apk.CleanupJob, client *redis.Client) {
+	s.cleanupJob = job
+	s.redisClient = client
+}
+
 func (s *Scheduler) Run(ctx context.Context) error {
 	localCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg)
-	startStats(localCtx, s.db, s.aggRepo, s.runner, &s.wg)
+	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, &s.wg)
 
 	<-localCtx.Done()
 	s.wg.Wait()

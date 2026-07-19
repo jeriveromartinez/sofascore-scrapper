@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 )
 
 func (a *App) shutdown() error {
@@ -42,4 +44,10 @@ func normalizeServerClosed(err error) error {
 		return nil
 	}
 	return err
+}
+
+func buildCleanupJobFromApp(a *App) *apk.CleanupJob {
+	store := apk.NewUploadStateStore(a.Redis)
+	chunkStore := apk.NewChunkStore(a.storagePath)
+	return apk.NewCleanupJob(store, chunkStore)
 }

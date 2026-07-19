@@ -351,3 +351,56 @@ message ApkVersion {
     uint32 id = 1;
     string url = 2;
 }
+
+// ========== APK Resumable Upload ==========
+
+message UploadBeginRequest {
+  string file_name = 1;
+  int64 file_size = 2;
+  int32 total_chunks = 3;
+  string version = 4;
+  string description = 5;
+}
+
+message UploadBeginResponse {
+  string upload_id = 1;
+  int32 max_chunk_size = 2;
+  int32 max_total_chunks = 3;
+  int64 max_aggregate_size = 4;
+  int32 expires_at = 5;
+  string status = 6;
+  int32 chunks_received = 7;
+  int64 bytes_received = 8;
+}
+
+message UploadStatusResponse {
+  string upload_id = 1;
+  string status = 2;
+  int32 total_chunks = 3;
+  int32 chunks_received = 4;
+  int64 bytes_received = 5;
+  int32 expires_at = 6;
+  string file_name = 7;
+  int64 file_size = 8;
+}
+
+message UploadChunkResponse {
+  string upload_id = 1;
+  int32 chunk_index = 2;
+  bool ok = 3;
+}
+
+message UploadCompleteResponse {
+  uint32 id = 1;
+  string version = 2;
+  string file_name = 3;
+  int64 file_size = 4;
+  string description = 5;
+  string package_name = 6;
+  int32 version_code = 7;
+  int32 min_sdk_version = 8;
+  int32 target_sdk_version = 9;
+  string download_token = 10;
+  string download_url = 11;
+  string created_at = 12;
+}
