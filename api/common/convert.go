@@ -6,6 +6,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
@@ -103,26 +104,11 @@ func EventsToProto(events []models.SofaScoreEvent) []*pb.SofaScoreEvent {
 }
 
 func PlaybackToProto(p *models.PlaybackLog) *pb.PlaybackLog {
-	if p == nil {
-		return nil
-	}
-	return &pb.PlaybackLog{
-		Id:        uint32(p.ID),
-		CreatedAt: FormatTime(p.CreatedAt),
-		UpdatedAt: FormatTime(p.UpdatedAt),
-		DeviceId:  uint32(p.DeviceID),
-		Content:   p.Content,
-		StartedAt: p.StartedAt,
-		EndedAt:   p.EndedAt,
-	}
+	return playback.PlaybackToProto(p)
 }
 
 func PlaybackListToProto(pl []*models.PlaybackLog, total int64) *pb.PlaybackLogList {
-	result := make([]*pb.PlaybackLog, 0, len(pl))
-	for _, p := range pl {
-		result = append(result, PlaybackToProto(p))
-	}
-	return &pb.PlaybackLogList{List: result, Total: uint32(total)}
+	return playback.PlaybackListToProto(pl, total)
 }
 
 func GlobalConfigToProto(g models.GlobalTournamentConfig) *pb.GlobalTournamentConfig {

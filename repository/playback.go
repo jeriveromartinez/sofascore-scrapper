@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
@@ -10,28 +11,44 @@ type EventStats struct {
 	ViewCount        int64
 }
 
-func LogPlayback(deviceID uint, content string, startedAt int64) (*models.PlaybackLog, error) {
+func playbackRepo() (*playback.Repository, error) {
 	db, err := database.GetDB()
 	if err != nil {
 		return nil, err
 	}
-	var lastLog models.PlaybackLog
-	db.Where("device_id=?", deviceID).Order("started_at DESC").First(&lastLog)
-	if lastLog.ID != 0 {
-		db.Model(&lastLog).Where("id = ?", lastLog.ID).Update("ended_at", startedAt)
-	}
+	return playback.NewRepository(db), nil
+}
 
-	log := &models.PlaybackLog{DeviceID: deviceID, Content: content, StartedAt: startedAt}
-	result := db.Create(log)
-	return log, result.Error
+func LogPlayback(deviceID uint, content string, startedAt int64) (*playback.PlaybackLog, error) {
+	repo, err := playbackRepo()
+	if err != nil {
+		return nil, err
+	}
+	return repo.Log(deviceID, content, startedAt)
 }
 
 func UpdatePlaybackEnd(id uint, endedAt int64) error {
-	db, err := database.GetDB()
+	repo, err := playbackRepo()
 	if err != nil {
 		return err
 	}
-	return db.Model(&models.PlaybackLog{}).Where("id = ?", id).Update("ended_at", endedAt).Error
+	return repo.UpdateEnd(id, endedAt)
+}
+
+func GetList(page, limit int) ([]*playback.PlaybackLog, error) {
+	repo, err := playbackRepo()
+	if err != nil {
+		return nil, err
+	}
+	return repo.GetList(page, limit)
+}
+
+func TotalCount() int64 {
+	repo, err := playbackRepo()
+	if err != nil {
+		return 0
+	}
+	return repo.TotalCount()
 }
 
 func GetTopEvents(limit int) ([]EventStats, error) {
@@ -47,27 +64,4 @@ func GetTopEvents(limit int) ([]EventStats, error) {
 		Limit(limit).
 		Scan(&stats)
 	return stats, result.Error
-}
-
-func GetList(page, limit int) ([]*models.PlaybackLog, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-
-	offset := (page - 1) * limit
-	var stats []*models.PlaybackLog
-	result := db.Offset(offset).Limit(limit).Order("created_at DESC").Find(&stats)
-	return stats, result.Error
-}
-
-func TotalCount() int64 {
-	db, err := database.GetDB()
-	if err != nil {
-		return 0
-	}
-
-	var count int64
-	_ = db.Model(&models.PlaybackLog{}).Count(&count)
-	return count
 }

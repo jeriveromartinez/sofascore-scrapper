@@ -48,6 +48,14 @@ func (r *Repository) GetAll() ([]Device, error) {
 	return devices, result.Error
 }
 
+func (r *Repository) FindByToken(token string) (*Device, error) {
+	var device Device
+	if err := r.db.Where("token = ?", token).First(&device).Error; err != nil {
+		return nil, err
+	}
+	return &device, nil
+}
+
 func (r *Repository) Update(token, platform, name string) (*Device, error) {
 	var device Device
 	if err := r.db.Where("token = ?", token).First(&device).Error; err != nil {

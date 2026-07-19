@@ -8,6 +8,8 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	"github.com/jeriveromartinez/sofascore-scrapper/api/web"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 )
 
@@ -30,6 +32,15 @@ func NewRouter() *gin.Engine {
 	apkAdminHandler := apk.NewAdminHandler(apkRepo)
 	apkAdminHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: common.AuthMiddleware()})
 
+	devRepo := devices.NewRepository(db)
+	playbackRepo := playback.NewRepository(db)
+
+	playbackAppHandler := playback.NewAppHandler(playbackRepo, devRepo)
+	playbackAppHandler.RegisterRoutes(appV1)
+
+	playbackAdminHandler := playback.NewAdminHandler(playbackRepo)
+	playbackAdminHandler.RegisterRoutes(webV1, playback.AdminHandlerDeps{AuthMiddleware: common.AuthMiddleware()})
+
 	(&app.CurrentEventsController{Group: appV1}).LoadRoutes()
 	(&app.DeviceRegistrationController{Group: appV1}).LoadRoutes()
 	(&app.TeamController{Group: appV1}).LoadRoutes()
@@ -38,7 +49,6 @@ func NewRouter() *gin.Engine {
 	(&web.EventController{Group: webV1}).LoadRoutes()
 	(&web.UserController{Group: webV1}).LoadRoutes()
 	(&web.DeviceController{Group: webV1}).LoadRoutes()
-	(&web.PlaybackController{Group: webV1}).LoadRoutes()
 	(&web.StatsController{Group: webV1}).LoadRoutes()
 	(&web.TournamentController{Group: webV1}).LoadRoutes()
 	(&web.DeviceTournamentController{Group: webV1}).LoadRoutes()

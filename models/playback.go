@@ -1,11 +1,5 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 
-type PlaybackLog struct {
-	gorm.Model
-	DeviceID  uint   `gorm:"not null;index"`
-	Content   string `gorm:"not null"`
-	StartedAt int64
-	EndedAt   int64
-}
+type PlaybackLog = playback.PlaybackLog
