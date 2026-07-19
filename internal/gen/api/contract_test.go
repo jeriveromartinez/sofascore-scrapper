@@ -21,7 +21,7 @@ const hexPlaybackLogList = "102a"
 const hexApkInfo = "08011203312e301a076170702e61706b20c0843d2a085465737420617070320c636f6d2e746573742e6170703801401548215209746f6b656e2d6162635a1a687474703a2f2f6578616d706c652e636f6d2f6170702e61706b6214323032342d30312d30315430303a30303a30305a680170327a18687474703a2f2f70616e656c2e6578616d706c652e636f6d"
 
 func TestProtobufFileDescriptor(t *testing.T) {
-	fd := File_proto_api_proto
+	fd := (&ErrorResponse{}).ProtoReflect().Descriptor().ParentFile()
 
 	msgNames := map[string]bool{
 		"ErrorResponse":              false,
@@ -34,12 +34,15 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"UserWriteRequest":           false,
 		"Domain":                     false,
 		"DomainList":                 false,
+		"DomainPage":                 false,
 		"DomainRequest":              false,
 		"Device":                     false,
 		"DeviceList":                 false,
+		"DevicePage":                 false,
 		"DeviceUrl":                  false,
 		"Tournament":                 false,
 		"TournamentList":             false,
+		"TournamentPage":             false,
 		"TournamentRequest":          false,
 		"Team":                       false,
 		"SofaScoreEvent":             false,
@@ -48,10 +51,12 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"SetTournamentIdsRequest":    false,
 		"DeviceTournament":           false,
 		"DeviceTournamentList":       false,
+		"DeviceTournamentPage":       false,
 		"GlobalTournamentConfig":     false,
 		"GlobalTournamentConfigList": false,
 		"ApkInfo":                    false,
 		"ApkList":                    false,
+		"ApkPage":                    false,
 		"ApkUploadResponse":          false,
 		"ApkVersion":                 false,
 		"ApkUpdateCheckResponse":     false,
@@ -59,9 +64,11 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"UpdatePlaybackRequest":      false,
 		"PlaybackLog":                false,
 		"PlaybackLogList":            false,
+		"PlaybackPage":               false,
 		"CursorPageInfo":             false,
 		"UserPage":                   false,
 		"EventsList":                 false,
+		"EventPage":                  false,
 		"EventStats":                 false,
 		"TopEventsResponse":          false,
 	}
