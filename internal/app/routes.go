@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
@@ -18,9 +19,26 @@ import (
 	"gorm.io/gorm"
 )
 
+func requestID() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.GetHeader("X-Request-ID")
+		if id == "" {
+			id = uuid.New().String()
+		}
+		c.Header("X-Request-ID", id)
+		c.Next()
+	}
+}
+
 func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService) *gin.Engine {
 	router := gin.New()
-	router.Use(server.CORS(), gin.Logger(), gin.Recovery())
+
+	router.Use(gin.Recovery())
+	router.Use(requestID())
+	router.Use(server.BodyLimit())
+	router.Use(server.CORS())
+	router.Use(gin.Logger())
+	router.Use(server.RateLimit(redisClient))
 
 	appV1 := router.Group("/api/app/v1")
 	webV1 := router.Group("/api/web/v1")

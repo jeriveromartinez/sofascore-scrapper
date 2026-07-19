@@ -52,8 +52,13 @@ func New(cfg config.Config) (*App, error) {
 
 	router := NewRouter(db, redisClient, cfg, tokens)
 	httpServer := &http.Server{
-		Addr:    cfg.APIAddr,
-		Handler: router,
+		Addr:              cfg.APIAddr,
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Minute,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	sched := scheduler.New()
