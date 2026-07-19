@@ -70,11 +70,13 @@ require 'ref: ${{ needs.verify.outputs.sha }}'
 require 'runs-on: [self-hosted, iptv]'
 require 'cancel-in-progress: false'
 require 'for package in ca-certificates curl git python3; do'
-require 'if ! sudo -n true; then'
-[[ $(grep -Fc 'sudo -n true' "$workflow") -eq 1 ]] || {
-  echo 'passwordless sudo must only be required when packages are missing' >&2
+require 'Run these commands on the production server:'
+require 'sudo apt-get update'
+require 'sudo apt-get install -y ${missing[*]}'
+if grep -Fq 'sudo -n' "$workflow"; then
+  echo 'the deployment workflow must not attempt non-interactive sudo' >&2
   exit 1
-}
+fi
 require 'for command in curl git go node npm python3 systemctl; do'
 require 'EXPECTED_SHA: ${{ needs.verify.outputs.sha }}'
 require '[[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]'
