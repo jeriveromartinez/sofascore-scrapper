@@ -23,6 +23,12 @@ func TeamToProto(t *Team) *pb.Team {
 }
 
 func EventToProto(e Event) *pb.SofaScoreEvent {
+	if e.HomeTeamModel != nil {
+		e.HomeTeamModel.LogoUrl = "/api/app/v1" + e.HomeTeamModel.LogoUrl
+	}
+	if e.AwayTeamModel != nil {
+		e.AwayTeamModel.LogoUrl = "/api/app/v1" + e.AwayTeamModel.LogoUrl
+	}
 	return &pb.SofaScoreEvent{
 		Id:                          uint32(e.ID),
 		CreatedAt:                   formatTime(e.CreatedAt),

@@ -256,8 +256,8 @@ func TestEventsToProto(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2, got %d", len(result))
 	}
-	if result[0].TeamHome.LogoUrl != "/team/10/image" {
-		t.Errorf("expected LogoUrl='/team/10/image', got %s", result[0].TeamHome.LogoUrl)
+	if result[0].TeamHome.LogoUrl != "/api/app/v1/team/10/image" {
+		t.Errorf("expected LogoUrl='/api/app/v1/team/10/image', got %s", result[0].TeamHome.LogoUrl)
 	}
 }
 
