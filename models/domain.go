@@ -1,10 +1,5 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 
-type Domain struct {
-	gorm.Model
-	Domain string `gorm:"uniqueIndex;not null"`
-	UserID uint   `gorm:"index;not null"`
-	User   *User  `gorm:"foreignKey:UserID"`
-}
+type Domain = domains.Domain
