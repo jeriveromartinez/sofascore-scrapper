@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -11,11 +12,15 @@ import (
 var ErrJWTSecretRequired = errors.New("JWT_SECRET is required")
 
 type Database struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Name     string
+	Host            string
+	Port            string
+	User            string
+	Password        string
+	Name            string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
 }
 
 type Redis struct {
@@ -54,11 +59,15 @@ func Load() (Config, error) {
 		APKStoragePath:   getEnv("APK_STORAGE_PATH", "./apk_storage"),
 		ImageStoragePath: getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
 		Database: Database{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "3306"),
-			User:     getEnv("DB_USER", "root"),
-			Password: getEnv("DB_PASSWORD", ""),
-			Name:     getEnv("DB_NAME", "sofascore"),
+			Host:            getEnv("DB_HOST", "localhost"),
+			Port:            getEnv("DB_PORT", "3306"),
+			User:            getEnv("DB_USER", "root"),
+			Password:        getEnv("DB_PASSWORD", ""),
+			Name:            getEnv("DB_NAME", "sofascore"),
+			MaxOpenConns:    getInt("DB_MAX_OPEN_CONNS", 25),
+			MaxIdleConns:    getInt("DB_MAX_IDLE_CONNS", 10),
+			ConnMaxLifetime: getDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
+			ConnMaxIdleTime: getDuration("DB_CONN_MAX_IDLE_TIME", 5*time.Minute),
 		},
 		Redis: Redis{
 			URL:          getEnv("REDIS_URL", "redis://localhost:6379/0"),
@@ -93,4 +102,36 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+func getInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: invalid integer for %s=%q, using default %d: %v\n", key, v, fallback, err)
+		return fallback
+	}
+	return i
+}
+
+func (c Config) Validate() error {
+	if c.Database.MaxOpenConns <= 0 {
+		return fmt.Errorf("config: MaxOpenConns must be positive, got %d", c.Database.MaxOpenConns)
+	}
+	if c.Database.MaxIdleConns < 0 {
+		return fmt.Errorf("config: MaxIdleConns must be non-negative, got %d", c.Database.MaxIdleConns)
+	}
+	if c.Database.MaxIdleConns > c.Database.MaxOpenConns {
+		return fmt.Errorf("config: MaxIdleConns (%d) must not exceed MaxOpenConns (%d)", c.Database.MaxIdleConns, c.Database.MaxOpenConns)
+	}
+	if c.Database.ConnMaxLifetime <= 0 {
+		return fmt.Errorf("config: ConnMaxLifetime must be positive, got %v", c.Database.ConnMaxLifetime)
+	}
+	if c.Database.ConnMaxIdleTime <= 0 {
+		return fmt.Errorf("config: ConnMaxIdleTime must be positive, got %v", c.Database.ConnMaxIdleTime)
+	}
+	return nil
 }
