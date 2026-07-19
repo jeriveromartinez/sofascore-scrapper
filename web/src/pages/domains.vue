@@ -3,6 +3,8 @@ import { onMounted, reactive } from "vue";
 import { domainsApiService, usersApiService } from "../store/services";
 import type { Domain, User } from "../store/services/models";
 
+const PAGE_LIMIT = 20;
+
 const state = reactive({
   domains: [] as Domain[],
   users: [] as User[],
@@ -10,6 +12,11 @@ const state = reactive({
   error: "",
   editingId: null as number | null,
   form: { domain: "", userId: 0 },
+  currentCursor: "" as string,
+  nextCursor: "" as string,
+  prevCursors: [] as string[],
+  hasNext: false,
+  hasPrev: false,
 });
 
 function getDefaultUserId(): number {
@@ -22,17 +29,21 @@ function resetForm(): void {
   state.form.userId = getDefaultUserId();
 }
 
-async function loadData(): Promise<void> {
+async function loadPage(cursor?: string): Promise<void> {
   state.loading = true;
   state.error = "";
 
   try {
-    const [domains, users] = await Promise.all([
-      domainsApiService.getAllDomains(),
+    const [page, users] = await Promise.all([
+      domainsApiService.getDomainPage(cursor, PAGE_LIMIT),
       usersApiService.getAllUsers(),
     ]);
-    state.domains = domains;
+    state.domains = page.data;
     state.users = users;
+    state.nextCursor = page.page?.nextCursor ?? "";
+    state.hasNext = page.page?.hasMore ?? false;
+    state.currentCursor = cursor ?? "";
+    state.hasPrev = state.prevCursors.length > 0;
 
     if (!state.editingId) {
       state.form.userId = state.form.userId || getDefaultUserId();
@@ -45,6 +56,19 @@ async function loadData(): Promise<void> {
   } finally {
     state.loading = false;
   }
+}
+
+async function goNext(): Promise<void> {
+  if (!state.hasNext || !state.nextCursor) return;
+  state.prevCursors = [...state.prevCursors, state.currentCursor];
+  await loadPage(state.nextCursor);
+}
+
+async function goPrev(): Promise<void> {
+  if (state.prevCursors.length === 0) return;
+  const prev = state.prevCursors[state.prevCursors.length - 1];
+  state.prevCursors = state.prevCursors.slice(0, -1);
+  await loadPage(prev || undefined);
 }
 
 function startEdit(domain: Domain): void {
@@ -81,7 +105,7 @@ async function submitForm(): Promise<void> {
     }
 
     resetForm();
-    await loadData();
+    await loadPage(state.currentCursor || undefined);
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "No se pudo guardar el dominio";
@@ -101,7 +125,7 @@ async function deleteDomain(id: number): Promise<void> {
     if (state.editingId === id) {
       resetForm();
     }
-    await loadData();
+    await loadPage(state.currentCursor || undefined);
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "No se pudo eliminar el dominio";
@@ -116,7 +140,7 @@ function formatTimestamp(date?: string): string {
 }
 
 onMounted(() => {
-  void loadData();
+  void loadPage();
 });
 </script>
 
@@ -227,6 +251,23 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <button
+            class="btn btn-outline-secondary"
+            :disabled="!state.hasPrev || state.loading"
+            @click="goPrev"
+          >
+            Anterior
+          </button>
+          <button
+            class="btn btn-outline-secondary"
+            :disabled="!state.hasNext || state.loading"
+            @click="goNext"
+          >
+            Siguiente
+          </button>
+        </div>
       </div>
 
       <div v-else-if="!state.loading" class="text-center text-muted">
