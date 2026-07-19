@@ -36,7 +36,7 @@ func main() {
 }
 
 func runBootstrapInvitation(cfg config.Config) {
-	db, err := database.Open(cfg.Database)
+	db, _, err := database.Open(cfg.Database)
 	if err != nil {
 		log.Fatal(err)
 	}

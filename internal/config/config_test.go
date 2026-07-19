@@ -112,3 +112,138 @@ func setRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("JWT_SECRET", "test-secret")
 }
+
+func TestDatabasePoolDefaults(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Database.MaxOpenConns != 25 {
+		t.Fatalf("MaxOpenConns=%d, want 25", cfg.Database.MaxOpenConns)
+	}
+	if cfg.Database.MaxIdleConns != 10 {
+		t.Fatalf("MaxIdleConns=%d, want 10", cfg.Database.MaxIdleConns)
+	}
+	if cfg.Database.ConnMaxLifetime != 30*time.Minute {
+		t.Fatalf("ConnMaxLifetime=%v, want 30m", cfg.Database.ConnMaxLifetime)
+	}
+	if cfg.Database.ConnMaxIdleTime != 5*time.Minute {
+		t.Fatalf("ConnMaxIdleTime=%v, want 5m", cfg.Database.ConnMaxIdleTime)
+	}
+}
+
+func TestDatabasePoolEnvOverrides(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("DB_MAX_OPEN_CONNS", "50")
+	t.Setenv("DB_MAX_IDLE_CONNS", "20")
+	t.Setenv("DB_CONN_MAX_LIFETIME", "10m")
+	t.Setenv("DB_CONN_MAX_IDLE_TIME", "2m")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Database.MaxOpenConns != 50 {
+		t.Fatalf("MaxOpenConns=%d", cfg.Database.MaxOpenConns)
+	}
+	if cfg.Database.MaxIdleConns != 20 {
+		t.Fatalf("MaxIdleConns=%d", cfg.Database.MaxIdleConns)
+	}
+	if cfg.Database.ConnMaxLifetime != 10*time.Minute {
+		t.Fatalf("ConnMaxLifetime=%v", cfg.Database.ConnMaxLifetime)
+	}
+	if cfg.Database.ConnMaxIdleTime != 2*time.Minute {
+		t.Fatalf("ConnMaxIdleTime=%v", cfg.Database.ConnMaxIdleTime)
+	}
+}
+
+func TestValidatePoolRejectsNonpositiveMaxOpen(t *testing.T) {
+	cfg := Config{
+		JWTSecret: "test",
+		Database: Database{
+			MaxOpenConns:    0,
+			MaxIdleConns:    10,
+			ConnMaxLifetime: 30 * time.Minute,
+			ConnMaxIdleTime: 5 * time.Minute,
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for MaxOpenConns=0")
+	}
+}
+
+func TestValidatePoolRejectsNegativeMaxIdle(t *testing.T) {
+	cfg := Config{
+		JWTSecret: "test",
+		Database: Database{
+			MaxOpenConns:    25,
+			MaxIdleConns:    -1,
+			ConnMaxLifetime: 30 * time.Minute,
+			ConnMaxIdleTime: 5 * time.Minute,
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for MaxIdleConns=-1")
+	}
+}
+
+func TestValidatePoolRejectsMaxIdleGreaterThanMaxOpen(t *testing.T) {
+	cfg := Config{
+		JWTSecret: "test",
+		Database: Database{
+			MaxOpenConns:    10,
+			MaxIdleConns:    20,
+			ConnMaxLifetime: 30 * time.Minute,
+			ConnMaxIdleTime: 5 * time.Minute,
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for MaxIdleConns > MaxOpenConns")
+	}
+}
+
+func TestValidatePoolRejectsNonpositiveLifetime(t *testing.T) {
+	cfg := Config{
+		JWTSecret: "test",
+		Database: Database{
+			MaxOpenConns:    25,
+			MaxIdleConns:    10,
+			ConnMaxLifetime: 0,
+			ConnMaxIdleTime: 5 * time.Minute,
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for ConnMaxLifetime=0")
+	}
+}
+
+func TestValidatePoolRejectsNonpositiveIdleTime(t *testing.T) {
+	cfg := Config{
+		JWTSecret: "test",
+		Database: Database{
+			MaxOpenConns:    25,
+			MaxIdleConns:    10,
+			ConnMaxLifetime: 30 * time.Minute,
+			ConnMaxIdleTime: 0,
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for ConnMaxIdleTime=0")
+	}
+}
+
+func TestValidatePoolAcceptsValidConfig(t *testing.T) {
+	cfg := Config{
+		JWTSecret: "test",
+		Database: Database{
+			MaxOpenConns:    25,
+			MaxIdleConns:    10,
+			ConnMaxLifetime: 30 * time.Minute,
+			ConnMaxIdleTime: 5 * time.Minute,
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

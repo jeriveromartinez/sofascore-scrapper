@@ -31,12 +31,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	db, err := database.Open(cfg.Database)
-	if err != nil {
-		return nil, err
-	}
-
-	sqlDB, err := db.DB()
+	db, sqlDB, err := database.Open(cfg.Database)
 	if err != nil {
 		return nil, err
 	}
