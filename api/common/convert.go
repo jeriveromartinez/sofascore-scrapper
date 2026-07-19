@@ -6,6 +6,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
@@ -57,48 +58,24 @@ func TournamentsToProto(ts []models.Tournament) []*pb.Tournament {
 	return tournaments.TournamentsToProto(ts)
 }
 
-func TeamPtrToProto(t *models.Team) *pb.Team {
-	if t == nil {
-		return nil
-	}
-	return &pb.Team{
-		Id:             uint32(t.ID),
-		TeamId:         t.TeamId,
-		LogoUrl:        t.LogoUrl,
-		Name:           t.Name,
-		PrimaryColor:   t.PrimaryColor,
-		SecondaryColor: t.SecondaryColor,
-		TextColor:      t.TextColor,
-	}
+func TeamPtrToProto(t *events.Team) *pb.Team {
+	return events.TeamToProto(t)
 }
 
-func EventToProto(e models.SofaScoreEvent) *pb.SofaScoreEvent {
-	return &pb.SofaScoreEvent{
-		Id:                          uint32(e.ID),
-		CreatedAt:                   FormatTime(e.CreatedAt),
-		UpdatedAt:                   FormatTime(e.UpdatedAt),
-		SofaScoreEventId:            e.SofaScoreEventId,
-		Sport:                       e.Sport,
-		HomeScore:                   int32(e.HomeScore),
-		HomeTeamId:                  e.HomeTeamId,
-		AwayScore:                   int32(e.AwayScore),
-		AwayTeamId:                  e.AwayTeamId,
-		ScrapedAt:                   e.ScrapedAt,
-		StartTimestamp:              e.StartTimestamp,
-		CurrentPeriodStartTimestamp: e.CurrentPeriodStartTimestamp,
-		Slug:                        e.Slug,
-		TeamHome:                    TeamPtrToProto(e.HomeTeamModel),
-		TeamAway:                    TeamPtrToProto(e.AwayTeamModel),
-		League:                      TournamentPtrToProto(e.League),
-	}
+func EventToProto(e events.Event) *pb.SofaScoreEvent {
+	return events.EventToProto(e)
 }
 
-func EventsToProto(events []models.SofaScoreEvent) []*pb.SofaScoreEvent {
-	result := make([]*pb.SofaScoreEvent, 0, len(events))
-	for _, e := range events {
-		e.AwayTeamModel.LogoUrl = "/api/app/v1" + e.AwayTeamModel.LogoUrl
-		e.HomeTeamModel.LogoUrl = "/api/app/v1" + e.HomeTeamModel.LogoUrl
-		result = append(result, EventToProto(e))
+func EventsToProto(evs []events.Event) []*pb.SofaScoreEvent {
+	result := make([]*pb.SofaScoreEvent, 0, len(evs))
+	for _, e := range evs {
+		if e.AwayTeamModel != nil {
+			e.AwayTeamModel.LogoUrl = "/api/app/v1" + e.AwayTeamModel.LogoUrl
+		}
+		if e.HomeTeamModel != nil {
+			e.HomeTeamModel.LogoUrl = "/api/app/v1" + e.HomeTeamModel.LogoUrl
+		}
+		result = append(result, events.EventToProto(e))
 	}
 	return result
 }

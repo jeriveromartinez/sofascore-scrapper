@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
@@ -14,9 +15,9 @@ func Migrate() {
 	}
 
 	if err := db.AutoMigrate(
-		&SofaScoreEvent{},
+		&events.Event{},
 		&Tournament{},
-		&Team{},
+		&events.Team{},
 		&User{},
 		&Domain{},
 		&RefreshToken{},

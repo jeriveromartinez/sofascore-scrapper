@@ -1,13 +1,5 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 
-type Team struct {
-	gorm.Model
-	TeamId         int64 `gorm:"uniqueIndex"`
-	Name           string
-	LogoUrl        string
-	PrimaryColor   string
-	SecondaryColor string
-	TextColor      string
-}
+type Team = events.Team
