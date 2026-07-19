@@ -5,26 +5,51 @@ import apkEditUrlModal from "./apkEditUrl.vue";
 import { apkApiService } from "../../store/services";
 import type { ApkVersionInfo } from "../../store/services/models";
 
+const PAGE_LIMIT = 10;
+
 const editModal = ref<typeof apkEditUrlModal>();
 
 const listState = reactive({
   loading: false,
   error: "",
   versions: [] as ApkVersionInfo[],
+  currentCursor: "" as string,
+  nextCursor: "" as string,
+  prevCursors: [] as string[],
+  hasNext: false,
+  hasPrev: false,
 });
 
-async function loadVersions(): Promise<void> {
+async function loadPage(cursor?: string): Promise<void> {
   listState.loading = true;
   listState.error = "";
 
   try {
-    listState.versions = await apkApiService.listVersions();
+    const page = await apkApiService.listVersionsPage(cursor, PAGE_LIMIT);
+    listState.versions = page.data;
+    listState.nextCursor = page.page?.nextCursor ?? "";
+    listState.hasNext = page.page?.hasMore ?? false;
+    listState.currentCursor = cursor ?? "";
+    listState.hasPrev = listState.prevCursors.length > 0;
   } catch (error) {
     listState.error =
       error instanceof Error ? error.message : "No se pudo cargar el listado";
   } finally {
     listState.loading = false;
   }
+}
+
+async function goNext(): Promise<void> {
+  if (!listState.hasNext || !listState.nextCursor) return;
+  listState.prevCursors = [...listState.prevCursors, listState.currentCursor];
+  await loadPage(listState.nextCursor);
+}
+
+async function goPrev(): Promise<void> {
+  if (listState.prevCursors.length === 0) return;
+  const prev = listState.prevCursors[listState.prevCursors.length - 1];
+  listState.prevCursors = listState.prevCursors.slice(0, -1);
+  await loadPage(prev || undefined);
 }
 
 function getDownloadUrl(appKey: string): string {
@@ -45,7 +70,7 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
-onMounted(() => loadVersions());
+onMounted(() => loadPage());
 </script>
 
 <template>
@@ -59,13 +84,13 @@ onMounted(() => loadVersions());
         </div>
         <div>
           <apk-upload-modal
-            @uploaded="loadVersions"
+            @uploaded="loadPage"
             :auto-close-modal="false"
           />
           <button
             class="btn btn-outline-primary btn-sm ms-2"
             :disabled="listState.loading"
-            @click="loadVersions"
+            @click="loadPage()"
           >
             Recargar
           </button>
@@ -121,6 +146,23 @@ onMounted(() => loadVersions());
               </tr>
             </tbody>
           </table>
+
+          <div class="d-flex justify-content-between align-items-center mt-3">
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="!listState.hasPrev || listState.loading"
+              @click="goPrev"
+            >
+              Anterior
+            </button>
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="!listState.hasNext || listState.loading"
+              @click="goNext"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
         <p class="text-body-secondary mb-0" v-else-if="!listState.loading">
           No hay versiones cargadas.
@@ -131,7 +173,7 @@ onMounted(() => loadVersions());
 
   <apk-edit-url-modal
     ref="editModal"
-    @updated="loadVersions"
+    @updated="loadPage"
     :auto-close-modal="false"
   />
 </template>

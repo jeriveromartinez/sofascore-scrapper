@@ -1,5 +1,7 @@
 import type {
   ApkInfo as ProtoApkInfo,
+  ApkList,
+  ApkPage as ProtoApkPage,
   ApkUploadResponse as ProtoApkUploadResponse,
   ApkUpdateCheckResponse as ProtoApkUpdateCheckResponse,
   Domain as ProtoDomain,
@@ -86,6 +88,7 @@ export interface AddGlobalConfigPayload {
 export type UploadApkResponse = ProtoApkUploadResponse;
 export type ApkVersionInfo = ProtoApkInfo;
 export type ApkCheckResponse = ProtoApkUpdateCheckResponse;
+export type ApkPageResponse = ProtoApkPage;
 
 export interface ApiErrorResponse {
   error: string;

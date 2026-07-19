@@ -1,6 +1,7 @@
 import { BaseApiService } from "./BaseApiService";
 import {
   ApkList,
+  ApkPage,
   ApkUpdateCheckResponse,
   ApkUploadResponse,
   DeviceUrl,
@@ -9,6 +10,7 @@ import {
 import type {
   ApkCheckResponse,
   ApkVersionInfo,
+  ApkPageResponse,
   UploadApkResponse,
 } from "./models";
 
@@ -123,6 +125,18 @@ export class ApkApiService extends BaseApiService {
 
   async listVersions(): Promise<ApkVersionInfo[]> {
     return (await this.get("/versions", ApkList)).versions;
+  }
+
+  async listVersionsPage(
+    cursor?: string,
+    limit?: number,
+  ): Promise<ApkPageResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    const url = qs ? `/versions/page?${qs}` : "/versions/page";
+    return this.get(url, ApkPage);
   }
 
   async checkUpdate(
