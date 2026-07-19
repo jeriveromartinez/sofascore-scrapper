@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { api, AuthRequest, AuthResponse, CreateInvitationRequest, InvitationResponse } from "./helpers";
+import { api, AuthRequest, AuthResponse, createTestInvitation, CreateInvitationRequest, InvitationResponse } from "./helpers";
 
 const INVITE_PATH = "/api/web/v1/users/invitations";
 const REGISTER_PATH = "/api/web/v1/users/register";
@@ -15,8 +15,8 @@ let accessToken: string;
 let refreshToken: string;
 
 test.describe("Auth flow", () => {
-  test.beforeAll(async () => {
-    bootstrapToken = await getBootstrapInvitationToken();
+  test.beforeAll(async ({ request }) => {
+    bootstrapToken = await createTestInvitation(request);
     expect(bootstrapToken).toBeTruthy();
   });
 
@@ -124,18 +124,3 @@ test.describe("Auth flow", () => {
     expect(resp.status).toBe(400);
   });
 });
-
-async function getBootstrapInvitationToken(): Promise<string> {
-  const { execSync } = await import("child_process");
-  const composeFile = "deployments/docker/compose.test.yml";
-  const cmds = [
-    `docker compose -f ${composeFile} exec -T backend cat /shared/invite.txt`,
-    `docker compose -f ${composeFile} run --rm -T --no-deps backend cat /shared/invite.txt`,
-  ];
-  for (const cmd of cmds) {
-    try {
-      return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
-    } catch { /* try next */ }
-  }
-  throw new Error("Could not read bootstrap invitation token from compose.");
-}

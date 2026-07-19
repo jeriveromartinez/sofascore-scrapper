@@ -96,10 +96,14 @@ jobs:
 
       - name: Run full load suite
         run: |
+          failed=0
           for script in tests/load/devices.js tests/load/events.js tests/load/multi-instance.js tests/load/playback.js tests/load/redis-degraded.js tests/load/uploads.js; do
             echo "=== Running $script ==="
-            k6 run --summary-export="k6-$(basename "$script" .js)-summary.json" "$script" || true
+            if ! k6 run --summary-export="k6-$(basename "$script" .js)-summary.json" "$script"; then
+              failed=1
+            fi
           done
+          exit "$failed"
         env:
           BASE_URL: ${{ secrets.LOAD_BASE_URL }}
 

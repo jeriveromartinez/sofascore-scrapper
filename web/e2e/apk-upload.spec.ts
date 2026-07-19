@@ -1,27 +1,14 @@
 import { test, expect } from "@playwright/test";
-import { api, AuthRequest, AuthResponse, UploadBeginRequest, UploadBeginResponse, UploadStatusResponse, UploadChunkResponse, StatusMessage, DeviceUrl } from "./helpers";
+import { api, getE2EAdminToken, UploadBeginRequest, UploadBeginResponse, UploadStatusResponse, UploadChunkResponse, StatusMessage, DeviceUrl } from "./helpers";
 
-const AUTH_PATH = "/api/web/v1/users";
 const UPLOADS_PATH = "/api/web/v1/apk/uploads";
 const APK_PATH = "/api/web/v1/apk";
-
-const TEST_EMAIL = `e2e-apk-${Date.now()}@test.local`;
-const TEST_PASSWORD = "Password1!";
 
 let accessToken: string;
 
 test.describe("Resumable APK upload", () => {
-  test.beforeAll(async ({ request }) => {
-    const bootstrapToken = await getBootstrapInvitationToken();
-    const registerResp = await api.post<AuthResponse, AuthRequest>(
-      request,
-      `${AUTH_PATH}/register`,
-      { email: TEST_EMAIL, password: TEST_PASSWORD, invitationToken: bootstrapToken },
-      AuthRequest,
-      AuthResponse,
-    );
-    expect(registerResp.status).toBe(201);
-    accessToken = registerResp.data!.token;
+  test.beforeAll(() => {
+    accessToken = getE2EAdminToken();
   });
 
   test("begin upload requires auth", async ({ request }) => {
@@ -129,16 +116,3 @@ test.describe("Resumable APK upload", () => {
     expect(resp.status).toBe(404);
   });
 });
-
-async function getBootstrapInvitationToken(): Promise<string> {
-  const { execSync } = await import("child_process");
-  const composeFile = "deployments/docker/compose.test.yml";
-  try {
-    return execSync(
-      `docker compose -f ${composeFile} exec -T backend cat /shared/invite.txt`,
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-    ).toString().trim();
-  } catch {
-    throw new Error("Could not read bootstrap invitation token.");
-  }
-}

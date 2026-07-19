@@ -1,30 +1,17 @@
 import { test, expect } from "@playwright/test";
-import { api, AuthRequest, AuthResponse, TournamentRequest, Tournament, TournamentPage } from "./helpers";
+import { api, getE2EAdminToken, StatusMessage, TournamentRequest, Tournament, TournamentPage } from "./helpers";
 
-const AUTH_PATH = "/api/web/v1/users";
 const TOURNAMENTS_PATH = "/api/web/v1/tournaments";
 const PAGE_PATH = "/api/web/v1/tournaments/page";
 
-const TEST_EMAIL = `e2e-page-${Date.now()}@test.local`;
-const TEST_PASSWORD = "Password1!";
-
 let accessToken: string;
+const tournamentIds: number[] = [];
 
 test.describe("Cursor pagination", () => {
   test.beforeAll(async ({ request }) => {
-    const bootstrapToken = await getBootstrapInvitationToken();
-    const registerResp = await api.post<AuthResponse, AuthRequest>(
-      request,
-      `${AUTH_PATH}/register`,
-      { email: TEST_EMAIL, password: TEST_PASSWORD, invitationToken: bootstrapToken },
-      AuthRequest,
-      AuthResponse,
-    );
-    expect(registerResp.status).toBe(201);
-    accessToken = registerResp.data!.token;
-
+    accessToken = getE2EAdminToken();
     for (let i = 0; i < 25; i++) {
-      await api.post<Tournament, TournamentRequest>(
+      const response = await api.post<Tournament, TournamentRequest>(
         request,
         TOURNAMENTS_PATH,
         { name: `Tournament ${String(i).padStart(3, "0")}`, slug: `tournament-${String(i).padStart(3, "0")}` },
@@ -32,6 +19,18 @@ test.describe("Cursor pagination", () => {
         Tournament,
         { Authorization: `Bearer ${accessToken}` },
       );
+      if (response.status !== 201 || !response.data) {
+        throw new Error(`Could not seed pagination tournament: ${response.error ?? response.status}`);
+      }
+      tournamentIds.push(response.data.id);
+    }
+  });
+
+  test.afterAll(async ({ request }) => {
+    for (const id of tournamentIds) {
+      await api.delete(request, `${TOURNAMENTS_PATH}/${id}`, StatusMessage, {
+        Authorization: `Bearer ${accessToken}`,
+      });
     }
   });
 
@@ -114,16 +113,3 @@ test.describe("Cursor pagination", () => {
     expect(resp.status).toBe(400);
   });
 });
-
-async function getBootstrapInvitationToken(): Promise<string> {
-  const { execSync } = await import("child_process");
-  const composeFile = "deployments/docker/compose.test.yml";
-  try {
-    return execSync(
-      `docker compose -f ${composeFile} exec -T backend cat /shared/invite.txt`,
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-    ).toString().trim();
-  } catch {
-    throw new Error("Could not read bootstrap invitation token.");
-  }
-}

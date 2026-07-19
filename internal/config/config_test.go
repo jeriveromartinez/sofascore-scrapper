@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -16,6 +17,7 @@ func TestLoadRequiresJWTSecret(t *testing.T) {
 
 func TestLoadSecurityDefaults(t *testing.T) {
 	setRequiredEnv(t)
+	t.Setenv("TRUSTED_PROXIES", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -26,11 +28,28 @@ func TestLoadSecurityDefaults(t *testing.T) {
 	if cfg.HTTP.ReadHeaderTimeout != 5*time.Second {
 		t.Fatal(cfg.HTTP.ReadHeaderTimeout)
 	}
+	if len(cfg.HTTP.TrustedProxies) != 0 {
+		t.Fatalf("TrustedProxies=%v, want none", cfg.HTTP.TrustedProxies)
+	}
+}
+
+func TestLoadTrustedProxiesCSV(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("TRUSTED_PROXIES", " 10.0.0.10, 192.168.1.0/24, ,")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"10.0.0.10", "192.168.1.0/24"}
+	if !reflect.DeepEqual(cfg.HTTP.TrustedProxies, want) {
+		t.Fatalf("TrustedProxies=%v, want %v", cfg.HTTP.TrustedProxies, want)
+	}
 }
 
 func TestLoadDefaults(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret")
-	t.Setenv("API_ADDR", "")
+	setRequiredEnv(t)
 	got, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +63,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadAllDefaults(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret")
+	setRequiredEnv(t)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -71,6 +90,7 @@ func TestLoadAllDefaults(t *testing.T) {
 }
 
 func TestLoadEnvOverrides(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("JWT_SECRET", "super-secret")
 	t.Setenv("DB_PASSWORD", "pass123")
 	t.Setenv("API_ADDR", ":9090")
@@ -110,6 +130,17 @@ func TestLoadRedisDefaults(t *testing.T) {
 
 func setRequiredEnv(t *testing.T) {
 	t.Helper()
+	for _, key := range []string{
+		"API_ADDR", "PPROF_ADDR", "APK_STORAGE_PATH", "IMAGE_STORAGE_PATH",
+		"SCRAPE_BATCH_SIZE", "SCRAPE_CONCURRENCY", "DB_HOST", "DB_PORT",
+		"DB_USER", "DB_PASSWORD", "DB_NAME", "DB_MAX_OPEN_CONNS",
+		"DB_MAX_IDLE_CONNS", "DB_CONN_MAX_LIFETIME", "DB_CONN_MAX_IDLE_TIME",
+		"REDIS_URL", "REDIS_KEY_PREFIX", "REDIS_DIAL_TIMEOUT", "REDIS_READ_TIMEOUT",
+		"REDIS_WRITE_TIMEOUT", "HTTP_READ_HEADER_TIMEOUT", "HTTP_WRITE_TIMEOUT",
+		"HTTP_IDLE_TIMEOUT", "TRUSTED_PROXIES",
+	} {
+		t.Setenv(key, "")
+	}
 	t.Setenv("JWT_SECRET", "test-secret")
 }
 

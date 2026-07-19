@@ -21,6 +21,7 @@ All database migrations are embedded in the binary via `go:embed` and run automa
 | `000005_apk_semver_order` | Add semver columns to APK versions | No | Yes (columns dropped, index dropped) |
 | `000006_download_counter_flushes` | Create `download_counter_flushes` idempotency table | No | Yes (table dropped) |
 | `000007_apk_publish_state` | Create `apk_upload_publications` table | No | Yes (table dropped) |
+| `000008_user_roles` | Add `role` column to `users`; promote existing accounts to `admin` | No (schema change) | Yes (column dropped) |
 
 ---
 

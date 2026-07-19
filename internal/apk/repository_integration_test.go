@@ -3,12 +3,14 @@
 package apk
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"testing"
 
 	_ "github.com/golang-migrate/migrate/v4/database/mysql"
+	dbplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -43,7 +45,18 @@ func setupRepoTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("gorm.Open: %v", err)
 	}
+	ensureIntegrationSchema(t, sqlDB, db)
 	return db
+}
+
+func ensureIntegrationSchema(t *testing.T, sqlDB *sql.DB, db *gorm.DB) {
+	t.Helper()
+	if db.Migrator().HasTable(&ApkVersion{}) {
+		return
+	}
+	if err := dbplatform.Migrate(context.Background(), sqlDB); err != nil {
+		t.Fatalf("migrate integration database: %v", err)
+	}
 }
 
 func TestGetLatest_ReturnsNewestVersion(t *testing.T) {
@@ -128,7 +141,7 @@ func TestGetLatest_PackageIsolation(t *testing.T) {
 	}
 }
 
-func TestGetLatest_IDTieBreak(t *testing.T) {
+func TestCreate_RejectsDuplicateVersionForPackage(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
@@ -136,21 +149,10 @@ func TestGetLatest_IDTieBreak(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create first: %v", err)
 	}
-	second, err := repo.Create("1.0.0", "second.apk", "/tmp/second.apk", "second", "com.test.tiebreak", 200, 1, 21, 31)
-	if err != nil {
-		t.Fatalf("Create second: %v", err)
-	}
-	t.Cleanup(func() {
-		db.Unscoped().Delete(first)
-		db.Unscoped().Delete(second)
-	})
+	t.Cleanup(func() { db.Unscoped().Delete(first) })
 
-	latest, err := repo.GetLatest("com.test.tiebreak")
-	if err != nil {
-		t.Fatalf("GetLatest: %v", err)
-	}
-	if latest.ID != second.ID {
-		t.Errorf("expected higher ID %d to win tiebreak, got %d", second.ID, latest.ID)
+	if _, err := repo.Create("1.0.0", "second.apk", "/tmp/second.apk", "second", "com.test.tiebreak", 200, 1, 21, 31); err == nil {
+		t.Fatal("duplicate version and package should be rejected")
 	}
 }
 

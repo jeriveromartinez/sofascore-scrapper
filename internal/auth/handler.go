@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 )
 
 type AuthHandler struct {
@@ -21,12 +21,12 @@ func NewAuthHandler(authRepo *AuthRepository, userRepo *users.Repository, tokens
 	return &AuthHandler{authRepo: authRepo, userRepo: userRepo, tokens: tokens, invitation: invitation}
 }
 
-func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup, rateLimitMw gin.HandlerFunc) {
+func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup, rateLimitMw, adminMw gin.HandlerFunc) {
 	group.POST("/users/register", rateLimitMw, h.handleRegister)
 	group.POST("/users/login", rateLimitMw, h.handleLogin)
 	group.POST("/users/refresh", rateLimitMw, h.handleRefresh)
 	group.POST("/users/logout", AuthMiddleware(h.tokens), rateLimitMw, h.handleLogout)
-	group.POST("/users/invitations", AuthMiddleware(h.tokens), rateLimitMw, h.handleCreateInvitation)
+	group.POST("/users/invitations", AuthMiddleware(h.tokens), adminMw, rateLimitMw, h.handleCreateInvitation)
 }
 
 func (h *AuthHandler) handleRegister(c *gin.Context) {

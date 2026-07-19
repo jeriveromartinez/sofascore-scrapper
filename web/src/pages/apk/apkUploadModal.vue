@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, watch } from "vue";
+import { onBeforeUnmount, reactive, watch } from "vue";
 import { apkApiService } from "../../store/services";
 
 const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
@@ -43,8 +43,8 @@ function openUploadModal(): void {
     if (resumed) {
       upload.resuming = true;
       upload.sessionResumed = true;
-      const done = resumed.status.chunks_received;
-      const total = resumed.status.total_chunks;
+      const done = resumed.status.chunksReceived;
+      const total = resumed.status.totalChunks;
       upload.pendingChunks = total - done;
       upload.progress = Math.round((done / total) * 90);
       upload.uploadId = resumed.session.uploadId;
@@ -107,12 +107,12 @@ async function resumeAndComplete(): Promise<void> {
 
   try {
     const status = await apkApiService.getUploadStatus(upload.uploadId);
-    const totalChunks = status.total_chunks;
-    const received = status.chunks_received;
+    const totalChunks = status.totalChunks;
+    const received = status.chunksReceived;
 
     for (let i = received; i < totalChunks; i++) {
       const start = i * (10 * 1024 * 1024);
-      const fileSize = status.file_size;
+      const fileSize = status.fileSize;
       const end = Math.min(start + 10 * 1024 * 1024, fileSize);
 
       const chunkReady = upload.file

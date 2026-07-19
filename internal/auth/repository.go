@@ -65,5 +65,3 @@ func (r *AuthRepository) RotateRefreshToken(ctx context.Context, userID uint, ol
 		return tx.Create(&RefreshToken{UserID: userID, TokenID: newID, ExpiresAt: expiresAt}).Error
 	})
 }
-
-

@@ -9,16 +9,16 @@ import (
 )
 
 const (
-	protobufBodyLimit  int64 = 1 << 20
-	directUploadLimit  int64 = 200<<20 + 1<<20
-	chunkUploadLimit   int64 = 10<<20 + 1<<20
-	protobufReadDeadline     = 10 * time.Second
-	uploadReadDeadline       = 15 * time.Minute
+	protobufBodyLimit    int64 = 1 << 20
+	directUploadLimit    int64 = 200<<20 + 1<<20
+	chunkUploadLimit     int64 = 10<<20 + 1<<20
+	protobufReadDeadline       = 10 * time.Second
+	uploadReadDeadline         = 15 * time.Minute
 )
 
 func BodyLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		limit, readDeadline := classifyBodyLimit(c.Request.URL.Path)
+		limit, readDeadline := classifyBodyLimit(c.Request.Method, c.Request.URL.Path)
 		if readDeadline > 0 {
 			setReadDeadline(c, readDeadline)
 		}
@@ -31,11 +31,22 @@ func BodyLimit() gin.HandlerFunc {
 	}
 }
 
-func classifyBodyLimit(path string) (int64, time.Duration) {
-	if strings.HasPrefix(path, "/api/web/v1/apk/upload/chunk") {
+func classifyBodyLimit(method, path string) (int64, time.Duration) {
+	const (
+		legacyUploadPath = "/api/web/v1/apk/upload"
+		uploadsPath      = "/api/web/v1/apk/uploads/"
+	)
+
+	if path == legacyUploadPath+"/chunk" || strings.HasPrefix(path, legacyUploadPath+"/chunk/") {
 		return chunkUploadLimit, uploadReadDeadline
 	}
-	if strings.HasPrefix(path, "/api/web/v1/apk/upload") {
+	if method == http.MethodPut && strings.HasPrefix(path, uploadsPath) {
+		parts := strings.Split(strings.TrimPrefix(path, uploadsPath), "/")
+		if len(parts) == 3 && parts[0] != "" && parts[1] == "chunks" && parts[2] != "" {
+			return chunkUploadLimit, uploadReadDeadline
+		}
+	}
+	if path == legacyUploadPath || strings.HasPrefix(path, legacyUploadPath+"/") {
 		return directUploadLimit, uploadReadDeadline
 	}
 	return protobufBodyLimit, protobufReadDeadline

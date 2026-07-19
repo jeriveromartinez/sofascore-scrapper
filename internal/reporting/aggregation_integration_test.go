@@ -114,6 +114,51 @@ func TestGenerateDaily_MillisecondDuration(t *testing.T) {
 	}
 }
 
+func TestGenerateDaily_UpsertsExistingPeriodIdempotently(t *testing.T) {
+	db := setupAggTestDB(t)
+	repo := NewAggregationRepository(db)
+
+	now := time.Now()
+	begin := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).Add(-24 * time.Hour)
+	existing := ContentStat{
+		ContentHash: "late-channel",
+		PeriodType:  PeriodTypeDay,
+		PeriodStart: begin,
+		Seconds:     10,
+		Views:       1,
+	}
+	if err := db.Create(&existing).Error; err != nil {
+		t.Fatalf("seed existing daily stat: %v", err)
+	}
+	createEndedPlaybackLog(db, "late-channel", 2, begin.Add(time.Hour).UnixMilli())
+
+	if err := repo.GenerateDaily(); err != nil {
+		t.Fatalf("GenerateDaily with an existing period failed: %v", err)
+	}
+
+	var stats []ContentStat
+	if err := db.Where("content_hash = ? AND period_type = ? AND period_start = ?", "late-channel", PeriodTypeDay, begin).Find(&stats).Error; err != nil {
+		t.Fatalf("query daily stat: %v", err)
+	}
+	if len(stats) != 1 {
+		t.Fatalf("daily rows: want 1, got %d", len(stats))
+	}
+	if stats[0].Seconds != 30 || stats[0].Views != 1 {
+		t.Fatalf("updated daily stat: want 30 seconds/1 view, got %d seconds/%d views", stats[0].Seconds, stats[0].Views)
+	}
+
+	if err := repo.GenerateDaily(); err != nil {
+		t.Fatalf("GenerateDaily retry failed: %v", err)
+	}
+	var afterRetry ContentStat
+	if err := db.First(&afterRetry, stats[0].ID).Error; err != nil {
+		t.Fatalf("query daily stat after retry: %v", err)
+	}
+	if afterRetry.Seconds != stats[0].Seconds || afterRetry.Views != stats[0].Views {
+		t.Fatalf("retry changed daily stat from %d/%d to %d/%d", stats[0].Seconds, stats[0].Views, afterRetry.Seconds, afterRetry.Views)
+	}
+}
+
 func TestGenerateMonthly_UsesPeriodStart(t *testing.T) {
 	db := setupAggTestDB(t)
 	repo := NewAggregationRepository(db)

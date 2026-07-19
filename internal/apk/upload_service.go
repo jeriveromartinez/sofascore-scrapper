@@ -2,6 +2,7 @@ package apk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,15 +15,14 @@ import (
 )
 
 type UploadPublication struct {
-	ID        uint           `gorm:"primaryKey"`
-	UploadID  string         `gorm:"uniqueIndex;size:36;not null;column:upload_id"`
-	TempPath  string         `gorm:"size:1024;not null;column:temp_path"`
-	FinalPath string         `gorm:"size:1024;not null;default:'';column:final_path"`
-	Status    string         `gorm:"size:20;not null;default:'assembling';column:status"`
-	UserID    uint           `gorm:"not null;default:0;column:user_id"`
-	CreatedAt time.Time      `gorm:"not null;autoCreateTime"`
-	UpdatedAt time.Time      `gorm:"not null;autoUpdateTime"`
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+	ID        uint      `gorm:"primaryKey"`
+	UploadID  string    `gorm:"uniqueIndex;size:36;not null;column:upload_id"`
+	TempPath  string    `gorm:"size:1024;not null;column:temp_path"`
+	FinalPath string    `gorm:"size:1024;not null;default:'';column:final_path"`
+	Status    string    `gorm:"size:20;not null;default:'assembling';column:status"`
+	UserID    uint      `gorm:"not null;default:0;column:user_id"`
+	CreatedAt time.Time `gorm:"not null;autoCreateTime"`
+	UpdatedAt time.Time `gorm:"not null;autoUpdateTime"`
 }
 
 func (UploadPublication) TableName() string {
@@ -80,10 +80,13 @@ func (s *UploadService) Begin(ctx context.Context, userID uint, req *pb.UploadBe
 	}, nil
 }
 
-func (s *UploadService) Status(ctx context.Context, uploadID uuid.UUID) (*pb.UploadStatusResponse, error) {
+func (s *UploadService) Status(ctx context.Context, uploadID uuid.UUID, userID uint) (*pb.UploadStatusResponse, error) {
 	session, err := s.store.Get(ctx, uploadID)
 	if err != nil {
 		return nil, err
+	}
+	if session.UserID != userID {
+		return nil, fmt.Errorf("owner mismatch")
 	}
 
 	return &pb.UploadStatusResponse{
@@ -98,10 +101,13 @@ func (s *UploadService) Status(ctx context.Context, uploadID uuid.UUID) (*pb.Upl
 	}, nil
 }
 
-func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkIndex int, reader io.Reader) (*pb.UploadChunkResponse, error) {
+func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkIndex int, userID uint, reader io.Reader) (*pb.UploadChunkResponse, error) {
 	session, err := s.store.Get(ctx, uploadID)
 	if err != nil {
 		return nil, err
+	}
+	if session.UserID != userID {
+		return nil, fmt.Errorf("owner mismatch")
 	}
 
 	if session.Status != StatusReceiving {
@@ -222,13 +228,17 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	if err := PublishNoReplace(tmpPath, destPath); err != nil {
 		os.Remove(tmpPath)
 		s.markPublicationFailed(pub.ID)
-		if err.Error() == "file exists" {
+		if errors.Is(err, os.ErrExist) {
 			return nil, fmt.Errorf("APK version already exists")
 		}
 		return nil, fmt.Errorf("publish: %w", err)
 	}
 
-	pub.TempPath = tmpPath
+	// PublishNoReplace renames the temp into place on Linux (nothing left to
+	// remove), but the cross-platform fallback copies it, so clean up any
+	// leftover assembled temp to avoid orphaning a full-size APK in storage.
+	os.Remove(tmpPath)
+
 	pub.FinalPath = destPath
 	pub.Status = "published"
 	s.db.Save(pub)

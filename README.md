@@ -151,36 +151,70 @@ cd web && npm run build
 
 # Generate protobuf (Go)
 PATH="$PATH:/D/.go/bin" protoc \
-  --proto_path="E:/Projects/sofascore-scrapper" \
-  --go_out="E:/Projects/sofascore-scrapper" \
+  --proto_path="E:/Projects/IPTV/sofascore-scrapper" \
+  --go_out="E:/Projects/IPTV/sofascore-scrapper" \
   --go_opt=module=github.com/jeriveromartinez/sofascore-scrapper \
-  "E:/Projects/sofascore-scrapper/proto/api.proto"
+  "E:/Projects/IPTV/sofascore-scrapper/proto/api.proto"
 
 # Generate protobuf (Vue/TypeScript)
 protoc \
-  --proto_path=E:/Projects/sofascore-scrapper \
-  --plugin=protoc-gen-ts_proto=E:/Projects/sofascore-scrapper/web/node_modules/.bin/protoc-gen-ts_proto.cmd \
-  --ts_proto_out=E:/Projects/sofascore-scrapper/web/src \
+  --proto_path=E:/Projects/IPTV/sofascore-scrapper \
+  --plugin=protoc-gen-ts_proto=E:/Projects/IPTV/sofascore-scrapper/web/node_modules/.bin/protoc-gen-ts_proto.cmd \
+  --ts_proto_out=E:/Projects/IPTV/sofascore-scrapper/web/src \
   --ts_proto_opt=esModuleInterop=true,outputClientImpl=false \
-  E:/Projects/sofascore-scrapper/proto/api.proto
+  E:/Projects/IPTV/sofascore-scrapper/proto/api.proto
 ```
 
 ## API Endpoints
 
+**Auth column:** `None` public · `Token` download-token capability · `Device` registered-device header (`APP-XIPTV`) · `Auth` JWT bearer (any user) · `Admin` JWT bearer with the `admin` role.
+
+### Infrastructure
+
 | Path | Auth | Description |
 |---|---|---|
-| `/` | None | SPA dashboard |
-| `/health/live` | None | Liveness probe |
-| `/health/ready` | None | Readiness probe (DB + Redis) |
-| `/metrics` | None | Prometheus metrics |
-| `GET /api/app/v1/apk/latest` | Device | Latest APK version |
-| `GET /api/app/v1/apk/download/:token` | Device | Download APK |
-| `POST /api/app/v1/devices/register` | None | Register device |
-| `POST /api/app/v1/playback/start` | Device | Start playback |
-| `POST /api/app/v1/playback/end` | Device | End playback |
-| `POST /api/app/v1/crash` | Device | Submit crash report |
-| `GET /api/app/v1/events` | Device | Live events feed |
-| `GET /api/app/v1/logo/:teamId` | Device | Team logo image |
+| `GET /` | None | SPA dashboard |
+| `GET /health/live` | None | Liveness probe |
+| `GET /health/ready` | None | Readiness probe (DB + Redis) |
+| `GET /metrics` | None | Prometheus metrics (blocked at the edge in multi-instance; see `nginx.conf`) |
+
+### App API (`/api/app/v1`) — consumed by Android devices
+
+| Method / Path | Auth | Description |
+|---|---|---|
+| `GET /update` | None | Latest APK version / update check |
+| `GET /apk/download/:token` | Token | Download APK by capability token |
+| `GET /devices/url/:packageName` | None | Resolve distribution domain for a package |
+| `POST /devices` | None | Register device |
+| `POST /devices/viewing` | Device | Report playback / viewing |
+| `GET /current-events` | Device | Current + upcoming events for the device |
+| `POST /crash-report` | None | Submit crash report (IP rate-limited, body-size capped) |
+| `GET /teams/logo/:teamId` | None | Team logo image |
+
+### Management API (`/api/web/v1`) — dashboard / operators
+
+| Method / Path | Auth | Description |
+|---|---|---|
+| `POST /users/register` | None | Register (requires a valid invitation token) |
+| `POST /users/login` | None | Obtain access + refresh tokens |
+| `POST /users/refresh` | None | Rotate access + refresh tokens |
+| `POST /users/logout` | Auth | Revoke refresh token(s) |
+| `POST /users/invitations` | Admin | Create an invitation token |
+| `PUT /users/:id/role` | Admin | Set a user's role (`admin`/`user`); refuses to demote the last admin |
+
+Every other `/api/web/v1/*` route requires **Admin** — user, device, event, playback, APK
+(including resumable uploads), tournament, domain, and global-config management, plus
+reporting (`GET /stats/top-events`). See `internal/app/routes.go` for the authoritative list.
+
+## Authorization & Roles
+
+The management API uses JWT bearer authentication (`AuthMiddleware`) plus role-based access control:
+
+- **Roles:** `admin` and `user` (`users.role`, default `user`).
+- **Admin gate:** `RequireAdmin` runs after authentication on every `/api/web/v1/*` management route and on invitation creation; non-admins receive `403`.
+- **Middleware order:** authenticate → rate-limit (fail-closed) → admin check, so an unauthenticated flood is throttled before any database lookup.
+- **Bootstrapping:** migration `000008_user_roles` adds the column and promotes every pre-existing account to `admin` (they were implicit operators). New invited accounts default to `user`.
+- **Promoting / demoting:** `PUT /api/web/v1/users/:id/role` (admin only); the last remaining admin cannot be demoted. Inspect roles directly with `SELECT email, role FROM users;`.
 
 ## Data Model
 
@@ -188,7 +222,7 @@ Core tables (see `migrations/000001_baseline.up.sql` for full DDL):
 
 | Table | Purpose |
 |---|---|
-| `users` | Admin user accounts |
+| `users` | Operator accounts (email, bcrypt password, `role`: admin/user) |
 | `events` | Scraped sport events with scores, timestamps |
 | `teams` | Team metadata and logos |
 | `tournaments` | Tournament/league registry |

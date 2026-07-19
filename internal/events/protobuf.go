@@ -3,8 +3,8 @@ package events
 import (
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 )
 
 func TeamToProto(t *Team) *pb.Team {

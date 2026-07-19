@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 )
 
 type AdminHandlerDeps struct {

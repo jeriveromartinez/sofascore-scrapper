@@ -10,7 +10,7 @@ import (
 )
 
 func Open(cfg config.Database) (*gorm.DB, *sql.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local&multiStatements=true", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("connect database: %w", err)

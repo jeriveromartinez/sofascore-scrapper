@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	uploadSessionTTL      = 24 * time.Hour
-	maxActiveUploads      = 2
-	uploadMetaKeyFmt      = "upload:v1:%s:meta"
-	uploadChunksKeyFmt    = "upload:v1:%s:chunks"
-	uploadUserActiveFmt   = "upload:v1:user:%d:active"
-	uploadExpiresSet      = "upload:v1:expires"
+	uploadSessionTTL    = 24 * time.Hour
+	maxActiveUploads    = 2
+	uploadMetaKeyFmt    = "upload:v1:%s:meta"
+	uploadChunksKeyFmt  = "upload:v1:%s:chunks"
+	uploadUserActiveFmt = "upload:v1:user:%d:active"
+	uploadExpiresSet    = "upload:v1:expires"
 )
 
 type UploadSessionStatus string
@@ -31,18 +31,18 @@ const (
 )
 
 type UploadSession struct {
-	ID            string
-	UserID        uint
-	FileName      string
-	FileSize      int64
-	TotalChunks   int
+	ID             string
+	UserID         uint
+	FileName       string
+	FileSize       int64
+	TotalChunks    int
 	ChunksReceived int
-	BytesReceived int64
-	Status        UploadSessionStatus
-	Version       string
-	Description   string
-	CreatedAt     time.Time
-	ExpiresAt     time.Time
+	BytesReceived  int64
+	Status         UploadSessionStatus
+	Version        string
+	Description    string
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
 }
 
 type ChunkRecord struct {
@@ -105,12 +105,12 @@ var uploadBeginScript = goredis.NewScript(`
 
 	redis.call('SET', meta_key, meta, 'PX', ttl_ms)
 	redis.call('SADD', user_active_key, upload_id)
-	redis.call('EXPIRE', user_active_key, ttl_ms)
+	redis.call('PEXPIRE', user_active_key, ttl_ms)
 	redis.call('ZADD', expires_key, expires_at, upload_id)
 
-	return {ok = 1}
+	return {'ok', 1}
 
-`) 
+`)
 
 var uploadRecordChunkScript = goredis.NewScript(`
 	local meta_key = KEYS[1]
@@ -135,20 +135,20 @@ var uploadRecordChunkScript = goredis.NewScript(`
 	if existing then
 		local existing_data = cjson.decode(existing)
 		if existing_data.hash == chunk_hash then
-			return {ok = 1, duplicate = 1}
+			return {'ok', 1, 'duplicate', 1}
 		end
 		return {err = 'chunk hash mismatch'}
 	end
 
 	local chunk_data = cjson.encode({hash = chunk_hash, size = tonumber(chunk_size)})
 	redis.call('HSET', chunks_key, chunk_field, chunk_data)
-	redis.call('EXPIRE', chunks_key, ttl_ms)
+	redis.call('PEXPIRE', chunks_key, ttl_ms)
 
 	meta.chunks_received = meta.chunks_received + 1
 	meta.bytes_received = meta.bytes_received + tonumber(chunk_size)
 	redis.call('SET', meta_key, cjson.encode(meta), 'PX', ttl_ms)
 
-	return {ok = 1, duplicate = 0}
+	return {'ok', 1, 'duplicate', 0}
 `)
 
 var uploadBeginAssemblyScript = goredis.NewScript(`
@@ -174,7 +174,7 @@ var uploadBeginAssemblyScript = goredis.NewScript(`
 	meta.status = 'assembling'
 	redis.call('SET', meta_key, cjson.encode(meta), 'KEEPTTL')
 
-	return {ok = 1}
+	return {'ok', 1}
 `)
 
 var uploadCompleteScript = goredis.NewScript(`
@@ -198,7 +198,7 @@ var uploadCompleteScript = goredis.NewScript(`
 	redis.call('SREM', user_active_key, upload_id)
 	redis.call('ZREM', expires_key, upload_id)
 
-	return {ok = 1}
+	return {'ok', 1}
 `)
 
 var uploadAbortScript = goredis.NewScript(`
@@ -224,7 +224,7 @@ var uploadAbortScript = goredis.NewScript(`
 	redis.call('ZREM', expires_key, upload_id)
 	redis.call('DEL', chunks_key)
 
-	return {ok = 1}
+	return {'ok', 1}
 `)
 
 func (s *UploadStateStore) Begin(ctx context.Context, req BeginUploadRequest) (*UploadSession, error) {
@@ -273,18 +273,18 @@ func (s *UploadStateStore) Begin(ctx context.Context, req BeginUploadRequest) (*
 	}
 
 	return &UploadSession{
-		ID:            id,
-		UserID:        req.UserID,
-		FileName:      req.FileName,
-		FileSize:      req.FileSize,
-		TotalChunks:   req.TotalChunks,
+		ID:             id,
+		UserID:         req.UserID,
+		FileName:       req.FileName,
+		FileSize:       req.FileSize,
+		TotalChunks:    req.TotalChunks,
 		ChunksReceived: 0,
-		BytesReceived: 0,
-		Status:        StatusReceiving,
-		Version:       req.Version,
-		Description:   req.Description,
-		CreatedAt:     now,
-		ExpiresAt:     expiresAt,
+		BytesReceived:  0,
+		Status:         StatusReceiving,
+		Version:        req.Version,
+		Description:    req.Description,
+		CreatedAt:      now,
+		ExpiresAt:      expiresAt,
 	}, nil
 }
 

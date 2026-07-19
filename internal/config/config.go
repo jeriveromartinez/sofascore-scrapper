@@ -35,6 +35,7 @@ type HTTP struct {
 	ReadHeaderTimeout time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
+	TrustedProxies    []string
 }
 
 type Config struct {
@@ -57,11 +58,11 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		APIAddr:          getEnv("API_ADDR", ":8080"),
-		PprofAddr:        getEnv("PPROF_ADDR", ""),
-		JWTSecret:        secret,
-		APKStoragePath:   getEnv("APK_STORAGE_PATH", "./apk_storage"),
-		ImageStoragePath: getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
+		APIAddr:           getEnv("API_ADDR", ":8080"),
+		PprofAddr:         getEnv("PPROF_ADDR", ""),
+		JWTSecret:         secret,
+		APKStoragePath:    getEnv("APK_STORAGE_PATH", "./apk_storage"),
+		ImageStoragePath:  getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
 		ScrapeBatchSize:   getInt("SCRAPE_BATCH_SIZE", 500),
 		ScrapeConcurrency: getInt("SCRAPE_CONCURRENCY", 8),
 		Database: Database{
@@ -86,6 +87,7 @@ func Load() (Config, error) {
 			ReadHeaderTimeout: getDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
 			WriteTimeout:      getDuration("HTTP_WRITE_TIMEOUT", 10*time.Second),
 			IdleTimeout:       getDuration("HTTP_IDLE_TIMEOUT", 120*time.Second),
+			TrustedProxies:    getCSV("TRUSTED_PROXIES"),
 		},
 	}, nil
 }
@@ -95,6 +97,16 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getCSV(key string) []string {
+	var values []string
+	for _, value := range strings.Split(os.Getenv(key), ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func getDuration(key string, fallback time.Duration) time.Duration {

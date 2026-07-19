@@ -198,33 +198,19 @@ func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]ui
 }
 
 func (r *Repository) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit int) ([]Event, error) {
+	tournamentIDs, err := r.ResolveTournamentIDs(ctx, devID)
+	if err != nil {
+		return nil, err
+	}
+	return r.getCurrentAndUpcoming(ctx, tournamentIDs, limit)
+}
+
+func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []uint, limit int) ([]Event, error) {
 	if limit <= 0 || limit > 6 {
 		limit = 6
 	}
 
 	var events []Event
-
-	var deviceTournaments []tournaments.DeviceTournament
-	if err := r.db.WithContext(ctx).Find(&deviceTournaments, "device_id = ?", devID).Error; err != nil {
-		return nil, err
-	}
-
-	var tournamentIDs []uint
-	if len(deviceTournaments) > 0 {
-		tournamentIDs = make([]uint, len(deviceTournaments))
-		for i, dt := range deviceTournaments {
-			tournamentIDs[i] = dt.TournamentID
-		}
-	} else {
-		var globalConfig []tournaments.GlobalTournamentConfig
-		if err := r.db.WithContext(ctx).Find(&globalConfig).Error; err != nil {
-			return nil, err
-		}
-		tournamentIDs = make([]uint, len(globalConfig))
-		for i, gc := range globalConfig {
-			tournamentIDs[i] = gc.TournamentID
-		}
-	}
 
 	if err := r.db.WithContext(ctx).Where("status_type = ? AND league_id IN ?", "inprogress", tournamentIDs).
 		Order("current_period_start_timestamp DESC").
@@ -285,4 +271,3 @@ func (r *Repository) ListPage(ctx context.Context, startTimestamp int64, id uint
 	}
 	return rows, hasMore, nil
 }
-

@@ -3,8 +3,8 @@ package domains
 import (
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 )
 
 func DomainToProto(d Domain) *pb.Domain {

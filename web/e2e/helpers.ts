@@ -1,4 +1,7 @@
 import type { APIRequestContext } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   AuthRequest,
   AuthResponse,
@@ -19,6 +22,11 @@ import {
 } from "../src/proto/api";
 
 const PROTO_CONTENT_TYPE = "application/x-protobuf";
+const AUTH_PATH = "/api/web/v1/users";
+
+export const E2E_ADMIN_TOKEN_PATH = join(tmpdir(), "sofascore-e2e-admin-token");
+
+let cachedAdminToken = "";
 
 interface ProtoCodec<T> {
   encode(message: T): { finish(): Uint8Array };
@@ -154,6 +162,9 @@ function parseResponse<T>(
 ): { status: number; data: T | null; error: string | null } {
   if (!body.byteLength) {
     if (status >= 400) return { status, data: null, error: `HTTP ${status}` };
+    if (contentType.includes(PROTO_CONTENT_TYPE)) {
+      return { status, data: decoder.decode(new Uint8Array()), error: null };
+    }
     return { status, data: null, error: null };
   }
   if (status >= 400) {
@@ -175,6 +186,29 @@ function parseJsonError(body: Buffer): string | null {
   } catch {
     return null;
   }
+}
+
+export async function createTestInvitation(request: APIRequestContext): Promise<string> {
+  const accessToken = getE2EAdminToken();
+  const response = await protoPost<InvitationResponse, CreateInvitationRequest>(
+    request,
+    `${AUTH_PATH}/invitations`,
+    { ttlSeconds: 600 },
+    CreateInvitationRequest,
+    InvitationResponse,
+    { Authorization: `Bearer ${accessToken}` },
+  );
+  if (response.status !== 201 || !response.data?.token) {
+    throw new Error(`Could not create E2E invitation: ${response.error ?? response.status}`);
+  }
+  return response.data.token;
+}
+
+export function getE2EAdminToken(): string {
+  if (cachedAdminToken) return cachedAdminToken;
+  cachedAdminToken = readFileSync(E2E_ADMIN_TOKEN_PATH, "utf-8").trim();
+  if (!cachedAdminToken) throw new Error("E2E admin token is empty");
+  return cachedAdminToken;
 }
 
 export const api = {

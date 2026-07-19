@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,9 +18,10 @@ import (
 )
 
 type fakeCache struct {
-	data    map[string][]byte
-	getErr  error
-	setErr  error
+	mu       sync.Mutex
+	data     map[string][]byte
+	getErr   error
+	setErr   error
 	getCalls int
 	setCalls int
 }
@@ -27,6 +31,8 @@ func newFakeCache() *fakeCache {
 }
 
 func (c *fakeCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.getCalls++
 	if c.getErr != nil {
 		return nil, false, c.getErr
@@ -36,12 +42,47 @@ func (c *fakeCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 }
 
 func (c *fakeCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.setCalls++
 	if c.setErr != nil {
 		return c.setErr
 	}
 	c.data[key] = value
 	return nil
+}
+
+type missBarrierCache struct {
+	cache   *fakeCache
+	total   int
+	mu      sync.Mutex
+	arrived int
+	release chan struct{}
+}
+
+func newMissBarrierCache(total int) *missBarrierCache {
+	return &missBarrierCache{cache: newFakeCache(), total: total, release: make(chan struct{})}
+}
+
+func (c *missBarrierCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	c.mu.Lock()
+	c.arrived++
+	if c.arrived == c.total {
+		close(c.release)
+	}
+	release := c.release
+	c.mu.Unlock()
+
+	select {
+	case <-release:
+		return c.cache.Get(ctx, key)
+	case <-ctx.Done():
+		return nil, false, ctx.Err()
+	}
+}
+
+func (c *missBarrierCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return c.cache.Set(ctx, key, value, ttl)
 }
 
 type fakeEpoch struct {
@@ -61,10 +102,16 @@ func (e *fakeEpoch) Increment(ctx context.Context) (int64, error) {
 
 func setupCacheTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	dsn := fmt.Sprintf("file:events-cache-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql database: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(16)
 	if err := db.AutoMigrate(&Event{}, &Team{}, &tournaments.Tournament{}, &tournaments.DeviceTournament{}, &tournaments.GlobalTournamentConfig{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -280,6 +327,148 @@ func TestService_GetCurrentAndUpcoming_DeviceTournamentsPreferred(t *testing.T) 
 	}
 	if events[0].SofaScoreEventId != 2 {
 		t.Errorf("expected event from device's tournament, got sofaID=%d", events[0].SofaScoreEventId)
+	}
+}
+
+func TestService_GetCurrentAndUpcoming_CoalescesConcurrentCacheMisses(t *testing.T) {
+	const callers = 8
+	db := setupCacheTestDB(t)
+	if err := db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1}).Error; err != nil {
+		t.Fatalf("seed tournament selection: %v", err)
+	}
+	if err := db.Create(&Event{SofaScoreEventId: 1, LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+
+	var eventQueries atomic.Int32
+	queryStarted := make(chan struct{}, callers)
+	releaseQueries := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseQueries) }) }
+	defer release()
+	if err := db.Callback().Query().Before("gorm:query").Register("test:block_event_query", func(tx *gorm.DB) {
+		if tx.Statement.Table != "events" {
+			return
+		}
+		eventQueries.Add(1)
+		queryStarted <- struct{}{}
+		<-releaseQueries
+	}); err != nil {
+		t.Fatalf("register query callback: %v", err)
+	}
+
+	cache := newMissBarrierCache(callers)
+	service := NewService(NewRepository(db), cache, &EpochStore{client: nil})
+	start := make(chan struct{})
+	type result struct {
+		events []Event
+		err    error
+	}
+	results := make(chan result, callers)
+	for i := 0; i < callers; i++ {
+		go func() {
+			<-start
+			events, err := service.GetCurrentAndUpcoming(context.Background(), 10, 1)
+			results <- result{events: events, err: err}
+		}()
+	}
+	close(start)
+
+	select {
+	case <-queryStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for database query")
+	}
+	time.Sleep(100 * time.Millisecond)
+	release()
+
+	for i := 0; i < callers; i++ {
+		result := <-results
+		if result.err != nil {
+			t.Fatalf("caller %d failed: %v", i, result.err)
+		}
+		if len(result.events) != 1 {
+			t.Fatalf("caller %d: want 1 event, got %d", i, len(result.events))
+		}
+	}
+
+	if got := eventQueries.Load(); got != 1 {
+		t.Fatalf("event database queries: want 1, got %d", got)
+	}
+	cache.cache.mu.Lock()
+	getCalls := cache.cache.getCalls
+	cache.cache.mu.Unlock()
+	if getCalls != callers+1 {
+		t.Fatalf("cache gets: want %d outer checks plus one flight revalidation, got %d", callers+1, getCalls)
+	}
+}
+
+func TestService_GetCurrentAndUpcoming_CanceledCallerDoesNotCancelSharedLoad(t *testing.T) {
+	db := setupCacheTestDB(t)
+	if err := db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1}).Error; err != nil {
+		t.Fatalf("seed tournament selection: %v", err)
+	}
+	if err := db.Create(&Event{SofaScoreEventId: 1, LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+
+	queryStarted := make(chan struct{}, 2)
+	releaseQueries := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseQueries) }) }
+	defer release()
+	if err := db.Callback().Query().Before("gorm:query").Register("test:block_event_query", func(tx *gorm.DB) {
+		if tx.Statement.Table != "events" {
+			return
+		}
+		queryStarted <- struct{}{}
+		<-releaseQueries
+	}); err != nil {
+		t.Fatalf("register query callback: %v", err)
+	}
+
+	service := NewService(NewRepository(db), newFakeCache(), &EpochStore{client: nil})
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	leaderResult := make(chan error, 1)
+	go func() {
+		_, err := service.GetCurrentAndUpcoming(leaderCtx, 10, 1)
+		leaderResult <- err
+	}()
+
+	select {
+	case <-queryStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for leader database query")
+	}
+
+	followerResult := make(chan error, 1)
+	go func() {
+		events, err := service.GetCurrentAndUpcoming(context.Background(), 10, 1)
+		if err == nil && len(events) != 1 {
+			err = fmt.Errorf("want 1 event, got %d", len(events))
+		}
+		followerResult <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancelLeader()
+
+	select {
+	case err := <-leaderResult:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("leader error: want context canceled, got %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("canceled caller remained blocked on the shared load")
+	}
+
+	release()
+	select {
+	case err := <-followerResult:
+		if err != nil {
+			t.Fatalf("follower failed after leader cancellation: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("shared load did not terminate")
 	}
 }
 
