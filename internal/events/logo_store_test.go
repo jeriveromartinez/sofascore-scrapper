@@ -58,12 +58,16 @@ func TestDownloadTeamLogoUsesUTLSTransportForTLS(t *testing.T) {
 		if r.TLS.Version != tls.VersionTLS12 {
 			t.Fatalf("TLS version = %x, want %x", r.TLS.Version, tls.VersionTLS12)
 		}
+		if r.TLS.NegotiatedProtocol != "http/1.1" {
+			t.Fatalf("negotiated protocol = %q, want http/1.1", r.TLS.NegotiatedProtocol)
+		}
 		if r.Proto != "HTTP/1.1" {
 			t.Fatalf("HTTP version = %s, want HTTP/1.1", r.Proto)
 		}
 		_, _ = w.Write([]byte("test-image"))
 	}))
 	server.EnableHTTP2 = false
+	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
 	server.StartTLS()
 	defer server.Close()
 

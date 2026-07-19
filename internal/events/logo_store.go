@@ -64,11 +64,23 @@ func dialImageTLSWithConfig(ctx context.Context, network, addr string, tlsConfig
 	}
 
 	weights := utls.DefaultWeights
-	// HelloRandomized otherwise selects TLS 1.3 independently of Config.
+	// Omit the TLS 1.3 extension so SetTLSVers can set an exact TLS 1.2 range.
 	weights.TLSVersMax_Set_VersionTLS13 = 0
-	clientHelloID := utls.HelloRandomized
+	clientHelloID := utls.HelloRandomizedALPN
 	clientHelloID.Weights = &weights
 	conn := utls.UClient(raw, config, clientHelloID)
+	if err := conn.BuildHandshakeState(); err != nil {
+		_ = raw.Close()
+		return nil, err
+	}
+	if err := conn.SetTLSVers(tls.VersionTLS12, tls.VersionTLS12, conn.Extensions); err != nil {
+		_ = raw.Close()
+		return nil, err
+	}
+	if err := conn.BuildHandshakeState(); err != nil {
+		_ = raw.Close()
+		return nil, err
+	}
 	if err := conn.HandshakeContext(ctx); err != nil {
 		_ = raw.Close()
 		return nil, err
