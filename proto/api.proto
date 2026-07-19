@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package sofascore;
 
-option go_package = "github.com/jeriveromartinez/sofascore-scrapper/pb;pb";
+option go_package = "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api;api";
 
 // ========== Common ==========
 

@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/apkutil"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 

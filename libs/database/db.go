@@ -1,11 +1,11 @@
 package database
 
 import (
-	"fmt"
 	"log"
 	"os"
 
-	"gorm.io/driver/mysql"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
+	newdb "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"gorm.io/gorm"
 )
 
@@ -16,16 +16,17 @@ func Connect() (*gorm.DB, error) {
 		return _db, nil
 	}
 
-	host := getEnv("DB_HOST", "localhost")
-	port := getEnv("DB_PORT", "3306")
-	user := getEnv("DB_USER", "root")
-	password := getEnv("DB_PASSWORD", "")
-	dbName := getEnv("DB_NAME", "sofascore")
+	cfg := config.Database{
+		Host:     getEnv("DB_HOST", "localhost"),
+		Port:     getEnv("DB_PORT", "3306"),
+		User:     getEnv("DB_USER", "root"),
+		Password: getEnv("DB_PASSWORD", ""),
+		Name:     getEnv("DB_NAME", "sofascore"),
+	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", user, password, host, port, dbName)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := newdb.Open(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to database: %w", err)
+		return nil, err
 	}
 
 	log.Println("Database connection established and schema migrated.")

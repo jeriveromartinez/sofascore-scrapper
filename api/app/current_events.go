@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/api/common"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/pb"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
