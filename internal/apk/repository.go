@@ -1,8 +1,10 @@
 package apk
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -87,6 +89,27 @@ func (r *Repository) ListAll() ([]ApkVersion, error) {
 		return nil, err
 	}
 	return versions, nil
+}
+
+func (r *Repository) ListPage(ctx context.Context, createdAtStr string, id uint, limit int) ([]ApkVersion, bool, error) {
+	query := r.db.WithContext(ctx).Order("created_at DESC, id DESC")
+	if createdAtStr != "" {
+		createdAt, err := time.Parse(time.RFC3339, createdAtStr)
+		if err != nil {
+			return nil, false, err
+		}
+		query = query.Where("created_at < ? OR (created_at = ? AND id < ?)", createdAt, createdAt, id)
+	}
+	var rows []ApkVersion
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
 }
 
 func (r *Repository) UpdateURL(id uint, url string) error {

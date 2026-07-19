@@ -12,9 +12,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"gorm.io/gorm"
@@ -45,7 +47,65 @@ func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerD
 	group.POST("/apk/upload/chunk", deps.AuthMiddleware, h.handleUploadChunk)
 	group.POST("/apk/upload/assemble", deps.AuthMiddleware, h.handleAssembleChunks)
 	group.GET("/apk/versions", deps.AuthMiddleware, h.handleListVersions)
+	group.GET("/apk/versions/page", deps.AuthMiddleware, h.handleListVersionsPage)
 	group.PUT("/apk/:id", deps.AuthMiddleware, h.handleUpdateVersion)
+}
+
+const defaultPageLimit = 20
+
+func (h *AdminHandler) handleListVersionsPage(c *gin.Context) {
+	cursorRaw := c.Query("cursor")
+	limitStr := c.Query("limit")
+	limit := defaultPageLimit
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 100 {
+			limit = parsed
+		}
+	}
+
+	var createdAtStr string
+	var id uint
+	if cursorRaw != "" {
+		keys, err := pagination.Decode(cursorRaw, 2)
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid cursor")
+			return
+		}
+		createdAtStr = keys[0]
+		parsedID, err := server.ParseID(keys[1])
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid cursor: bad id")
+			return
+		}
+		id = parsedID
+	}
+
+	versions, hasMore, err := h.repo.ListPage(c.Request.Context(), createdAtStr, id, limit)
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var nextCursor string
+	if hasMore && len(versions) > 0 {
+		last := versions[len(versions)-1]
+		nextCursor, err = pagination.Encode(
+			last.CreatedAt.Format(time.RFC3339),
+			strconv.FormatUint(uint64(last.ID), 10),
+		)
+		if err != nil {
+			server.RespondError(c, http.StatusInternalServerError, "cursor encoding failed")
+			return
+		}
+	}
+
+	server.RespondProto(c, http.StatusOK, &pb.ApkPage{
+		Data: ApksToProto(versions),
+		Page: &pb.CursorPageInfo{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+		},
+	})
 }
 
 func (h *AdminHandler) handleUpload(c *gin.Context) {
