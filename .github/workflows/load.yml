@@ -1,0 +1,112 @@
+name: Load Tests
+
+on:
+  pull_request:
+    paths:
+      - "tests/load/**"
+      - "cmd/**"
+      - "internal/**"
+      - ".github/workflows/load.yml"
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Test suite to run"
+        required: true
+        type: choice
+        options:
+          - smoke
+          - full
+
+jobs:
+  smoke:
+    name: Smoke (2 min)
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'smoke')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test images
+        run: docker compose -f deployments/docker/compose.test.yml build
+
+      - name: Start test stack
+        run: docker compose -f deployments/docker/compose.test.yml up --wait
+
+      - name: Ensure server is healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health/live; then
+              echo "Server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server not ready"
+          exit 1
+
+      - name: Install k6
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ca-certificates gnupg
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq k6
+
+      - name: Run smoke
+        run: k6 run --summary-export=k6-smoke-summary.json tests/load/smoke.js
+        env:
+          BASE_URL: http://localhost:8080
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-smoke-summary
+          path: k6-smoke-summary.json
+          retention-days: 7
+
+      - name: Stop test stack
+        if: always()
+        run: docker compose -f deployments/docker/compose.test.yml down --volumes
+
+  full:
+    name: Full (30 min)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'full')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ca-certificates gnupg
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq k6
+
+      - name: Run full load suite
+        run: |
+          for script in tests/load/devices.js tests/load/events.js tests/load/multi-instance.js tests/load/playback.js tests/load/redis-degraded.js tests/load/uploads.js; do
+            echo "=== Running $script ==="
+            k6 run --summary-export="k6-$(basename "$script" .js)-summary.json" "$script" || true
+          done
+        env:
+          BASE_URL: ${{ secrets.LOAD_BASE_URL }}
+
+      - name: Upload k6 summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-full-summaries
+          path: k6-*-summary.json
+          retention-days: 30
