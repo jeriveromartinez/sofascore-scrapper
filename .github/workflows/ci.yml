@@ -154,3 +154,15 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t sofascore-scrapper:ci .
+
+  native-deploy:
+    name: Native deployment checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deployment scripts
+        run: |
+          bash -n deployments/native/deploy.sh deployments/native/deploy_test.sh deployments/native/workflow_test.sh
+          deployments/native/deploy_test.sh
+          deployments/native/workflow_test.sh

@@ -1,6 +1,7 @@
 package events
 
 import (
+	"strings"
 	"time"
 
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
@@ -23,12 +24,15 @@ func TeamToProto(t *Team) *pb.Team {
 }
 
 func EventToProto(e Event) *pb.SofaScoreEvent {
-	if e.HomeTeamModel != nil {
-		e.HomeTeamModel.LogoUrl = "/api/app/v1" + e.HomeTeamModel.LogoUrl
+	homeTeam := TeamToProto(e.HomeTeamModel)
+	if homeTeam != nil {
+		homeTeam.LogoUrl = logoURLForAPI(homeTeam.LogoUrl)
 	}
-	if e.AwayTeamModel != nil {
-		e.AwayTeamModel.LogoUrl = "/api/app/v1" + e.AwayTeamModel.LogoUrl
+	awayTeam := TeamToProto(e.AwayTeamModel)
+	if awayTeam != nil {
+		awayTeam.LogoUrl = logoURLForAPI(awayTeam.LogoUrl)
 	}
+
 	return &pb.SofaScoreEvent{
 		Id:                          uint32(e.ID),
 		CreatedAt:                   formatTime(e.CreatedAt),
@@ -44,10 +48,18 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 		CurrentPeriodStartTimestamp: e.CurrentPeriodStartTimestamp,
 		Slug:                        e.Slug,
 		StatusType:                  e.StatusType,
-		TeamHome:                    TeamToProto(e.HomeTeamModel),
-		TeamAway:                    TeamToProto(e.AwayTeamModel),
+		TeamHome:                    homeTeam,
+		TeamAway:                    awayTeam,
 		League:                      tournaments.TournamentPtrToProto(e.League),
 	}
+}
+
+func logoURLForAPI(rawURL string) string {
+	const apiPrefix = "/api/app/v1"
+	if strings.HasPrefix(rawURL, "/") && rawURL != apiPrefix && !strings.HasPrefix(rawURL, apiPrefix+"/") {
+		return apiPrefix + rawURL
+	}
+	return rawURL
 }
 
 func EventsToProto(events []Event) []*pb.SofaScoreEvent {
