@@ -1,6 +1,9 @@
 package models
 
-import "github.com/jeriveromartinez/sofascore-scrapper/libs/database"
+import (
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
+)
 
 func Migrate() {
 	db, err := database.GetDB()
@@ -17,7 +20,7 @@ func Migrate() {
 		&RefreshToken{},
 		&Device{},
 		&PlaybackLog{},
-		&ApkVersion{},
+		&apk.ApkVersion{},
 		&DeviceTournament{},
 		&GlobalTournamentConfig{},
 		&ContentStat{},

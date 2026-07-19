@@ -2,7 +2,6 @@ package app
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +19,6 @@ type DeviceRegistrationController struct {
 func (c *DeviceRegistrationController) LoadRoutes() {
 	c.Group.POST("/devices", handleRegisterDevice)
 	c.Group.POST("/devices/viewing", common.AppMiddleware(), handleReportViewing)
-	c.Group.GET("/devices/url/:packageName", handleGetDomain)
 }
 
 func handleRegisterDevice(c *gin.Context) {
@@ -76,24 +74,4 @@ func handleReportViewing(c *gin.Context) {
 	common.RespondProto(c, http.StatusCreated, common.PlaybackToProto(playbackLog))
 }
 
-func handleGetDomain(c *gin.Context) {
-	packageName := c.Param("packageName")
-	if packageName == "" {
-		common.RespondError(c, http.StatusBadRequest, "packageName is required")
-		return
-	}
 
-	parts := len(strings.Split(packageName, "."))
-	if parts < 3 || parts > 4 {
-		common.RespondError(c, http.StatusBadRequest, "invalid packageName format")
-		return
-	}
-
-	apk, err := repository.GetLatestApkVersion(packageName)
-	if err != nil {
-		common.RespondError(c, http.StatusNotFound, "APK version not found")
-		return
-	}
-
-	common.RespondProto(c, http.StatusOK, &pb.DeviceUrl{Url: apk.IPTVUrl})
-}
