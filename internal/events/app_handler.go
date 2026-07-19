@@ -35,9 +35,9 @@ func (h *AppHandler) handleGetCurrentEvents(c *gin.Context) {
 		}
 	}
 
-	events, err := h.repo.GetCurrentAndUpcoming(device.ID, limit)
+	events, err := h.repo.GetCurrentAndUpcoming(c.Request.Context(), device.ID, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		server.RespondError(c, http.StatusInternalServerError, "unable to fetch events")
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.EventsList{Data: EventsToProto(events)})

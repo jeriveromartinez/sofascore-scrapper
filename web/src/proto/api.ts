@@ -2,7 +2,7 @@
 // versions:
 //   protoc-gen-ts_proto  v2.11.5
 //   protoc               v4.24.3
-// source: proto/api.proto
+// source: api.proto
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
@@ -189,6 +189,7 @@ export interface SofaScoreEvent {
   teamHome: Team | undefined;
   teamAway: Team | undefined;
   league: Tournament | undefined;
+  statusType: string;
 }
 
 export interface EventsList {
@@ -2952,6 +2953,7 @@ function createBaseSofaScoreEvent(): SofaScoreEvent {
     teamHome: undefined,
     teamAway: undefined,
     league: undefined,
+    statusType: "",
   };
 }
 
@@ -3007,6 +3009,9 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
     }
     if (message.league !== undefined) {
       Tournament.encode(message.league, writer.uint32(138).fork()).join();
+    }
+    if (message.statusType !== "") {
+      writer.uint32(146).string(message.statusType);
     }
     return writer;
   },
@@ -3154,6 +3159,14 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
           message.league = Tournament.decode(reader, reader.uint32());
           continue;
         }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.statusType = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3230,6 +3243,11 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
         ? Team.fromJSON(object.team_away)
         : undefined,
       league: isSet(object.league) ? Tournament.fromJSON(object.league) : undefined,
+      statusType: isSet(object.statusType)
+        ? globalThis.String(object.statusType)
+        : isSet(object.status_type)
+        ? globalThis.String(object.status_type)
+        : "",
     };
   },
 
@@ -3286,6 +3304,9 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
     if (message.league !== undefined) {
       obj.league = Tournament.toJSON(message.league);
     }
+    if (message.statusType !== "") {
+      obj.statusType = message.statusType;
+    }
     return obj;
   },
 
@@ -3317,6 +3338,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
     message.league = (object.league !== undefined && object.league !== null)
       ? Tournament.fromPartial(object.league)
       : undefined;
+    message.statusType = object.statusType ?? "";
     return message;
   },
 };

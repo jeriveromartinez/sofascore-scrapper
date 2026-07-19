@@ -43,6 +43,7 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 		StartTimestamp:              e.StartTimestamp,
 		CurrentPeriodStartTimestamp: e.CurrentPeriodStartTimestamp,
 		Slug:                        e.Slug,
+		StatusType:                  e.StatusType,
 		TeamHome:                    TeamToProto(e.HomeTeamModel),
 		TeamAway:                    TeamToProto(e.AwayTeamModel),
 		League:                      tournaments.TournamentPtrToProto(e.League),

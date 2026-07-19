@@ -25,17 +25,27 @@ func ToEvent(source APIEvent, sport string) events.Event {
 	awayTeam := ToTeam(source.AwayTeam)
 	tournamentSlug := source.Tournament.UniqueTournament.Slug + "-" + strings.ToLower(source.Tournament.UniqueTournament.Category.Slug)
 
+	startTs := int64(0)
+	if source.StartTimestamp > 0 && source.StartTimestamp < 1<<62/1000 {
+		startTs = source.StartTimestamp * 1000
+	}
+	currentPeriodTs := int64(0)
+	if source.Time.CurrentPeriodStartTimestamp > 0 && source.Time.CurrentPeriodStartTimestamp < 1<<62/1000 {
+		currentPeriodTs = source.Time.CurrentPeriodStartTimestamp * 1000
+	}
+
 	return events.Event{
 		SofaScoreEventId:            source.ID,
 		HomeScore:                   source.HomeScore.Current,
 		HomeTeamId:                  source.HomeTeam.ID,
 		AwayScore:                   source.AwayScore.Current,
 		AwayTeamId:                  source.AwayTeam.ID,
-		StartTimestamp:              source.StartTimestamp,
-		CurrentPeriodStartTimestamp: source.Time.CurrentPeriodStartTimestamp,
+		StartTimestamp:              startTs,
+		CurrentPeriodStartTimestamp: currentPeriodTs,
 		Slug:                        source.Slug,
 		LeagueId:                    uint(source.Tournament.UniqueTournament.ID),
 		Sport:                       sport,
+		StatusType:                  source.Status.Type,
 		HomeTeamModel:               &homeTeam,
 		AwayTeamModel:               &awayTeam,
 		League: &tournaments.Tournament{

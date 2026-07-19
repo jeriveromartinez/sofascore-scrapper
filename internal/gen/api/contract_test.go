@@ -100,6 +100,36 @@ func TestAuthResponseFields(t *testing.T) {
 	assertFieldNumber(t, fd, "refresh_token", 4)
 }
 
+func TestSofaScoreEventFields(t *testing.T) {
+	event := &SofaScoreEvent{
+		Id:                          1,
+		SofaScoreEventId:            12345,
+		Sport:                       "football",
+		HomeScore:                   2,
+		HomeTeamId:                  100,
+		AwayScore:                   1,
+		AwayTeamId:                  200,
+		ScrapedAt:                   999999,
+		StartTimestamp:              1710000000000,
+		CurrentPeriodStartTimestamp: 1710000000000,
+		Slug:                        "test-match",
+		StatusType:                  "inprogress",
+	}
+	fd := event.ProtoReflect().Descriptor()
+	assertFieldNumber(t, fd, "id", 1)
+	assertFieldNumber(t, fd, "sofa_score_event_id", 4)
+	assertFieldNumber(t, fd, "sport", 5)
+	assertFieldNumber(t, fd, "home_score", 6)
+	assertFieldNumber(t, fd, "home_team_id", 7)
+	assertFieldNumber(t, fd, "away_score", 8)
+	assertFieldNumber(t, fd, "away_team_id", 9)
+	assertFieldNumber(t, fd, "scraped_at", 10)
+	assertFieldNumber(t, fd, "start_timestamp", 12)
+	assertFieldNumber(t, fd, "current_period_start_timestamp", 13)
+	assertFieldNumber(t, fd, "slug", 14)
+	assertFieldNumber(t, fd, "status_type", 18)
+}
+
 func TestDeviceRegisterRequestFields(t *testing.T) {
 	req := &DeviceRegisterRequest{
 		Token:    "device-token-123",

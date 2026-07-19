@@ -202,6 +202,7 @@ message SofaScoreEvent {
   Team team_home = 15;
   Team team_away = 16;
   Tournament league = 17;
+  string status_type = 18;
 }
 
 message EventsList {

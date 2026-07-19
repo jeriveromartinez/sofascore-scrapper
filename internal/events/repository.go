@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"log"
 	"strings"
 	"time"
@@ -20,7 +21,7 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Save(events []Event, sport string) {
+func (r *Repository) Upsert(ctx context.Context, events []Event, sport string) error {
 	now := time.Now().Unix()
 	for i := range events {
 		event := &events[i]
@@ -28,28 +29,37 @@ func (r *Repository) Save(events []Event, sport string) {
 		event.Sport = sport
 
 		if event.HomeTeamModel != nil {
-			r.db.FirstOrCreate(event.HomeTeamModel, Team{TeamId: event.HomeTeamModel.TeamId})
+			r.db.WithContext(nil).FirstOrCreate(event.HomeTeamModel, Team{TeamId: event.HomeTeamModel.TeamId})
 			if !isProxiedLogoURL(event.HomeTeamModel.LogoUrl) {
 				scheduleLogoDownload(r.db, event.HomeTeamModel.TeamId, event.HomeTeamModel.LogoUrl)
 			}
 		}
 
 		if event.AwayTeamModel != nil {
-			r.db.FirstOrCreate(event.AwayTeamModel, Team{TeamId: event.AwayTeamModel.TeamId})
+			r.db.WithContext(nil).FirstOrCreate(event.AwayTeamModel, Team{TeamId: event.AwayTeamModel.TeamId})
 			if !isProxiedLogoURL(event.AwayTeamModel.LogoUrl) {
 				scheduleLogoDownload(r.db, event.AwayTeamModel.TeamId, event.AwayTeamModel.LogoUrl)
 			}
 		}
 
 		if event.League != nil {
-			r.db.FirstOrCreate(event.League, tournaments.Tournament{Slug: event.League.Slug})
+			r.db.WithContext(nil).FirstOrCreate(event.League, tournaments.Tournament{Slug: event.League.Slug})
 		}
 
-		r.db.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "sofa_score_event_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"home_score", "away_score", "current_period_start_timestamp", "scraped_at"}),
+		result := r.db.WithContext(nil).Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "sofa_score_event_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"sport", "home_score", "away_score",
+				"home_team_id", "away_team_id",
+				"start_timestamp", "current_period_start_timestamp",
+				"slug", "league_id", "status_type", "scraped_at",
+			}),
 		}).Create(event)
+		if result.Error != nil {
+			return result.Error
+		}
 	}
+	return nil
 }
 
 func isProxiedLogoURL(url string) bool {
@@ -79,16 +89,17 @@ func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {
 	}
 }
 
-func (r *Repository) GetCurrentAndUpcoming(devID uint, limit int) ([]Event, error) {
+func (r *Repository) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit int) ([]Event, error) {
 	if limit <= 0 || limit > 6 {
 		limit = 6
 	}
 
-	now := time.Now().Add(-(time.Minute * 5)).Unix()
 	var events []Event
 
 	var deviceTournaments []tournaments.DeviceTournament
-	r.db.Find(&deviceTournaments, "device_id = ?", devID)
+	if err := r.db.WithContext(ctx).Find(&deviceTournaments, "device_id = ?", devID).Error; err != nil {
+		return nil, err
+	}
 
 	var tournamentIDs []uint
 	if len(deviceTournaments) > 0 {
@@ -98,20 +109,24 @@ func (r *Repository) GetCurrentAndUpcoming(devID uint, limit int) ([]Event, erro
 		}
 	} else {
 		var globalConfig []tournaments.GlobalTournamentConfig
-		r.db.Find(&globalConfig)
+		if err := r.db.WithContext(ctx).Find(&globalConfig).Error; err != nil {
+			return nil, err
+		}
 		tournamentIDs = make([]uint, len(globalConfig))
 		for i, gc := range globalConfig {
 			tournamentIDs[i] = gc.TournamentID
 		}
 	}
 
-	r.db.Where("current_period_start_timestamp >= ? AND league_id IN ?", now, tournamentIDs).
+	if err := r.db.WithContext(ctx).Where("status_type = ? AND league_id IN ?", "inprogress", tournamentIDs).
 		Order("current_period_start_timestamp DESC").
 		Limit(limit).
 		Preload("HomeTeamModel").
 		Preload("AwayTeamModel").
 		Preload("League").
-		Find(&events)
+		Find(&events).Error; err != nil {
+		return nil, err
+	}
 
 	if len(events) < limit {
 		remaining := limit - len(events)
@@ -121,17 +136,19 @@ func (r *Repository) GetCurrentAndUpcoming(devID uint, limit int) ([]Event, erro
 			existingIDs[i] = e.ID
 		}
 
-		now = time.Now().Add((time.Minute * 5)).Unix()
-		query := r.db.Where("start_timestamp > ? AND league_id IN ?", now, tournamentIDs).Order("start_timestamp ASC")
+		nowMs := time.Now().UnixMilli()
+		query := r.db.WithContext(ctx).Where("status_type = ? AND start_timestamp >= ? AND league_id IN ?", "notstarted", nowMs, tournamentIDs).Order("start_timestamp ASC")
 		if len(existingIDs) > 0 {
 			query = query.Where("id NOT IN ?", existingIDs)
 		}
 
-		query.Limit(remaining).
+		if err := query.Limit(remaining).
 			Preload("HomeTeamModel").
 			Preload("AwayTeamModel").
 			Preload("League").
-			Find(&upcoming)
+			Find(&upcoming).Error; err != nil {
+			return nil, err
+		}
 
 		events = append(events, upcoming...)
 	}
