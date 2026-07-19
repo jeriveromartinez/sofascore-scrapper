@@ -25,6 +25,7 @@ import (
 
 type App struct {
 	HTTP        *http.Server
+	Pprof       *http.Server
 	Scheduler   *scheduler.Scheduler
 	DB          *gorm.DB
 	SQL         *sql.DB
@@ -63,13 +64,23 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
+	if err := observability.Register(server.NewSQLCollector(sqlDB)); err != nil {
+		return nil, err
+	}
+	if err := observability.Register(server.NewRedisCollector(redisClient)); err != nil {
+		return nil, err
+	}
+
 	sched := scheduler.New(slog.Default())
+
+	pprofSrv := observability.NewPprofServer(cfg.PprofAddr)
 
 	app := &App{
 		Scheduler:   sched,
 		DB:          db,
 		SQL:         sqlDB,
 		Redis:       redisClient,
+		Pprof:       pprofSrv,
 		batchSize:   cfg.ScrapeBatchSize,
 		concur:      cfg.ScrapeConcurrency,
 		storagePath: cfg.APKStoragePath,
@@ -104,6 +115,12 @@ func (a *App) Run(ctx context.Context) error {
 		a.logger.Info("API server listening", slog.String("addr", a.HTTP.Addr))
 		return a.HTTP.ListenAndServe()
 	})
+	if a.Pprof != nil {
+		group.Go(func() error {
+			a.logger.Info("pprof server listening", slog.String("addr", a.Pprof.Addr))
+			return observability.PprofListenAndServe(a.Pprof)
+		})
+	}
 	group.Go(func() error { return a.Scheduler.Run(ctx) })
 	group.Go(func() error {
 		<-ctx.Done()

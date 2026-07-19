@@ -39,6 +39,7 @@ type HTTP struct {
 
 type Config struct {
 	APIAddr           string
+	PprofAddr         string
 	JWTSecret         string
 	APKStoragePath    string
 	ImageStoragePath  string
@@ -57,6 +58,7 @@ func Load() (Config, error) {
 
 	return Config{
 		APIAddr:          getEnv("API_ADDR", ":8080"),
+		PprofAddr:        getEnv("PPROF_ADDR", ""),
 		JWTSecret:        secret,
 		APKStoragePath:   getEnv("APK_STORAGE_PATH", "./apk_storage"),
 		ImageStoragePath: getEnv("IMAGE_STORAGE_PATH", "./image_storage"),

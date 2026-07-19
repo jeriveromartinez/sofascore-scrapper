@@ -31,6 +31,7 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	router.Use(server.RequestID())
 	router.Use(server.BodyLimit())
 	router.Use(server.CORS())
+	router.Use(server.PrometheusMiddleware())
 	router.Use(server.SlogLogger())
 
 	healthChecker := server.NewHealthChecker()
@@ -39,6 +40,7 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 
 	router.GET("/health/live", healthChecker.LivenessHandler())
 	router.GET("/health/ready", healthChecker.ReadinessHandler())
+	router.GET("/metrics", server.MetricsHandler())
 
 	rl := server.RateLimit(redisClient)
 
