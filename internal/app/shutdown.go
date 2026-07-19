@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
 )
 
 func (a *App) shutdown() error {
@@ -19,6 +20,14 @@ func (a *App) shutdown() error {
 
 	if err := a.HTTP.Shutdown(shutdownCtx); err != nil {
 		a.logger.Error("HTTP shutdown error", slog.String("error", err.Error()))
+	}
+
+	if a.Pprof != nil {
+		pprofCtx, pprofCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer pprofCancel()
+		if err := observability.PprofShutdown(pprofCtx, a.Pprof); err != nil {
+			a.logger.Error("pprof shutdown error", slog.String("error", err.Error()))
+		}
 	}
 
 	a.Scheduler.Shutdown()
