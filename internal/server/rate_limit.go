@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -132,7 +133,7 @@ func classifyRateLimit(c *gin.Context, path string, method string) (redisplatfor
 	}
 
 	if strings.HasPrefix(path, "/api/web/v1/") {
-		return RateLimitAdmin, c.ClientIP(), true
+		return RateLimitAdmin, resolveUserOrIP(c), true
 	}
 
 	if strings.HasPrefix(path, "/api/app/v1/devices/viewing") && method == http.MethodPost {
@@ -150,6 +151,13 @@ func classifyRateLimit(c *gin.Context, path string, method string) (redisplatfor
 	}
 
 	return RateLimitAppRead, c.ClientIP(), false
+}
+
+func resolveUserOrIP(c *gin.Context) string {
+	if userID, exists := c.Get("userID"); exists {
+		return fmt.Sprintf("user:%d", userID)
+	}
+	return c.ClientIP()
 }
 
 func resolveDeviceOrIP(c *gin.Context) string {
