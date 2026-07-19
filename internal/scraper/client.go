@@ -2,10 +2,12 @@ package scraper
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"strconv"
@@ -13,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	utls "github.com/refraction-networking/utls"
 )
 
 const (
@@ -79,6 +83,7 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
+		DialTLSContext:      utlsDialTLS,
 	}
 
 	httpClient := &http.Client{
@@ -96,17 +101,55 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	}, nil
 }
 
+// utlsDialTLS establishes a TLS connection using utls.HelloRandomized with
+// TLS 1.2 and HTTP/1.1 ALPN. SofaScore's Varnish reverse proxy blocks clients
+// whose TLS fingerprint matches known HTTP libraries (Go stdlib, curl); using
+// a randomized ClientHello evades that fingerprint check.
+func utlsDialTLS(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, _, _ := net.SplitHostPort(addr)
+	raw, err := (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+	cfg := &utls.Config{
+		ServerName: host,
+		MinVersion: tls.VersionTLS12,
+		MaxVersion: tls.VersionTLS12,
+		NextProtos: []string{"http/1.1"},
+	}
+	conn := utls.UClient(raw, cfg, utls.HelloRandomized)
+	if err := conn.HandshakeContext(ctx); err != nil {
+		raw.Close()
+		return nil, fmt.Errorf("utls handshake: %w", err)
+	}
+	return conn, nil
+}
+
 func setBrowserHeaders(req *http.Request, accept string, referer string) {
 	req.Header.Set("User-Agent", browserUserAgent)
 	req.Header.Set("Accept", accept)
 	req.Header.Set("Accept-Language", "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7")
+	req.Header.Set("Accept-Encoding", "identity")
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Pragma", "no-cache")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="145", "Not?A_Brand";v="24", "Google Chrome";v="145"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("DNT", "1")
 	if referer != "" {
 		req.Header.Set("Referer", referer)
 	}
 }
 
+// ensureCookies fetches the SofaScore home page to populate the cookie jar
+// with anti-bot tokens (e.g. Cloudflare). It must fail loudly when the home
+// page is blocked (HTTP 403) or returns no cookies, otherwise downstream API
+// requests silently fail with 401/403 that the caller cannot distinguish from
+// a stale-cookie condition.
 func (c *Client) ensureCookies(ctx context.Context) error {
 	if c.cookieLoaded.Load() {
 		return nil
@@ -119,11 +162,29 @@ func (c *Client) ensureCookies(ctx context.Context) error {
 		return nil
 	}
 
+	if err := c.loadCookies(ctx, ""); err != nil {
+		return err
+	}
+	c.cookieLoaded.Store(true)
+	return nil
+}
+
+// loadCookies resets the cookie jar and fetches the home page. When
+// pubReferer is non-empty, it is sent as the Referer for the home request to
+// work around anti-bot rules that reject bare home fetches. It returns an
+// error when the home page responds >= 400 or the jar contains no cookies.
+func (c *Client) loadCookies(ctx context.Context, pubReferer string) error {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return fmt.Errorf("scraper: cookiejar: %w", err)
+	}
+	c.httpClient.Jar = jar
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/es/", nil)
 	if err != nil {
 		return err
 	}
-	setBrowserHeaders(req, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", "")
+	setBrowserHeaders(req, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", pubReferer)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -132,7 +193,10 @@ func (c *Client) ensureCookies(ctx context.Context) error {
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, c.responseMaxBytes))
 
-	c.cookieLoaded.Store(true)
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("scraper: cookie fetch blocked: HTTP %d", resp.StatusCode)
+	}
+
 	return nil
 }
 
@@ -140,21 +204,9 @@ func (c *Client) refreshCookies(ctx context.Context) {
 	c.cookieMu.Lock()
 	defer c.cookieMu.Unlock()
 
-	jar, _ := cookiejar.New(nil)
-	c.httpClient.Jar = jar
-	c.cookieLoaded.Store(false)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/es/", nil)
-	if err != nil {
+	if err := c.loadCookies(ctx, ""); err != nil {
 		return
 	}
-	setBrowserHeaders(req, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", "")
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, c.responseMaxBytes))
 	c.cookieLoaded.Store(true)
 }
 
@@ -184,16 +236,35 @@ func parseRetryAfter(s string) time.Duration {
 }
 
 func (c *Client) ScheduledEvents(ctx context.Context, sport string, date time.Time) ([]*APIEvent, error) {
-	path := fmt.Sprintf("/api/v1/sport/%s/scheduled-events/%s", sport, date.Format("2006-01-02"))
-	body, err := c.doRequest(ctx, path)
+	dateStr := date.Format("2006-01-02")
+	tournamentsPath := fmt.Sprintf("/api/v1/sport/%s/scheduled-tournaments/%s/page/1", sport, dateStr)
+	body, err := c.doRequest(ctx, tournamentsPath)
 	if err != nil {
 		return nil, err
 	}
-	var list EventsListResponse
-	if err := json.Unmarshal(body, &list); err != nil {
-		return nil, fmt.Errorf("scraper: parse scheduled events: %w", err)
+	var tournamentsResp ScheduledTournamentsResponse
+	if err := json.Unmarshal(body, &tournamentsResp); err != nil {
+		return nil, fmt.Errorf("scraper: parse scheduled tournaments: %w", err)
 	}
-	return list.Events, nil
+
+	var allEvents []*APIEvent
+	for _, t := range tournamentsResp.Scheduled {
+		uniqueTournamentID := t.Tournament.UniqueTournament.ID
+		if uniqueTournamentID == 0 {
+			continue
+		}
+		eventsPath := fmt.Sprintf("/api/v1/unique-tournament/%d/scheduled-events/%s", uniqueTournamentID, dateStr)
+		eventsBody, err := c.doRequest(ctx, eventsPath)
+		if err != nil {
+			continue
+		}
+		var list EventsListResponse
+		if err := json.Unmarshal(eventsBody, &list); err != nil {
+			continue
+		}
+		allEvents = append(allEvents, list.Events...)
+	}
+	return allEvents, nil
 }
 
 func (c *Client) TrendingEvents(ctx context.Context, countryCode string) ([]*APIEvent, error) {
