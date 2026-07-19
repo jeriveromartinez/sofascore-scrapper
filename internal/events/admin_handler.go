@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"gorm.io/gorm"
@@ -25,6 +26,69 @@ func NewAdminHandler(db *gorm.DB) *AdminHandler {
 
 func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerDeps) {
 	group.GET("/events", deps.AuthMiddleware, h.handleGetEvents)
+	group.GET("/events/page", deps.AuthMiddleware, h.handleGetEventsPage)
+}
+
+const defaultPageLimit = 20
+
+func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
+	cursorRaw := c.Query("cursor")
+	limitStr := c.Query("limit")
+	limit := defaultPageLimit
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 100 {
+			limit = parsed
+		}
+	}
+
+	var startTimestamp int64
+	var id uint
+	if cursorRaw != "" {
+		keys, err := pagination.Decode(cursorRaw, 2)
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid cursor")
+			return
+		}
+		parsedTS, err := strconv.ParseInt(keys[0], 10, 64)
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid cursor: bad timestamp")
+			return
+		}
+		startTimestamp = parsedTS
+		parsedID, err := server.ParseID(keys[1])
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid cursor: bad id")
+			return
+		}
+		id = parsedID
+	}
+
+	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), startTimestamp, id, limit)
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var nextCursor string
+	if hasMore && len(events) > 0 {
+		last := events[len(events)-1]
+		nextCursor, err = pagination.Encode(
+			strconv.FormatInt(last.StartTimestamp, 10),
+			strconv.FormatUint(uint64(last.ID), 10),
+		)
+		if err != nil {
+			server.RespondError(c, http.StatusInternalServerError, "cursor encoding failed")
+			return
+		}
+	}
+
+	server.RespondProto(c, http.StatusOK, &pb.EventPage{
+		Data: EventsToProto(events),
+		Page: &pb.CursorPageInfo{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+		},
+	})
 }
 
 func (h *AdminHandler) handleGetEvents(c *gin.Context) {

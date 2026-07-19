@@ -156,3 +156,25 @@ func (r *Repository) GetCurrentAndUpcoming(ctx context.Context, devID uint, limi
 	return events, nil
 }
 
+func (r *Repository) ListPage(ctx context.Context, startTimestamp int64, id uint, limit int) ([]Event, bool, error) {
+	query := r.db.WithContext(ctx).Order("start_timestamp ASC, id ASC").
+		Preload("HomeTeamModel").
+		Preload("AwayTeamModel").
+		Preload("League")
+
+	if startTimestamp > 0 {
+		query = query.Where("start_timestamp > ? OR (start_timestamp = ? AND id > ?)", startTimestamp, startTimestamp, id)
+	}
+
+	var rows []Event
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
+}
+

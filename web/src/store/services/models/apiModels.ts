@@ -16,6 +16,7 @@ import type {
   DeviceTournamentList,
   DeviceTournamentPage as ProtoDeviceTournamentPage,
   EventsList,
+  EventPage as ProtoEventPage,
   GlobalTournamentConfig as ProtoGlobalTournamentConfig,
   LogPlaybackRequest,
   PlaybackLog as ProtoPlaybackLog,
@@ -37,6 +38,7 @@ import type {
 export type Team = ProtoTeam;
 export type SofaScoreEvent = ProtoSofaScoreEvent;
 export type EventsResponse = EventsList;
+export type EventPageResponse = ProtoEventPage;
 export type DeviceResponse = DeviceList;
 export type DevicePageResponse = ProtoDevicePage;
 export type UsersResponse = UserList;

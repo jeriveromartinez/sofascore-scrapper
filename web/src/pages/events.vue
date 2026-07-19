@@ -1,40 +1,33 @@
 <script setup lang="ts">
 import { onMounted, reactive } from "vue";
 import { eventsApiService } from "../store/services";
-import type { EventsResponse } from "../store/services/models";
+import type { SofaScoreEvent } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
 
-type EventState = {
-  date: string;
-  sport: string;
-  page: number;
-  limit: number;
-  loading: boolean;
-  error: string;
-  data: EventsResponse | null;
-};
+const PAGE_LIMIT = 20;
 
-const state = reactive<EventState>({
-  date: "",
-  sport: "",
-  page: 1,
-  limit: 10,
+const state = reactive({
+  events: [] as SofaScoreEvent[],
   loading: false,
   error: "",
-  data: null,
+  currentCursor: "" as string,
+  nextCursor: "" as string,
+  prevCursors: [] as string[],
+  hasNext: false,
+  hasPrev: false,
 });
 
-async function fetchEvents(): Promise<void> {
+async function loadPage(cursor?: string): Promise<void> {
   state.loading = true;
   state.error = "";
 
   try {
-    state.data = await eventsApiService.getEvents({
-      date: state.date || undefined,
-      sport: state.sport || undefined,
-      page: state.page,
-      limit: state.limit,
-    });
+    const page = await eventsApiService.getEventPage(cursor, PAGE_LIMIT);
+    state.events = page.data;
+    state.nextCursor = page.page?.nextCursor ?? "";
+    state.hasNext = page.page?.hasMore ?? false;
+    state.currentCursor = cursor ?? "";
+    state.hasPrev = state.prevCursors.length > 0;
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "Error cargando eventos";
@@ -43,25 +36,20 @@ async function fetchEvents(): Promise<void> {
   }
 }
 
-function nextPage(): void {
-  if (!state.data) return;
-  if (state.page >= state.data.totalPages) return;
-  state.page += 1;
-  void fetchEvents();
+async function goNext(): Promise<void> {
+  if (!state.hasNext || !state.nextCursor) return;
+  state.prevCursors = [...state.prevCursors, state.currentCursor];
+  await loadPage(state.nextCursor);
 }
 
-function prevPage(): void {
-  if (state.page <= 1) return;
-  state.page -= 1;
-  void fetchEvents();
+async function goPrev(): Promise<void> {
+  if (state.prevCursors.length === 0) return;
+  const prev = state.prevCursors[state.prevCursors.length - 1];
+  state.prevCursors = state.prevCursors.slice(0, -1);
+  await loadPage(prev || undefined);
 }
 
-function applyFilters(): void {
-  state.page = 1;
-  void fetchEvents();
-}
-
-onMounted(() => fetchEvents());
+onMounted(() => loadPage());
 </script>
 
 <template>
@@ -75,63 +63,19 @@ onMounted(() => fetchEvents());
       <button
         class="btn btn-outline-primary"
         :disabled="state.loading"
-        @click="fetchEvents"
+        @click="loadPage(state.currentCursor || undefined)"
       >
         Recargar
       </button>
     </div>
 
     <div class="card-body">
-      <form class="row g-3 mb-4" @submit.prevent="applyFilters">
-        <div class="col-12 col-md-6 col-lg-3">
-          <label class="form-label">Fecha</label>
-          <input v-model="state.date" type="date" class="form-control" />
-        </div>
-        <div class="col-12 col-md-6 col-lg-3">
-          <label class="form-label">Sport</label>
-          <input
-            v-model="state.sport"
-            type="text"
-            class="form-control"
-            placeholder="football"
-          />
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label">Page</label>
-          <input
-            v-model.number="state.page"
-            type="number"
-            min="1"
-            class="form-control"
-          />
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label">Limit</label>
-          <input
-            v-model.number="state.limit"
-            type="number"
-            min="1"
-            max="100"
-            class="form-control"
-          />
-        </div>
-        <div class="col-12 col-md-4 col-lg-2 d-flex align-items-end">
-          <button
-            class="btn btn-primary w-100"
-            type="submit"
-            :disabled="state.loading"
-          >
-            Buscar
-          </button>
-        </div>
-      </form>
-
       <div v-if="state.error" class="alert alert-danger">{{ state.error }}</div>
       <div v-if="state.loading" class="alert alert-info">
         Cargando eventos...
       </div>
 
-      <div v-if="state.data" class="table-responsive">
+      <div v-if="state.events.length > 0" class="table-responsive">
         <table class="table table-sm table-striped align-middle">
           <thead>
             <tr>
@@ -144,7 +88,7 @@ onMounted(() => fetchEvents());
             </tr>
           </thead>
           <tbody>
-            <tr v-for="event in state.data.data" :key="event.id">
+            <tr v-for="event in state.events" :key="event.id">
               <td class="d-none d-md-table-cell">
                 {{ event.sofaScoreEventId }}
               </td>
@@ -191,35 +135,27 @@ onMounted(() => fetchEvents());
             </tr>
           </tbody>
         </table>
-      </div>
 
-      <div
-        v-if="state.data"
-        class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between"
-      >
-        <div class="d-flex gap-2">
+        <div class="d-flex justify-content-between align-items-center mt-3">
           <button
             class="btn btn-outline-secondary btn-sm"
-            @click="prevPage"
-            :disabled="state.page <= 1 || state.loading"
+            :disabled="!state.hasPrev || state.loading"
+            @click="goPrev"
           >
-            <span class="d-none d-sm-inline">Anterior</span>
-            <span class="d-inline d-sm-none">&lt;</span>
+            Anterior
           </button>
           <button
             class="btn btn-outline-secondary btn-sm"
-            @click="nextPage"
-            :disabled="state.loading || state.page >= state.data.totalPages"
+            :disabled="!state.hasNext || state.loading"
+            @click="goNext"
           >
-            <span class="d-none d-sm-inline">Siguiente</span>
-            <span class="d-inline d-sm-none">&gt;</span>
+            Siguiente
           </button>
         </div>
-        <span class="text-body-secondary small">
-          Pág. {{ state.page }} / {{ state.data.totalPages }} ({{
-            state.data.total
-          }})
-        </span>
+      </div>
+
+      <div v-else-if="!state.loading" class="text-center text-muted">
+        No hay eventos disponibles
       </div>
     </div>
   </div>
