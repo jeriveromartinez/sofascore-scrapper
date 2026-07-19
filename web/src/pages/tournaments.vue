@@ -120,7 +120,6 @@ onMounted(() => {
       </div>
 
       <form
-        v-if="state.editingId"
         class="row g-3 mb-4"
         @submit.prevent="state.editingId ? updateTournament() : createTournament()"
       >

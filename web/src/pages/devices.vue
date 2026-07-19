@@ -2,6 +2,7 @@
 import { onMounted, reactive } from "vue";
 import { devicesApiService } from "../store/services";
 import type { DeviceResponse } from "../store/services/models";
+import { formatUnixTimestamp } from "../utils/time";
 
 const state = reactive({
   loading: false,
@@ -39,11 +40,6 @@ function prevPage(): void {
   if (state.result.page <= 1) return;
   state.result.page -= 1;
   void loadDevices();
-}
-
-function formatTimestamp(unix: number): string {
-  if (!unix) return "-";
-  return new Date(unix * 1000).toLocaleString();
 }
 
 onMounted(() => {
@@ -86,7 +82,7 @@ onMounted(() => {
               <td class="d-none d-md-table-cell">{{ device.platform }}</td>
               <td>{{ device.name }}</td>
               <td>{{ device.version }}</td>
-              <td class="d-none d-lg-table-cell">{{ formatTimestamp(device.lastSeen) }}</td>
+              <td class="d-none d-lg-table-cell">{{ formatUnixTimestamp(device.lastSeen) }}</td>
             </tr>
           </tbody>
         </table>

@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 import { routes } from "./routes";
-import { KEY_USER_LOGIN } from "../constants";
+import { readAuthStorage } from "../store/authStorage";
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -8,19 +8,9 @@ const router = createRouter({
 });
 
 router.beforeEach((to, _) => {
-  const userLogin =
-    sessionStorage.getItem(KEY_USER_LOGIN) ??
-    localStorage.getItem(KEY_USER_LOGIN) ??
-    "{}";
-  let data: { token?: string } = {};
+  const { user } = readAuthStorage();
 
-  try {
-    data = JSON.parse(userLogin) as { token?: string };
-  } catch {
-    data = {};
-  }
-
-  if (!data?.token && to.name !== "Login" && to.name !== "Register")
+  if (!user?.token && to.name !== "Login" && to.name !== "Register")
     return { name: "Login" };
 
   return true;
