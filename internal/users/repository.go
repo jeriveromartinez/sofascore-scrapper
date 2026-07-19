@@ -39,6 +39,13 @@ func (r *Repository) ListPage(ctx context.Context, email string, id uint, limit 
 	return rows, hasMore, nil
 }
 
+// Count returns the total number of user accounts.
+func (r *Repository) Count() (int64, error) {
+	var n int64
+	err := r.db.Model(&User{}).Count(&n).Error
+	return n, err
+}
+
 func (r *Repository) Create(email, password string) (*User, error) {
 	hash, err := hashPassword(password)
 	if err != nil {

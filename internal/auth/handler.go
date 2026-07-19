@@ -52,6 +52,16 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 		server.RespondError(c, http.StatusConflict, "could not create user")
 		return
 	}
+	// The very first account bootstraps as admin so a fresh install has an
+	// operator who can invite and manage others; subsequent users default to
+	// the least-privileged role. The bootstrap invitation (see
+	// runBootstrapInvitation) only issues while the users table is empty, so
+	// this promotes exactly one account.
+	if count, countErr := h.userRepo.Count(); countErr == nil && count == 1 {
+		if promoted, roleErr := h.userRepo.SetRole(user.ID, users.RoleAdmin); roleErr == nil {
+			user = promoted
+		}
+	}
 	response, err := h.buildAuthResponse(user.ID, user.Email)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "token generation failed")
