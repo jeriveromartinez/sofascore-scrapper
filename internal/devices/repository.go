@@ -1,6 +1,7 @@
 package devices
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -50,6 +51,23 @@ func (r *Repository) GetAll() ([]Device, error) {
 	var devices []Device
 	result := r.db.Preload("Manager").Find(&devices)
 	return devices, result.Error
+}
+
+func (r *Repository) ListPage(ctx context.Context, id uint, limit int) ([]Device, bool, error) {
+	query := r.db.WithContext(ctx).Preload("Manager").Order("id DESC")
+	if id > 0 {
+		query = query.Where("id < ?", id)
+	}
+	var rows []Device
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
 }
 
 func (r *Repository) FindByToken(token string) (*Device, error) {

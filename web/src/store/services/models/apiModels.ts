@@ -8,6 +8,7 @@ import type {
   DomainRequest,
   Device as ProtoDevice,
   DeviceList,
+  DevicePage as ProtoDevicePage,
   DeviceRegisterRequest,
   DeviceTournament as ProtoDeviceTournament,
   EventsList,
@@ -33,6 +34,7 @@ export type Team = ProtoTeam;
 export type SofaScoreEvent = ProtoSofaScoreEvent;
 export type EventsResponse = EventsList;
 export type DeviceResponse = DeviceList;
+export type DevicePageResponse = ProtoDevicePage;
 export type UsersResponse = UserList;
 export type UserPageResponse = ProtoUserPage;
 export type DomainPageResponse = ProtoDomainPage;

@@ -1,25 +1,33 @@
 <script setup lang="ts">
 import { onMounted, reactive } from "vue";
 import { devicesApiService } from "../store/services";
-import type { DeviceResponse } from "../store/services/models";
+import type { Device } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
 
+const PAGE_LIMIT = 20;
+
 const state = reactive({
+  devices: [] as Device[],
   loading: false,
   error: "",
-  success: "",
-  result: {} as DeviceResponse,
+  currentCursor: "" as string,
+  nextCursor: "" as string,
+  prevCursors: [] as string[],
+  hasNext: false,
+  hasPrev: false,
 });
 
-async function loadDevices(): Promise<void> {
+async function loadPage(cursor?: string): Promise<void> {
   state.loading = true;
   state.error = "";
 
   try {
-    state.result = await devicesApiService.getDevices({
-      page: state.result.page || 1,
-      limit: state.result.limit || 10,
-    });
+    const page = await devicesApiService.getDevicePage(cursor, PAGE_LIMIT);
+    state.devices = page.data;
+    state.nextCursor = page.page?.nextCursor ?? "";
+    state.hasNext = page.page?.hasMore ?? false;
+    state.currentCursor = cursor ?? "";
+    state.hasPrev = state.prevCursors.length > 0;
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "Error cargando dispositivos";
@@ -28,22 +36,21 @@ async function loadDevices(): Promise<void> {
   }
 }
 
-function nextPage(): void {
-  if (!state.result) return;
-  if (state.result.page >= state.result.totalPages) return;
-  state.result.page += 1;
-  void loadDevices();
+async function goNext(): Promise<void> {
+  if (!state.hasNext || !state.nextCursor) return;
+  state.prevCursors = [...state.prevCursors, state.currentCursor];
+  await loadPage(state.nextCursor);
 }
 
-function prevPage(): void {
-  if (!state.result) return;
-  if (state.result.page <= 1) return;
-  state.result.page -= 1;
-  void loadDevices();
+async function goPrev(): Promise<void> {
+  if (state.prevCursors.length === 0) return;
+  const prev = state.prevCursors[state.prevCursors.length - 1];
+  state.prevCursors = state.prevCursors.slice(0, -1);
+  await loadPage(prev || undefined);
 }
 
 onMounted(() => {
-  void loadDevices();
+  void loadPage();
 });
 </script>
 
@@ -59,10 +66,11 @@ onMounted(() => {
         Cargando dispositivos...
       </div>
 
-      <div v-if="state.result" class="table-responsive">
+      <div v-if="state.devices.length > 0" class="table-responsive">
         <table class="table table-sm table-striped align-middle">
           <thead>
             <tr>
+              <th>ID</th>
               <th class="text-truncate" style="max-width: 150px">Token</th>
               <th class="d-none d-md-table-cell">Platform</th>
               <th>Name</th>
@@ -71,7 +79,8 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="device in state.result.data" :key="device.id">
+            <tr v-for="device in state.devices" :key="device.id">
+              <td>{{ device.id }}</td>
               <td
                 class="text-truncate"
                 style="max-width: 150px"
@@ -89,34 +98,34 @@ onMounted(() => {
       </div>
 
       <div
-        v-if="state.result"
-        class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between"
+        v-else-if="!state.loading"
+        class="text-center text-muted"
+      >
+        No hay dispositivos registrados
+      </div>
+
+      <div
+        v-if="state.devices.length > 0"
+        class="d-flex gap-2 mt-3 align-items-center justify-content-between"
       >
         <div class="d-flex gap-2">
           <button
             class="btn btn-outline-secondary btn-sm"
-            @click="prevPage"
-            :disabled="state.result.page <= 1 || state.loading"
+            :disabled="!state.hasPrev || state.loading"
+            @click="goPrev"
           >
             <span class="d-none d-sm-inline">Anterior</span>
             <span class="d-inline d-sm-none">&lt;</span>
           </button>
           <button
             class="btn btn-outline-secondary btn-sm"
-            @click="nextPage"
-            :disabled="
-              state.loading || state.result.page >= state.result.totalPages
-            "
+            :disabled="!state.hasNext || state.loading"
+            @click="goNext"
           >
             <span class="d-none d-sm-inline">Siguiente</span>
             <span class="d-inline d-sm-none">&gt;</span>
           </button>
         </div>
-        <span class="text-body-secondary small">
-          Pág. {{ state.result.page }} / {{ state.result.totalPages }} ({{
-            state.result.total
-          }})
-        </span>
       </div>
     </div>
   </div>
