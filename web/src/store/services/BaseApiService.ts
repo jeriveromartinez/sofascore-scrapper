@@ -1,10 +1,11 @@
-import { API_BASE_URL, KEY_USER_LOGIN } from "../../constants";
+import { API_BASE_URL } from "../../constants";
 import { ErrorResponse, AuthResponse } from "../../proto/api";
 import axios, {
   type AxiosInstance,
   type InternalAxiosRequestConfig,
 } from "axios";
 import { type ApiErrorResponse, type UserAuthModel } from "./models";
+import { readAuthStorage, clearAuthStorage } from "../authStorage";
 
 const PROTO_CONTENT_TYPE = "application/x-protobuf";
 
@@ -15,50 +16,10 @@ export interface ProtoCodec<T> {
   decode(input: Uint8Array): T;
 }
 
-function clearAuthStorage(): void {
-  sessionStorage.removeItem(KEY_USER_LOGIN);
-  localStorage.removeItem(KEY_USER_LOGIN);
-}
-
 function redirectToLogin(): void {
   import("../../router").then(({ router }) => {
     router.push({ name: "Login" });
   });
-}
-
-function readStoredAuth(): {
-  user: UserAuthModel | null;
-  storage: Storage | null;
-} {
-  const storedSession = sessionStorage.getItem(KEY_USER_LOGIN);
-  if (storedSession) {
-    try {
-      return {
-        user: JSON.parse(storedSession) as UserAuthModel,
-        storage: sessionStorage,
-      };
-    } catch {
-      return { user: null, storage: null };
-    }
-  }
-
-  const storedLocal = localStorage.getItem(KEY_USER_LOGIN);
-  if (storedLocal) {
-    try {
-      return {
-        user: JSON.parse(storedLocal) as UserAuthModel,
-        storage: localStorage,
-      };
-    } catch {
-      return { user: null, storage: null };
-    }
-  }
-
-  return { user: null, storage: null };
-}
-
-function persistStoredAuth(user: UserAuthModel, storage: Storage | null): void {
-  storage?.setItem(KEY_USER_LOGIN, JSON.stringify(user));
 }
 
 async function refreshAuth(): Promise<UserAuthModel | null> {
@@ -67,7 +28,7 @@ async function refreshAuth(): Promise<UserAuthModel | null> {
   }
 
   refreshPromise = (async () => {
-    const { user, storage } = readStoredAuth();
+    const { user, storage } = readAuthStorage();
     if (!user?.refreshToken || !storage) {
       return null;
     }
@@ -97,7 +58,10 @@ async function refreshAuth(): Promise<UserAuthModel | null> {
       refreshToken: auth.refreshToken,
     };
 
-    persistStoredAuth(nextUser, storage);
+    storage.setItem(
+      "user_info",
+      JSON.stringify(nextUser),
+    );
     return nextUser;
   })().finally(() => {
     refreshPromise = null;
@@ -148,7 +112,7 @@ export abstract class BaseApiService {
   }
 
   private getToken(): string {
-    return readStoredAuth().user?.token ?? "";
+    return readAuthStorage().user?.token ?? "";
   }
 
   private getHeaders(withBody = false): Record<string, string> {

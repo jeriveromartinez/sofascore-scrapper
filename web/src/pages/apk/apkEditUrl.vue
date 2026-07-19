@@ -7,17 +7,22 @@ const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
   autoCloseModal: true,
 });
 
+const emit = defineEmits<{ updated: [id: number, url: string] }>();
+
 const modal = reactive({
   open: false,
   error: "",
   loading: false,
   info: {} as ApkInfo,
+  originalId: 0,
+  originalUrl: "",
 });
 
 const closeModal = (): void => {
   modal.open = false;
   modal.error = "";
   modal.loading = false;
+  modal.info = {} as ApkInfo;
 };
 
 const submitUrl = async (): Promise<void> => {
@@ -29,8 +34,11 @@ const submitUrl = async (): Promise<void> => {
   modal.loading = true;
 
   try {
-    await apkApiService.updateApkUrl(modal.info.id, modal.info.panelUrl);
-    closeModal();
+    await apkApiService.updateApkUrl(modal.originalId, modal.info.panelUrl);
+    emit("updated", modal.originalId, modal.info.panelUrl);
+    if (props.autoCloseModal) {
+      closeModal();
+    }
   } catch (error) {
     modal.error =
       error instanceof Error
@@ -43,7 +51,9 @@ const submitUrl = async (): Promise<void> => {
 
 const openModal = (info: ApkInfo): void => {
   modal.error = "";
-  modal.info = info;
+  modal.originalId = info.id;
+  modal.originalUrl = info.panelUrl;
+  modal.info = { ...info };
   modal.open = true;
 };
 

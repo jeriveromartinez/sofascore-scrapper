@@ -2,6 +2,7 @@
 import { onMounted, reactive } from "vue";
 import { playbackApiService } from "../store/services";
 import type { PlaybackLog } from "../store/services/models";
+import { formatUnixTimestamp } from "../utils/time";
 
 const state = reactive({
   page: 1,
@@ -11,10 +12,6 @@ const state = reactive({
   loading: false,
   error: "",
 });
-
-function parseUnix(value: number): string {
-  return new Date(value).toLocaleString("en-UK");
-}
 
 async function load() {
   state.error = "";
@@ -97,8 +94,8 @@ onMounted(() => {
             <tr v-for="(row, index) in state.data" :key="row.id">
               <td>{{ index + 1 }}</td>
               <td>{{ row.content }}</td>
-              <td>{{ parseUnix(row.startedAt) }}</td>
-              <td>{{ row.endedAt > 0 ? parseUnix(row.endedAt) : "" }}</td>
+              <td>{{ formatUnixTimestamp(row.startedAt) }}</td>
+              <td>{{ row.endedAt > 0 ? formatUnixTimestamp(row.endedAt) : "" }}</td>
             </tr>
           </tbody>
         </table>

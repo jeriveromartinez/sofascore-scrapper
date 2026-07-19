@@ -2,6 +2,7 @@
 import { onMounted, reactive } from "vue";
 import { eventsApiService } from "../store/services";
 import type { EventsResponse } from "../store/services/models";
+import { formatUnixTimestamp } from "../utils/time";
 
 type EventState = {
   date: string;
@@ -22,11 +23,6 @@ const state = reactive<EventState>({
   error: "",
   data: null,
 });
-
-function formatTimestamp(unix: number): string {
-  if (!unix) return "-";
-  return new Date(unix * 1000).toLocaleString();
-}
 
 async function fetchEvents(): Promise<void> {
   state.loading = true;
@@ -190,7 +186,7 @@ onMounted(() => fetchEvents());
                 <strong>{{ event.homeScore }} - {{ event.awayScore }}</strong>
               </td>
               <td class="d-none d-md-table-cell">
-                {{ formatTimestamp(event.startTimestamp) }}
+                {{ formatUnixTimestamp(event.startTimestamp) }}
               </td>
             </tr>
           </tbody>
