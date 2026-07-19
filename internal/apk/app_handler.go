@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -85,6 +86,10 @@ func (h *AppHandler) handleDownload(c *gin.Context) {
 	if err != nil || !strings.HasPrefix(absPath, storagePath+string(filepath.Separator)) {
 		server.RespondError(c, http.StatusForbidden, "file path is invalid")
 		return
+	}
+
+	if rc := http.NewResponseController(c.Writer); rc != nil {
+		rc.SetWriteDeadline(time.Time{})
 	}
 
 	_ = h.repo.IncrementDownloadCount(apk.ID)

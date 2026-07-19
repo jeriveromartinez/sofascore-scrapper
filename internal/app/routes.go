@@ -38,20 +38,27 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	router.Use(server.BodyLimit())
 	router.Use(server.CORS())
 	router.Use(gin.Logger())
-	router.Use(server.RateLimit(redisClient))
 
-	appV1 := router.Group("/api/app/v1")
+	rl := server.RateLimit(redisClient)
+
+	appV1 := router.Group("/api/app/v1", rl)
 	webV1 := router.Group("/api/web/v1")
 
 	appMw := devices.AppMiddleware(db)
 	authMw := auth.AuthMiddleware(tokens)
+	authThenRl := func(c *gin.Context) {
+		authMw(c)
+		if !c.IsAborted() {
+			rl(c)
+		}
+	}
 
 	apkRepo := apk.NewRepository(db)
 	apkAppHandler := apk.NewAppHandler(apkRepo)
 	apkAppHandler.RegisterRoutes(appV1)
 
 	apkAdminHandler := apk.NewAdminHandler(apkRepo)
-	apkAdminHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: authMw})
+	apkAdminHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: authThenRl})
 
 	devRepo := devices.NewRepository(db)
 	playbackRepo := playback.NewRepository(db)
@@ -63,52 +70,52 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	playbackAppHandler.RegisterRoutes(appV1, playback.PlaybackAppHandlerDeps{AppMiddleware: appMw})
 
 	devicesAdminHandler := devices.NewAdminHandler(devRepo)
-	devicesAdminHandler.RegisterRoutes(webV1, devices.AdminHandlerDeps{AuthMiddleware: authMw})
+	devicesAdminHandler.RegisterRoutes(webV1, devices.AdminHandlerDeps{AuthMiddleware: authThenRl})
 
 	playbackAdminHandler := playback.NewAdminHandler(playbackRepo)
-	playbackAdminHandler.RegisterRoutes(webV1, playback.AdminHandlerDeps{AuthMiddleware: authMw})
+	playbackAdminHandler.RegisterRoutes(webV1, playback.AdminHandlerDeps{AuthMiddleware: authThenRl})
 
 	reportingRepo := reporting.NewRepository(db)
 	crashHandler := reporting.NewCrashHandler(reportingRepo)
 	crashHandler.RegisterRoutes(appV1)
 
 	statsHandler := reporting.NewStatsHandler(reportingRepo)
-	statsHandler.RegisterRoutes(webV1, reporting.StatsHandlerDeps{AuthMiddleware: authMw})
+	statsHandler.RegisterRoutes(webV1, reporting.StatsHandlerDeps{AuthMiddleware: authThenRl})
 
 	eventsRepo := events.NewRepository(db)
 	eventsAppHandler := events.NewAppHandler(eventsRepo)
 	eventsAppHandler.RegisterRoutes(appV1, events.AppHandlerDeps{AppMiddleware: appMw})
 
 	eventsAdminHandler := events.NewAdminHandler(db)
-	eventsAdminHandler.RegisterRoutes(webV1, events.AdminHandlerDeps{AuthMiddleware: authMw})
+	eventsAdminHandler.RegisterRoutes(webV1, events.AdminHandlerDeps{AuthMiddleware: authThenRl})
 
 	logoHandler := events.NewLogoHandler()
 	logoHandler.RegisterRoutes(appV1)
 
 	userRepo := users.NewRepository(db)
 	userHandler := users.NewHandler(userRepo)
-	userHandler.RegisterUserRoutes(webV1, users.HandlerDeps{AuthMiddleware: authMw})
+	userHandler.RegisterUserRoutes(webV1, users.HandlerDeps{AuthMiddleware: authThenRl})
 
 	authRepo := auth.NewAuthRepository(db)
 	invitationStore := auth.NewInvitationStore(redisClient)
 	authHandler := auth.NewAuthHandler(authRepo, userRepo, tokens, invitationStore)
-	authHandler.RegisterAuthRoutes(webV1)
+	authHandler.RegisterAuthRoutes(webV1, rl)
 
 	tournamentRepo := tournaments.NewRepository(db)
 	tournamentHandler := tournaments.NewHandler(tournamentRepo)
-	tournamentHandler.RegisterRoutes(webV1, tournaments.HandlerDeps{AuthMiddleware: authMw})
+	tournamentHandler.RegisterRoutes(webV1, tournaments.HandlerDeps{AuthMiddleware: authThenRl})
 
 	deviceAssignmentsRepo := tournaments.NewDeviceAssignmentsRepository(db)
 	deviceAssignmentsHandler := tournaments.NewDeviceAssignmentsHandler(deviceAssignmentsRepo)
-	deviceAssignmentsHandler.RegisterRoutes(webV1, tournaments.DeviceAssignmentsHandlerDeps{AuthMiddleware: authMw})
+	deviceAssignmentsHandler.RegisterRoutes(webV1, tournaments.DeviceAssignmentsHandlerDeps{AuthMiddleware: authThenRl})
 
 	globalConfigRepo := tournaments.NewGlobalConfigRepository(db)
 	globalConfigHandler := tournaments.NewGlobalConfigHandler(globalConfigRepo)
-	globalConfigHandler.RegisterRoutes(webV1, tournaments.GlobalConfigHandlerDeps{AuthMiddleware: authMw})
+	globalConfigHandler.RegisterRoutes(webV1, tournaments.GlobalConfigHandlerDeps{AuthMiddleware: authThenRl})
 
 	domainRepo := domains.NewRepository(db)
 	domainHandler := domains.NewHandler(domainRepo)
-	domainHandler.RegisterRoutes(webV1, domains.HandlerDeps{AuthMiddleware: authMw})
+	domainHandler.RegisterRoutes(webV1, domains.HandlerDeps{AuthMiddleware: authThenRl})
 
 	server.RegisterDashboardRoutes(router)
 

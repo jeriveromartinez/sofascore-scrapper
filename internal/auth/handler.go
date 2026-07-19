@@ -21,12 +21,12 @@ func NewAuthHandler(authRepo *AuthRepository, userRepo *users.Repository, tokens
 	return &AuthHandler{authRepo: authRepo, userRepo: userRepo, tokens: tokens, invitation: invitation}
 }
 
-func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup) {
-	group.POST("/users/register", h.handleRegister)
-	group.POST("/users/login", h.handleLogin)
-	group.POST("/users/refresh", h.handleRefresh)
-	group.POST("/users/logout", AuthMiddleware(h.tokens), h.handleLogout)
-	group.POST("/users/invitations", AuthMiddleware(h.tokens), h.handleCreateInvitation)
+func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup, rateLimitMw gin.HandlerFunc) {
+	group.POST("/users/register", rateLimitMw, h.handleRegister)
+	group.POST("/users/login", rateLimitMw, h.handleLogin)
+	group.POST("/users/refresh", rateLimitMw, h.handleRefresh)
+	group.POST("/users/logout", AuthMiddleware(h.tokens), rateLimitMw, h.handleLogout)
+	group.POST("/users/invitations", AuthMiddleware(h.tokens), rateLimitMw, h.handleCreateInvitation)
 }
 
 func (h *AuthHandler) handleRegister(c *gin.Context) {
