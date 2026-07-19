@@ -133,6 +133,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Verify production prerequisites
+        id: runtime
         shell: bash
         run: |
           [[ "$(uname -s)" == "Linux" ]]
@@ -154,6 +155,24 @@ jobs:
               exit 1
             }
           done
+          environment_file=/etc/iptv/iptv.env
+          [[ -r "$environment_file" ]] || {
+            echo "Service environment file is not readable: $environment_file" >&2
+            exit 1
+          }
+          if ! grep -Eq '^JWT_SECRET=.+$' "$environment_file"; then
+            echo "JWT_SECRET is missing from $environment_file" >&2
+            echo "Run this command on the production server:" >&2
+            echo '  python3 -c '\''import secrets; print("JWT_SECRET=" + secrets.token_hex(32))'\'' | sudo tee -a /etc/iptv/iptv.env >/dev/null' >&2
+            exit 1
+          fi
+          api_addr=$(grep -E '^API_ADDR=' "$environment_file" | tail -n 1 | cut -d= -f2-)
+          health_port=${api_addr##*:}
+          [[ "$health_port" =~ ^[0-9]+$ ]] || {
+            echo "API_ADDR must end in a numeric port in $environment_file; got: $api_addr" >&2
+            exit 1
+          }
+          echo "health_url=http://127.0.0.1:${health_port}/health/ready" >> "$GITHUB_OUTPUT"
 
       - name: Build dashboard
         working-directory: web
@@ -169,6 +188,7 @@ jobs:
       - name: Publish and verify
         env:
           EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
+          HEALTH_URL: ${{ steps.runtime.outputs.health_url }}
         run: |
           [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]] || {
             echo "Checked out revision does not match selected SHA $EXPECTED_SHA" >&2

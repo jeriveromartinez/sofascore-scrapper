@@ -97,7 +97,7 @@ The script must:
 4. atomically replace `/opt/iptv/iptv` and `/opt/iptv/web/dist` without touching the service environment, `apk_storage`, or `image_storage`;
 5. preserve executable mode on the installed binary;
 6. restart with `systemctl --user restart iptv.service`;
-7. require both an active service and a successful readiness response from `http://127.0.0.1:8080/health/ready`.
+7. derive the local readiness URL from `API_ADDR` in `/etc/iptv/iptv.env`, then require both an active service and a successful `/health/ready` response.
 
 The script must clean temporary staging data on exit. The previous successful artifacts remain available for rollback and are replaced on the next deployment.
 

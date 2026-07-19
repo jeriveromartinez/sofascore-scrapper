@@ -96,6 +96,14 @@ fi
   exit 1
 }
 require 'systemctl --user show iptv.service'
+require 'id: runtime'
+require 'environment_file=/etc/iptv/iptv.env'
+require "grep -Eq '^JWT_SECRET=.+$' \"\$environment_file\""
+require 'secrets.token_hex(32)'
+require 'sudo tee -a /etc/iptv/iptv.env'
+require 'health_port=${api_addr##*:}'
+require 'echo "health_url=http://127.0.0.1:${health_port}/health/ready" >> "$GITHUB_OUTPUT"'
+require 'HEALTH_URL: ${{ steps.runtime.outputs.health_url }}'
 require 'uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4'
 require 'uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5'
 require 'uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4'
