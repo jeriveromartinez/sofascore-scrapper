@@ -31,9 +31,12 @@ cleanup() {
 
 wait_for_health() {
   local attempt
+  local http_status
   for ((attempt = 1; attempt <= health_attempts; attempt++)); do
     if "$systemctl_bin" --user is-active --quiet "$service_name" \
-      && "$curl_bin" --fail --silent --show-error --max-time 5 "$health_url" >/dev/null; then
+      && http_status=$("$curl_bin" --fail --silent --show-error --max-time 5 \
+        --output /dev/null --write-out '%{http_code}' "$health_url") \
+      && [[ "$http_status" == 200 ]]; then
       return 0
     fi
     sleep "$health_delay"
@@ -44,17 +47,17 @@ wait_for_health() {
 }
 
 restore_previous() {
-  [[ -f "$previous_dir/iptv" ]]
-  [[ -d "$previous_dir/web-dist" ]]
+  [[ -f "$previous_dir/iptv" ]] || return 1
+  [[ -d "$previous_dir/web-dist" ]] || return 1
 
-  install -m 0755 "$previous_dir/iptv" "$deploy_root/.iptv.rollback"
-  mv -f "$deploy_root/.iptv.rollback" "$current_binary"
-  rm -rf "$deploy_root/web/.dist.rollback"
-  cp -a "$previous_dir/web-dist" "$deploy_root/web/.dist.rollback"
-  rm -rf "$current_dashboard"
-  mv "$deploy_root/web/.dist.rollback" "$current_dashboard"
-  "$systemctl_bin" --user restart "$service_name"
-  wait_for_health
+  install -m 0755 "$previous_dir/iptv" "$deploy_root/.iptv.rollback" || return
+  mv -f "$deploy_root/.iptv.rollback" "$current_binary" || return
+  rm -rf "$deploy_root/web/.dist.rollback" || return
+  cp -a "$previous_dir/web-dist" "$deploy_root/web/.dist.rollback" || return
+  rm -rf "$current_dashboard" || return
+  mv "$deploy_root/web/.dist.rollback" "$current_dashboard" || return
+  "$systemctl_bin" --user restart "$service_name" || return
+  wait_for_health || return
 }
 
 handle_error() {

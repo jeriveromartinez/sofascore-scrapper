@@ -47,7 +47,7 @@ test_successful_publication() {
 
   cat > "$case_dir/bin/curl" <<'CURL'
 #!/usr/bin/env bash
-exit 0
+printf '200'
 CURL
   chmod +x "$case_dir/bin/curl"
 
@@ -67,6 +67,40 @@ CURL
   [[ -x "$case_dir/root/iptv" ]] || fail "installed binary is not executable"
 }
 
+test_non_200_health_restores_previous_release() {
+  make_fixture non-200
+  local case_dir="$tmp/non-200"
+
+  cat > "$case_dir/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+count=0
+[[ -f "$CURL_COUNT_FILE" ]] && count=$(<"$CURL_COUNT_FILE")
+count=$((count + 1))
+printf '%s' "$count" > "$CURL_COUNT_FILE"
+if [[ "$count" -eq 1 ]]; then
+  printf '204'
+else
+  printf '200'
+fi
+CURL
+  chmod +x "$case_dir/bin/curl"
+
+  if DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    CURL_COUNT_FILE="$case_dir/curl.count" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist"; then
+    fail "deployment with non-200 health unexpectedly succeeded"
+  fi
+
+  assert_content old-binary "$case_dir/root/iptv"
+  assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 2 ]] || fail "non-200 health did not trigger rollback"
+}
+
 test_failed_health_restores_previous_release() {
   make_fixture rollback
   local case_dir="$tmp/rollback"
@@ -77,7 +111,11 @@ count=0
 [[ -f "$CURL_COUNT_FILE" ]] && count=$(<"$CURL_COUNT_FILE")
 count=$((count + 1))
 printf '%s' "$count" > "$CURL_COUNT_FILE"
-[[ "$count" -gt 1 ]]
+if [[ "$count" -gt 1 ]]; then
+  printf '200'
+else
+  exit 1
+fi
 CURL
   chmod +x "$case_dir/bin/curl"
 
@@ -97,6 +135,62 @@ CURL
   [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 2 ]] || fail "rollback did not restart service"
 }
 
+test_rollback_operation_failure_is_reported() {
+  make_fixture rollback-failure
+  local case_dir="$tmp/rollback-failure"
+  local output
+
+  cat > "$case_dir/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+count=0
+[[ -f "$CURL_COUNT_FILE" ]] && count=$(<"$CURL_COUNT_FILE")
+count=$((count + 1))
+printf '%s' "$count" > "$CURL_COUNT_FILE"
+if [[ "$count" -gt 1 ]]; then
+  printf '200'
+else
+  exit 1
+fi
+CURL
+  chmod +x "$case_dir/bin/curl"
+
+  cat > "$case_dir/bin/install" <<'INSTALL'
+#!/usr/bin/env bash
+count=0
+[[ -f "$INSTALL_COUNT_FILE" ]] && count=$(<"$INSTALL_COUNT_FILE")
+count=$((count + 1))
+printf '%s' "$count" > "$INSTALL_COUNT_FILE"
+if [[ "$count" -eq 3 ]]; then
+  exit 1
+fi
+exec /usr/bin/install "$@"
+INSTALL
+  chmod +x "$case_dir/bin/install"
+
+  if output=$(PATH="$case_dir/bin:$PATH" \
+    DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    CURL_COUNT_FILE="$case_dir/curl.count" \
+    INSTALL_COUNT_FILE="$case_dir/install.count" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" 2>&1); then
+    fail "deployment with failed rollback operation unexpectedly succeeded"
+  fi
+
+  grep -Fq 'rollback failed; inspect iptv.service immediately' <<<"$output" || fail "rollback operation failure was not reported"
+  if grep -Fq 'previous release restored' <<<"$output"; then
+    fail "failed rollback was reported as successful"
+  fi
+  assert_content new-binary "$case_dir/root/iptv"
+  assert_content new-dashboard "$case_dir/root/web/dist/index.html"
+  [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 1 ]] || fail "rollback continued to service restart after operation failure"
+}
+
 test_successful_publication
+test_non_200_health_restores_previous_release
 test_failed_health_restores_previous_release
+test_rollback_operation_failure_is_reported
 printf 'native deploy tests passed\n'
