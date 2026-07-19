@@ -126,9 +126,16 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int) (*scraper.Service, *reporting.AggregationRepository) {
+	client, err := scraper.NewClient(scraper.ClientConfig{})
+	if err != nil {
+		panic("scraper: failed to create client: " + err.Error())
+	}
 	eventsRepo := events.NewRepository(db)
-	scrapeSvc := scraper.NewService(eventsRepo, batchSize)
+	scrapeSvc, err := scraper.NewService(eventsRepo, client, batchSize, concurrency)
+	if err != nil {
+		panic("scraper: failed to create service: " + err.Error())
+	}
 	aggRepo := reporting.NewAggregationRepository(db)
 	return scrapeSvc, aggRepo
 }
