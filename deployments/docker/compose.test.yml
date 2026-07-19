@@ -1,0 +1,98 @@
+services:
+  mariadb:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: test
+      MARIADB_DATABASE: sofascore
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    networks:
+      - test-net
+
+  redis:
+    image: redis:7-alpine
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+    networks:
+      - test-net
+
+  backend-init:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile.test
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_ONLY: "true"
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: test
+      DB_NAME: sofascore
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: test-secret-key-for-e2e
+      APK_STORAGE_PATH: /tmp/apk_storage
+      IMAGE_STORAGE_PATH: /tmp/image_storage
+    volumes:
+      - invite-data:/shared
+    networks:
+      - test-net
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile.test
+    ports:
+      - "8080:8080"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend-init:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: test
+      DB_NAME: sofascore
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: test-secret-key-for-e2e
+      API_ADDR: "0.0.0.0:8080"
+      APK_STORAGE_PATH: /tmp/apk_storage
+      IMAGE_STORAGE_PATH: /tmp/image_storage
+    tmpfs:
+      - /tmp/apk_storage
+      - /tmp/image_storage
+    volumes:
+      - invite-data:/shared
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks:
+      - test-net
+
+volumes:
+  invite-data:
+
+networks:
+  test-net:
