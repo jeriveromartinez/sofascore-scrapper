@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 )
 
@@ -19,7 +20,7 @@ func Migrate() {
 		&Domain{},
 		&RefreshToken{},
 		&Device{},
-		&PlaybackLog{},
+		&playback.PlaybackLog{},
 		&apk.ApkVersion{},
 		&DeviceTournament{},
 		&GlobalTournamentConfig{},
