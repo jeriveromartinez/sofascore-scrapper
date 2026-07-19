@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
@@ -33,16 +34,27 @@ func scrapeNext7Days(svc *scraper.Service) {
 	}
 }
 
-func startScrape(ctx context.Context, scrapeSvc interface{}) {
+func startScrape(ctx context.Context, scrapeSvc interface{}, wg *sync.WaitGroup) {
 	svc, ok := scrapeSvc.(*scraper.Service)
 	if !ok || svc == nil {
 		return
 	}
 
-	go scrapeToday(svc, time.Now())
-	go scrapeNext7Days(svc)
-
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		scrapeToday(svc, time.Now())
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scrapeNext7Days(svc)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
@@ -55,7 +67,9 @@ func startScrape(ctx context.Context, scrapeSvc interface{}) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			now := time.Now().UTC()
 			h, m, s := now.Clock()
