@@ -5,18 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
+	"gorm.io/gorm"
 )
 
-func AppMiddleware() gin.HandlerFunc {
+func AppMiddleware(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		db, err := database.GetDB()
-		if err != nil {
-			server.RespondError(c, http.StatusUnauthorized, "you are lost")
-			c.Abort()
-			return
-		}
-
 		var device Device
 		if err := db.Where("token = ?", c.GetHeader("APP-XIPTV")).First(&device).Error; err != nil {
 			server.RespondError(c, http.StatusUnauthorized, "you are lost")

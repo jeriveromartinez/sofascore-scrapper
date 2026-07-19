@@ -15,7 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/libs/apkutil"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 )
 
@@ -71,7 +70,7 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 		return
 	}
 
-	apkInfo, parseErr := apkutil.ParseAPKInfo(tmpPath)
+	apkInfo, parseErr := ParseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
 		server.RespondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
@@ -101,7 +100,7 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 	}
 
 	description := c.PostForm("description")
-	apk, err := h.repo.Create(
+	apkV, err := h.repo.Create(
 		version, fileName, destPath, description, apkInfo.PackageName,
 		fileHeader.Size, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
 	)
@@ -112,18 +111,18 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 	}
 
 	server.RespondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
-		Id:               uint32(apk.ID),
-		Version:          apk.Version,
-		FileName:         apk.FileName,
-		FileSize:         apk.FileSize,
-		Description:      apk.Description,
-		PackageName:      apk.PackageName,
-		VersionCode:      apk.VersionCode,
-		MinSdkVersion:    apk.MinSDKVersion,
-		TargetSdkVersion: apk.TargetSDKVersion,
-		DownloadToken:    apk.DownloadToken,
-		DownloadUrl:      fmt.Sprintf("/api/app/v1/apk/download/%s", apk.DownloadToken),
-		CreatedAt:        apk.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		Id:               uint32(apkV.ID),
+		Version:          apkV.Version,
+		FileName:         apkV.FileName,
+		FileSize:         apkV.FileSize,
+		Description:      apkV.Description,
+		PackageName:      apkV.PackageName,
+		VersionCode:      apkV.VersionCode,
+		MinSdkVersion:    apkV.MinSDKVersion,
+		TargetSdkVersion: apkV.TargetSDKVersion,
+		DownloadToken:    apkV.DownloadToken,
+		DownloadUrl:      fmt.Sprintf("/api/app/v1/apk/download/%s", apkV.DownloadToken),
+		CreatedAt:        apkV.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
 
@@ -257,10 +256,10 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 
 	_ = os.RemoveAll(chunkDir)
 
-	apkInfo, parseErr := apkutil.ParseAPKInfo(tmpPath)
+	apkInfo, parseErr := ParseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "could not parse APK metadata: " + parseErr.Error()})
+		server.RespondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
 		return
 	}
 
@@ -284,34 +283,34 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	destPath := filepath.Join(storagePath, fileName)
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		_ = os.Remove(tmpPath)
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not finalize file"})
+		server.RespondError(c, http.StatusInternalServerError, "could not finalize file")
 		return
 	}
 
 	description := c.PostForm("description")
-	apk, err := h.repo.Create(
+	apkV, err := h.repo.Create(
 		version, fileName, destPath, description, apkInfo.PackageName,
 		totalSize, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		c.JSON(http.StatusConflict, map[string]string{"error": "could not save APK version: " + err.Error()})
+		server.RespondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
 		return
 	}
 
 	server.RespondProto(c, http.StatusCreated, &pb.ApkUploadResponse{
-		Id:               uint32(apk.ID),
-		Version:          apk.Version,
-		FileName:         apk.FileName,
-		FileSize:         apk.FileSize,
-		Description:      apk.Description,
-		PackageName:      apk.PackageName,
-		VersionCode:      apk.VersionCode,
-		MinSdkVersion:    apk.MinSDKVersion,
-		TargetSdkVersion: apk.TargetSDKVersion,
-		DownloadToken:    apk.DownloadToken,
-		DownloadUrl:      fmt.Sprintf("/api/app/v1/apk/download/%s", apk.DownloadToken),
-		CreatedAt:        apk.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		Id:               uint32(apkV.ID),
+		Version:          apkV.Version,
+		FileName:         apkV.FileName,
+		FileSize:         apkV.FileSize,
+		Description:      apkV.Description,
+		PackageName:      apkV.PackageName,
+		VersionCode:      apkV.VersionCode,
+		MinSdkVersion:    apkV.MinSDKVersion,
+		TargetSdkVersion: apkV.TargetSDKVersion,
+		DownloadToken:    apkV.DownloadToken,
+		DownloadUrl:      fmt.Sprintf("/api/app/v1/apk/download/%s", apkV.DownloadToken),
+		CreatedAt:        apkV.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
 }
 

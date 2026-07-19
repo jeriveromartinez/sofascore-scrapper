@@ -1,6 +1,4 @@
-FROM golang:1.24-alpine AS builder
-
-RUN apk add --no-cache chromium chromium-chromedriver
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -8,14 +6,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -o sofascore-scrapper .
+RUN go build -o /out/sofascore-scrapper ./cmd/server
 
 FROM alpine:3.20
 
-RUN apk add --no-cache chromium chromium-chromedriver ca-certificates
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
-COPY --from=builder /app/sofascore-scrapper .
+COPY --from=builder /out/sofascore-scrapper .
 
 CMD ["./sofascore-scrapper"]
