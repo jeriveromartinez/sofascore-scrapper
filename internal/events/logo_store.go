@@ -21,25 +21,54 @@ const imageDownloadTimeout = 10 * time.Second
 const imageBrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 
 func newImageHTTPClient() *http.Client {
+	return newImageHTTPClientWithTLSConfig(nil)
+}
+
+func newImageHTTPClientWithTLSConfig(tlsConfig *utls.Config) *http.Client {
+	dialTLS := dialImageTLS
+	if tlsConfig != nil {
+		dialTLS = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialImageTLSWithConfig(ctx, network, addr, tlsConfig)
+		}
+	}
+
 	return &http.Client{
-		Transport: &http.Transport{DialTLSContext: dialImageTLS},
+		Transport: &http.Transport{DialTLSContext: dialTLS},
 		Timeout:   imageDownloadTimeout,
 	}
 }
 
 func dialImageTLS(ctx context.Context, network, addr string) (net.Conn, error) {
+	return dialImageTLSWithConfig(ctx, network, addr, nil)
+}
+
+func dialImageTLSWithConfig(ctx context.Context, network, addr string, tlsConfig *utls.Config) (net.Conn, error) {
 	host, _, _ := net.SplitHostPort(addr)
 	raw, err := (&net.Dialer{Timeout: imageDownloadTimeout}).DialContext(ctx, network, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	conn := utls.UClient(raw, &utls.Config{
+	config := &utls.Config{
 		ServerName: host,
 		MinVersion: tls.VersionTLS12,
 		MaxVersion: tls.VersionTLS12,
 		NextProtos: []string{"http/1.1"},
-	}, utls.HelloRandomized)
+	}
+	if tlsConfig != nil {
+		config = tlsConfig.Clone()
+		config.ServerName = host
+		config.MinVersion = tls.VersionTLS12
+		config.MaxVersion = tls.VersionTLS12
+		config.NextProtos = []string{"http/1.1"}
+	}
+
+	weights := utls.DefaultWeights
+	// HelloRandomized otherwise selects TLS 1.3 independently of Config.
+	weights.TLSVersMax_Set_VersionTLS13 = 0
+	clientHelloID := utls.HelloRandomized
+	clientHelloID.Weights = &weights
+	conn := utls.UClient(raw, config, clientHelloID)
 	if err := conn.HandshakeContext(ctx); err != nil {
 		_ = raw.Close()
 		return nil, err
@@ -63,6 +92,12 @@ func TeamLogoAPIPath(teamID int64) string {
 }
 
 func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
+	return downloadTeamLogo(teamID, sourceURL, newImageHTTPClient())
+}
+
+func downloadTeamLogo(teamID int64, sourceURL string, client *http.Client) (string, error) {
+	defer client.CloseIdleConnections()
+
 	localPath := TeamLogoLocalPath(teamID)
 
 	if _, err := os.Stat(localPath); err == nil {
@@ -74,7 +109,6 @@ func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
 		return "", fmt.Errorf("could not create image storage directory: %w", err)
 	}
 
-	client := newImageHTTPClient()
 	req, err := http.NewRequest(http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("could not create image request: %w", err)
