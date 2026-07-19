@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
@@ -22,17 +23,18 @@ type Scheduler struct {
 	cleanupJob      *apk.CleanupJob
 	redisClient     *redis.Client
 	downloadCounter apk.DownloadCounter
+	logger          *slog.Logger
 }
 
-func New() *Scheduler {
-	return &Scheduler{}
+func New(logger *slog.Logger) *Scheduler {
+	return &Scheduler{logger: logger}
 }
 
 func (s *Scheduler) Init(db *gorm.DB, scrapeSvc *scraper.Service, aggRepo *reporting.AggregationRepository, locker redisplatform.Locker) {
 	s.db = db
 	s.scrapeSvc = scrapeSvc
 	s.aggRepo = aggRepo
-	s.runner = NewRunner(locker)
+	s.runner = NewRunner(locker, s.logger)
 }
 
 func (s *Scheduler) SetCleanupJob(job *apk.CleanupJob, client *redis.Client) {
@@ -49,7 +51,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	s.cancel = cancel
 
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg)
-	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg)
+	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg, s.logger)
 
 	<-localCtx.Done()
 	s.wg.Wait()

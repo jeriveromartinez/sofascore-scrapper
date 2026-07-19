@@ -3,7 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
@@ -22,9 +22,10 @@ type Service struct {
 	batchSize        int
 	concur           int
 	onScrapeComplete func(context.Context) error
+	logger           *slog.Logger
 }
 
-func NewService(repo *events.Repository, client SofaScoreClient, batchSize int, concurrency int) (*Service, error) {
+func NewService(repo *events.Repository, client SofaScoreClient, batchSize int, concurrency int, logger *slog.Logger) (*Service, error) {
 	if concurrency == 0 {
 		concurrency = DefaultScrapeConcurrency
 	}
@@ -36,6 +37,7 @@ func NewService(repo *events.Repository, client SofaScoreClient, batchSize int, 
 		client:    client,
 		batchSize: batchSize,
 		concur:    concurrency,
+		logger:    logger,
 	}, nil
 }
 
@@ -55,7 +57,11 @@ func (s *Service) Scrape(ctx context.Context, sport string, date time.Time) erro
 	if s.onScrapeComplete != nil {
 		_ = s.onScrapeComplete(ctx)
 	}
-	log.Printf("scraper: scraped %d events for %s on %s", len(apiEvents), sport, date.Format("2006-01-02"))
+	s.logger.InfoContext(ctx, "scraped events",
+		slog.String("sport", sport),
+		slog.String("date", date.Format("2006-01-02")),
+		slog.Int("count", len(apiEvents)),
+	)
 	return nil
 }
 
@@ -71,7 +77,10 @@ func (s *Service) ScrapeCountry(ctx context.Context, countryCode string) error {
 	if s.onScrapeComplete != nil {
 		_ = s.onScrapeComplete(ctx)
 	}
-	log.Printf("scraper: scraped %d events for country %s", len(events), countryCode)
+	s.logger.InfoContext(ctx, "scraped country events",
+		slog.String("country", countryCode),
+		slog.Int("count", len(events)),
+	)
 	return nil
 }
 
@@ -93,7 +102,7 @@ func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
 	}
 
 	if err := g.Wait(); err != nil {
-		log.Printf("scraper: scrape today errors: %v", err)
+		s.logger.ErrorContext(ctx, "scrape today errors", slog.String("error", err.Error()))
 	}
 }
 
@@ -113,6 +122,6 @@ func (s *Service) ScrapeNext7Days(ctx context.Context) {
 	}
 
 	if err := g.Wait(); err != nil {
-		log.Printf("scraper: scrape next 7 days errors: %v", err)
+		s.logger.ErrorContext(ctx, "scrape next 7 days errors", slog.String("error", err.Error()))
 	}
 }

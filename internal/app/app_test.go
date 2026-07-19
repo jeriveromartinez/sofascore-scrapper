@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"testing"
@@ -21,12 +22,13 @@ func TestGracefulShutdown(t *testing.T) {
 		}),
 	}
 
-	sched := scheduler.New()
+	sched := scheduler.New(slog.Default())
 	sched.Init(nil, nil, nil, nil)
 
 	app := &App{
 		HTTP:      srv,
 		Scheduler: sched,
+		logger:    slog.Default(),
 	}
 	app.ready.Store(true)
 
@@ -74,12 +76,13 @@ func TestReadinessToggle(t *testing.T) {
 		}),
 	}
 
-	sched := scheduler.New()
+	sched := scheduler.New(slog.Default())
 	sched.Init(nil, nil, nil, nil)
 
 	app := &App{
 		HTTP:      srv,
 		Scheduler: sched,
+		logger:    slog.Default(),
 	}
 	app.ready.Store(true)
 

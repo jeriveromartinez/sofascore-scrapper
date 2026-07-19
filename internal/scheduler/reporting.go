@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -14,27 +14,27 @@ import (
 )
 
 const (
-	lockStatsDaily       = "scheduler:lock:stats:daily"
-	lockStatsMonthly     = "scheduler:lock:stats:monthly"
-	lockUploadsCleanup   = "scheduler:lock:uploads:cleanup"
+	lockStatsDaily        = "scheduler:lock:stats:daily"
+	lockStatsMonthly      = "scheduler:lock:stats:monthly"
+	lockUploadsCleanup    = "scheduler:lock:uploads:cleanup"
 	lockApkDownloadsFlush = "scheduler:lock:apk-downloads:flush"
 
-	ttlStatsDaily       = 10 * time.Minute
-	ttlStatsMonthly     = 30 * time.Minute
-	ttlUploadsCleanup   = 10 * time.Minute
+	ttlStatsDaily        = 10 * time.Minute
+	ttlStatsMonthly      = 30 * time.Minute
+	ttlUploadsCleanup    = 10 * time.Minute
 	ttlApkDownloadsFlush = 10 * time.Minute
 )
 
-func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner *Runner, cleanupJob *apk.CleanupJob, redisClient *redis.Client, counter apk.DownloadCounter, wg *sync.WaitGroup) {
+func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner *Runner, cleanupJob *apk.CleanupJob, redisClient *redis.Client, counter apk.DownloadCounter, wg *sync.WaitGroup, logger *slog.Logger) {
 	gormDB, ok := db.(*gorm.DB)
 	if !ok || gormDB == nil {
-		log.Printf("scheduler: no DB available for stats")
+		logger.Warn("scheduler: no DB available for stats")
 		return
 	}
 
 	agg, ok := aggRepo.(*reporting.AggregationRepository)
 	if !ok || agg == nil {
-		log.Printf("scheduler: no aggregation repository available")
+		logger.Warn("scheduler: no aggregation repository available")
 	}
 
 	_ = gormDB
@@ -46,27 +46,27 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 		_, err := c.AddFunc("1 0 * * *", func() {
 			_ = runner.RunLocked(context.Background(), lockStatsDaily, ttlStatsDaily, func(jobCtx context.Context) error {
 				if err := agg.GenerateDaily(); err != nil {
-					log.Printf("failed to generate daily event stats: %v", err)
+					logger.Error("failed to generate daily event stats", slog.String("error", err.Error()))
 					return err
 				}
 				return nil
 			})
 		})
 		if err != nil {
-			log.Printf("failed to schedule daily stats cron job: %v", err)
+			logger.Error("failed to schedule daily stats cron job", slog.String("error", err.Error()))
 		}
 
 		_, err = c.AddFunc("10 0 1 * *", func() {
 			_ = runner.RunLocked(context.Background(), lockStatsMonthly, ttlStatsMonthly, func(jobCtx context.Context) error {
 				if err := agg.GenerateMonthly(); err != nil {
-					log.Printf("failed to generate monthly event stats: %v", err)
+					logger.Error("failed to generate monthly event stats", slog.String("error", err.Error()))
 					return err
 				}
 				return nil
 			})
 		})
 		if err != nil {
-			log.Printf("failed to schedule monthly stats cron job: %v", err)
+			logger.Error("failed to schedule monthly stats cron job", slog.String("error", err.Error()))
 		}
 	}
 
@@ -77,7 +77,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 			})
 		})
 		if err != nil {
-			log.Printf("failed to schedule uploads cleanup cron job: %v", err)
+			logger.Error("failed to schedule uploads cleanup cron job", slog.String("error", err.Error()))
 		}
 	}
 
@@ -85,18 +85,18 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 		_, err := c.AddFunc("*/15 * * * *", func() {
 			_ = runner.RunLocked(context.Background(), lockApkDownloadsFlush, ttlApkDownloadsFlush, func(jobCtx context.Context) error {
 				if err := counter.Flush(jobCtx); err != nil {
-					log.Printf("failed to flush apk download counters: %v", err)
+					logger.Error("failed to flush apk download counters", slog.String("error", err.Error()))
 					return err
 				}
 				if err := counter.ReprocessOrphans(jobCtx); err != nil {
-					log.Printf("failed to reprocess orphan apk download batches: %v", err)
+					logger.Error("failed to reprocess orphan apk download batches", slog.String("error", err.Error()))
 					return err
 				}
 				return nil
 			})
 		})
 		if err != nil {
-			log.Printf("failed to schedule apk downloads flush cron job: %v", err)
+			logger.Error("failed to schedule apk downloads flush cron job", slog.String("error", err.Error()))
 		}
 	}
 

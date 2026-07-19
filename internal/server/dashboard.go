@@ -1,7 +1,7 @@
 package server
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,13 +16,13 @@ func RegisterDashboardRoutes(router *gin.Engine) {
 
 	if _, err := os.Stat(indexPath); err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("warning: could not stat dashboard index file: %v", err)
+			slog.Warn("could not stat dashboard index file", slog.String("error", err.Error()))
 		}
-		log.Printf("dashboard build not found at %s; serving API only", indexPath)
+		slog.Warn("dashboard build not found, serving API only", slog.String("path", indexPath))
 		return
 	}
 
-	log.Printf("serving dashboard from %s", frontendRoot)
+	slog.Info("serving dashboard", slog.String("path", frontendRoot))
 
 	router.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {

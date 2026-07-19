@@ -2,7 +2,7 @@ package app
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -10,7 +10,7 @@ import (
 )
 
 func (a *App) shutdown() error {
-	log.Println("shutting down application")
+	a.logger.Info("shutting down application")
 
 	a.ready.Store(false)
 
@@ -18,24 +18,24 @@ func (a *App) shutdown() error {
 	defer cancel()
 
 	if err := a.HTTP.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTP shutdown error: %v", err)
+		a.logger.Error("HTTP shutdown error", slog.String("error", err.Error()))
 	}
 
 	a.Scheduler.Shutdown()
 
 	if a.Redis != nil {
 		if err := a.Redis.Close(); err != nil {
-			log.Printf("Redis close error: %v", err)
+			a.logger.Error("Redis close error", slog.String("error", err.Error()))
 		}
 	}
 
 	if a.SQL != nil {
 		if err := a.SQL.Close(); err != nil {
-			log.Printf("SQL close error: %v", err)
+			a.logger.Error("SQL close error", slog.String("error", err.Error()))
 		}
 	}
 
-	log.Println("shutdown complete")
+	a.logger.Info("shutdown complete")
 	return nil
 }
 

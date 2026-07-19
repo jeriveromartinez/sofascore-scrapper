@@ -4,6 +4,7 @@ package scheduler
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -59,7 +60,7 @@ func TestRunLockedThreeRunnersOneExecution(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runner := NewRunner(locker)
+			runner := NewRunner(locker, slog.Default())
 			err := runner.RunLocked(context.Background(), key, 10*time.Second, job)
 			if err != nil {
 				t.Errorf("RunLocked error: %v", err)
@@ -93,7 +94,7 @@ func TestRunLockedSkipWithoutLock(t *testing.T) {
 		return nil
 	}
 
-	runner := NewRunner(locker)
+	runner := NewRunner(locker, slog.Default())
 	err = runner.RunLocked(context.Background(), key, 10*time.Second, job)
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +122,7 @@ func TestRunLockedLeaseRenewal(t *testing.T) {
 		}
 	}
 
-	runner := NewRunner(locker)
+	runner := NewRunner(locker, slog.Default())
 	go func() {
 		_ = runner.RunLocked(context.Background(), key, 750*time.Millisecond, job)
 	}()
@@ -156,7 +157,7 @@ func TestRunLockedCancelOnLeaseLoss(t *testing.T) {
 		return ctx.Err()
 	}
 
-	runner := NewRunner(locker)
+	runner := NewRunner(locker, slog.Default())
 	go func() {
 		_ = runner.RunLocked(context.Background(), key, 500*time.Millisecond, job)
 	}()
@@ -184,7 +185,7 @@ func TestRunLockedReleaseAfterJob(t *testing.T) {
 		return nil
 	}
 
-	runner := NewRunner(locker)
+	runner := NewRunner(locker, slog.Default())
 	err := runner.RunLocked(context.Background(), key, 10*time.Second, job)
 	if err != nil {
 		t.Fatal(err)

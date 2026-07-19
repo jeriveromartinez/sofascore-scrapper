@@ -3,8 +3,9 @@ package app
 import (
 	"context"
 	"database/sql"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
@@ -31,6 +33,7 @@ type App struct {
 	batchSize   int
 	concur      int
 	storagePath string
+	logger      *slog.Logger
 }
 
 func (a *App) IsReady() bool {
@@ -38,6 +41,9 @@ func (a *App) IsReady() bool {
 }
 
 func New(cfg config.Config) (*App, error) {
+	logger := observability.NewLogger(slog.LevelInfo, os.Stdout)
+	slog.SetDefault(logger)
+
 	tokens, err := auth.NewTokenService(cfg.JWTSecret)
 	if err != nil {
 		return nil, err
@@ -57,7 +63,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	sched := scheduler.New()
+	sched := scheduler.New(slog.Default())
 
 	app := &App{
 		Scheduler:   sched,
@@ -67,6 +73,7 @@ func New(cfg config.Config) (*App, error) {
 		batchSize:   cfg.ScrapeBatchSize,
 		concur:      cfg.ScrapeConcurrency,
 		storagePath: cfg.APKStoragePath,
+		logger:      logger,
 	}
 	app.ready.Store(true)
 
@@ -87,14 +94,14 @@ func New(cfg config.Config) (*App, error) {
 }
 
 func (a *App) Run(ctx context.Context) error {
-	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis))
+	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis), a.logger)
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {
-		log.Printf("API server listening on %s", a.HTTP.Addr)
+		a.logger.Info("API server listening", slog.String("addr", a.HTTP.Addr))
 		return a.HTTP.ListenAndServe()
 	})
 	group.Go(func() error { return a.Scheduler.Run(ctx) })
