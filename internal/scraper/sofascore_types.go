@@ -82,3 +82,14 @@ type APIEvent struct {
 type EventsListResponse struct {
 	Events []*APIEvent `json:"events"`
 }
+
+type ScheduledTournamentsResponse struct {
+	Scheduled []struct {
+		Tournament struct {
+			ID               int64 `json:"id"`
+			UniqueTournament struct {
+				ID int64 `json:"id"`
+			} `json:"uniqueTournament"`
+		} `json:"tournament"`
+	} `json:"scheduled"`
+}

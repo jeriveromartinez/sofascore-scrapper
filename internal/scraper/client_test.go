@@ -33,6 +33,22 @@ func newStubServer() *httptest.Server {
 			w.Header().Set("X-Cookie-Count", fmt.Sprintf("%d", len(cookies)))
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/scheduled-tournaments/") {
+			w.Write([]byte(`{"scheduled":[{"tournament":{"id":1,"uniqueTournament":{"id":16}}}]}`))
+			return
+		}
+		w.Write([]byte(`{"events":[]}`))
+	})
+
+	mux.HandleFunc("/api/v1/unique-tournament/", func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		cookies := r.Cookies()
+		if len(cookies) == 0 {
+			w.Header().Set("X-Cookie-Count", "0")
+		} else {
+			w.Header().Set("X-Cookie-Count", fmt.Sprintf("%d", len(cookies)))
+		}
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"events":[]}`))
 	})
 
@@ -480,8 +496,64 @@ func TestClient_TrendingParsesAllFields(t *testing.T) {
 	}
 }
 
+func TestClient_HomeBlockedFailsLoudly(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/es/") {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":{"code":403,"reason":"Forbidden"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"events":[]}`))
+	}))
+	defer ts.Close()
+
+	cfg := ClientConfig{BaseURL: ts.URL, MaxRetries: 1}
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.ScheduledEvents(context.Background(), "football", time.Now())
+	if err == nil {
+		t.Fatal("expected error when home page returns 403")
+	}
+	if !strings.Contains(err.Error(), "cookie") && !strings.Contains(err.Error(), "403") {
+		t.Fatalf("expected cookie/403 error, got: %v", err)
+	}
+}
+
+func TestClient_HomeNoCookiesAllowedWhenNotBlocked(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/es/") {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte("<html></html>"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/scheduled-tournaments/") {
+			w.Write([]byte(`{"scheduled":[{"tournament":{"id":1,"uniqueTournament":{"id":16}}}]}`))
+			return
+		}
+		w.Write([]byte(`{"events":[]}`))
+	}))
+	defer ts.Close()
+
+	cfg := ClientConfig{BaseURL: ts.URL, MaxRetries: 1}
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.ScheduledEvents(context.Background(), "football", time.Now())
+	if err != nil {
+		t.Fatalf("home 200 without cookies should not fail: %v", err)
+	}
+}
+
 func TestClient_ReadAllBody(t *testing.T) {
-	data := `{"events":[{"id":1,"slug":"test","startTimestamp":1710000000,"homeTeam":{"id":1,"name":"H"},"awayTeam":{"id":2,"name":"A"},"status":{"code":0,"description":"","type":"notstarted"},"time":{"currentPeriodStartTimestamp":1710000000}}]}`
+	tournamentsBody := `{"scheduled":[{"tournament":{"id":1,"uniqueTournament":{"id":16}}}]}`
+	eventsBody := `{"events":[{"id":1,"slug":"test","startTimestamp":1710000000,"homeTeam":{"id":1,"name":"H"},"awayTeam":{"id":2,"name":"A"},"status":{"code":0,"description":"","type":"notstarted"},"time":{"currentPeriodStartTimestamp":1710000000}}]}`
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/es/") {
 			http.SetCookie(w, &http.Cookie{Name: "ss-id", Value: "cookie"})
@@ -489,7 +561,11 @@ func TestClient_ReadAllBody(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, data)
+		if strings.Contains(r.URL.Path, "/scheduled-tournaments/") {
+			io.WriteString(w, tournamentsBody)
+			return
+		}
+		io.WriteString(w, eventsBody)
 	}))
 	defer ts.Close()
 
