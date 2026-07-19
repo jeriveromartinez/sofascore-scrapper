@@ -2,16 +2,21 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-var downloadSem = make(chan struct{}, 10)
+var (
+	downloadSem = make(chan struct{}, 10)
+	logoSF      singleflight.Group
+)
 
 type Repository struct {
 	db *gorm.DB
@@ -62,8 +67,73 @@ func (r *Repository) Upsert(ctx context.Context, events []Event, sport string) e
 	return nil
 }
 
+func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, batchSize int) error {
+	if batchSize <= 0 {
+		batchSize = 500
+	}
+
+	now := time.Now().Unix()
+	for i := range batch.Events {
+		batch.Events[i].ScrapedAt = now
+		batch.Events[i].HomeTeamModel = nil
+		batch.Events[i].AwayTeamModel = nil
+		batch.Events[i].League = nil
+	}
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(batch.Teams) > 0 {
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "team_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"name", "primary_color", "secondary_color", "text_color",
+				}),
+			}).CreateInBatches(batch.Teams, batchSize).Error; err != nil {
+				return err
+			}
+		}
+
+		if len(batch.Tournaments) > 0 {
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "id"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"name", "slug", "region",
+				}),
+			}).CreateInBatches(batch.Tournaments, batchSize).Error; err != nil {
+				return err
+			}
+		}
+
+		if len(batch.Events) > 0 {
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "sofa_score_event_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"sport", "home_score", "away_score",
+					"home_team_id", "away_team_id",
+					"start_timestamp", "current_period_start_timestamp",
+					"slug", "league_id", "status_type", "scraped_at",
+				}),
+			}).CreateInBatches(batch.Events, batchSize).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, team := range batch.Teams {
+		if !isProxiedLogoURL(team.LogoUrl) {
+			scheduleLogoSingleflight(r.db, team.TeamId, team.LogoUrl)
+		}
+	}
+
+	return nil
+}
+
 func isProxiedLogoURL(url string) bool {
-	return strings.HasPrefix(url, "/teams/logo/")
+	return strings.HasPrefix(url, "/teams/logo/") || strings.HasPrefix(url, "/api/app/v1/teams/logo/")
 }
 
 func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
@@ -75,6 +145,19 @@ func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
 		}()
 	default:
 	}
+}
+
+func scheduleLogoSingleflight(db *gorm.DB, teamID int64, sourceURL string) {
+	key := fmt.Sprintf("logo-%d", teamID)
+	logoSF.DoChan(key, func() (interface{}, error) {
+		select {
+		case downloadSem <- struct{}{}:
+			defer func() { <-downloadSem }()
+			downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
+		default:
+		}
+		return nil, nil
+	})
 }
 
 func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {

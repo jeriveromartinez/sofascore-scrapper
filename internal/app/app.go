@@ -23,6 +23,7 @@ type App struct {
 	Scheduler *scheduler.Scheduler
 	DB        *gorm.DB
 	SQL       *sql.DB
+	batchSize int
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -63,11 +64,12 @@ func New(cfg config.Config) (*App, error) {
 		Scheduler: sched,
 		DB:        db,
 		SQL:       sqlDB,
+		batchSize: cfg.ScrapeBatchSize,
 	}, nil
 }
 
 func (a *App) Run(ctx context.Context) error {
-	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB)
+	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize)
 	a.Scheduler.Start(ctx, a.DB, scrapeSvc, aggRepo)
 
 	go func() {

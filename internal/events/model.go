@@ -37,3 +37,9 @@ type Event struct {
 func (Event) TableName() string {
 	return "events"
 }
+
+type ScrapeBatch struct {
+	Teams       []Team                     `json:"teams"`
+	Tournaments []tournaments.Tournament   `json:"tournaments"`
+	Events      []Event                    `json:"events"`
+}

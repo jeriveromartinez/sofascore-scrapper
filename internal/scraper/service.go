@@ -10,11 +10,12 @@ import (
 )
 
 type Service struct {
-	repo *events.Repository
+	repo      *events.Repository
+	batchSize int
 }
 
-func NewService(repo *events.Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *events.Repository, batchSize int) *Service {
+	return &Service{repo: repo, batchSize: batchSize}
 }
 
 func (s *Service) Scrape(sport string, date time.Time) {
@@ -24,11 +25,8 @@ func (s *Service) Scrape(sport string, date time.Time) {
 		log.Printf("scraper: error parsing JSON for %s on %s: %v", sport, date.Format("2006-01-02"), err)
 		return
 	}
-	evs := make([]events.Event, 0, len(list.Events))
-	for _, apiEvent := range list.Events {
-		evs = append(evs, ToEvent(*apiEvent, sport))
-	}
-	if err := s.repo.Upsert(context.Background(), evs, sport); err != nil {
+	batch := ToScrapeBatch(list.Events, sport)
+	if err := s.repo.UpsertScrapeBatch(context.Background(), batch, s.batchSize); err != nil {
 		log.Printf("scraper: error upserting events for %s on %s: %v", sport, date.Format("2006-01-02"), err)
 		return
 	}
@@ -42,11 +40,8 @@ func (s *Service) ScrapeCountry(countryCode string) {
 		log.Printf("scraper: error parsing JSON for country %s: %v", countryCode, err)
 		return
 	}
-	evs := make([]events.Event, 0, len(list.Events))
-	for _, apiEvent := range list.Events {
-		evs = append(evs, ToEvent(*apiEvent, countryCode))
-	}
-	if err := s.repo.Upsert(context.Background(), evs, countryCode); err != nil {
+	batch := ToScrapeBatch(list.Events, countryCode)
+	if err := s.repo.UpsertScrapeBatch(context.Background(), batch, s.batchSize); err != nil {
 		log.Printf("scraper: error upserting events for country %s: %v", countryCode, err)
 		return
 	}
