@@ -22,7 +22,7 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 
 	sched := scheduler.New()
-	sched.Init(nil, nil, nil)
+	sched.Init(nil, nil, nil, nil)
 
 	app := &App{
 		HTTP:      srv,
@@ -75,7 +75,7 @@ func TestReadinessToggle(t *testing.T) {
 	}
 
 	sched := scheduler.New()
-	sched.Init(nil, nil, nil)
+	sched.Init(nil, nil, nil, nil)
 
 	app := &App{
 		HTTP:      srv,

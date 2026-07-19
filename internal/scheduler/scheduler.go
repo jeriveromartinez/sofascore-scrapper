@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 	"gorm.io/gorm"
@@ -15,24 +16,26 @@ type Scheduler struct {
 	db        *gorm.DB
 	scrapeSvc *scraper.Service
 	aggRepo   *reporting.AggregationRepository
+	runner    *Runner
 }
 
 func New() *Scheduler {
 	return &Scheduler{}
 }
 
-func (s *Scheduler) Init(db *gorm.DB, scrapeSvc *scraper.Service, aggRepo *reporting.AggregationRepository) {
+func (s *Scheduler) Init(db *gorm.DB, scrapeSvc *scraper.Service, aggRepo *reporting.AggregationRepository, locker redisplatform.Locker) {
 	s.db = db
 	s.scrapeSvc = scrapeSvc
 	s.aggRepo = aggRepo
+	s.runner = NewRunner(locker)
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
 	localCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 
-	startScrape(localCtx, s.scrapeSvc, &s.wg)
-	startStats(localCtx, s.db, s.aggRepo, &s.wg)
+	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg)
+	startStats(localCtx, s.db, s.aggRepo, s.runner, &s.wg)
 
 	<-localCtx.Done()
 	s.wg.Wait()

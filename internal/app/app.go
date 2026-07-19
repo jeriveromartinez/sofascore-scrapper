@@ -84,7 +84,7 @@ func New(cfg config.Config) (*App, error) {
 
 func (a *App) Run(ctx context.Context) error {
 	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur)
-	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo)
+	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {
