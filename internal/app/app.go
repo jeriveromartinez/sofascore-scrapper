@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
@@ -88,6 +89,7 @@ func (a *App) Run(ctx context.Context) error {
 	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur)
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
+	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {

@@ -57,7 +57,8 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	}
 
 	apkRepo := apk.NewRepository(db)
-	apkAppHandler := apk.NewAppHandler(apkRepo)
+	apkDownloadCounter := apk.NewDownloadCounter(redisClient, db)
+	apkAppHandler := apk.NewAppHandler(apkRepo, apkDownloadCounter)
 	apkAppHandler.RegisterRoutes(appV1)
 
 	apkAdminHandler := apk.NewAdminHandler(apkRepo)

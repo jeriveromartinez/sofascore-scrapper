@@ -13,11 +13,12 @@ import (
 )
 
 type AppHandler struct {
-	repo *Repository
+	repo    *Repository
+	counter DownloadCounter
 }
 
-func NewAppHandler(repo *Repository) *AppHandler {
-	return &AppHandler{repo: repo}
+func NewAppHandler(repo *Repository, counter DownloadCounter) *AppHandler {
+	return &AppHandler{repo: repo, counter: counter}
 }
 
 func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup) {
@@ -92,7 +93,7 @@ func (h *AppHandler) handleDownload(c *gin.Context) {
 		rc.SetWriteDeadline(time.Time{})
 	}
 
-	_ = h.repo.IncrementDownloadCount(apk.ID)
+	_ = h.counter.Increment(c.Request.Context(), apk.ID)
 	c.FileAttachment(absPath, apk.FileName)
 }
 

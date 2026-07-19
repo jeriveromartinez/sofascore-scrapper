@@ -13,14 +13,15 @@ import (
 )
 
 type Scheduler struct {
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	db         *gorm.DB
-	scrapeSvc  *scraper.Service
-	aggRepo    *reporting.AggregationRepository
-	runner     *Runner
-	cleanupJob *apk.CleanupJob
-	redisClient *redis.Client
+	cancel          context.CancelFunc
+	wg              sync.WaitGroup
+	db              *gorm.DB
+	scrapeSvc       *scraper.Service
+	aggRepo         *reporting.AggregationRepository
+	runner          *Runner
+	cleanupJob      *apk.CleanupJob
+	redisClient     *redis.Client
+	downloadCounter apk.DownloadCounter
 }
 
 func New() *Scheduler {
@@ -39,12 +40,16 @@ func (s *Scheduler) SetCleanupJob(job *apk.CleanupJob, client *redis.Client) {
 	s.redisClient = client
 }
 
+func (s *Scheduler) SetDownloadCounter(counter apk.DownloadCounter) {
+	s.downloadCounter = counter
+}
+
 func (s *Scheduler) Run(ctx context.Context) error {
 	localCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg)
-	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, &s.wg)
+	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg)
 
 	<-localCtx.Done()
 	s.wg.Wait()
