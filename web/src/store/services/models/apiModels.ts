@@ -4,6 +4,7 @@ import type {
   ApkUpdateCheckResponse as ProtoApkUpdateCheckResponse,
   Domain as ProtoDomain,
   DomainList,
+  DomainPage as ProtoDomainPage,
   DomainRequest,
   Device as ProtoDevice,
   DeviceList,
@@ -32,6 +33,7 @@ export type EventsResponse = EventsList;
 export type DeviceResponse = DeviceList;
 export type UsersResponse = UserList;
 export type UserPageResponse = ProtoUserPage;
+export type DomainPageResponse = ProtoDomainPage;
 export type DomainsResponse = DomainList;
 
 export interface EventsQuery {

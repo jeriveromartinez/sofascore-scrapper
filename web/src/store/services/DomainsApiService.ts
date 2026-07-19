@@ -2,6 +2,7 @@ import { BaseApiService } from "./BaseApiService";
 import {
   Domain as ProtoDomainMessage,
   DomainList,
+  DomainPage,
   DomainRequest,
   StatusMessage,
 } from "../../proto/api";
@@ -10,6 +11,7 @@ import type {
   Domain,
   StatusResponse,
   UpdateDomainPayload,
+  DomainPageResponse,
 } from "./models";
 
 export class DomainsApiService extends BaseApiService {
@@ -20,6 +22,18 @@ export class DomainsApiService extends BaseApiService {
   async getAllDomains(): Promise<Domain[]> {
     const response = await this.get("", DomainList);
     return response?.domains ?? [];
+  }
+
+  async getDomainPage(
+    cursor?: string,
+    limit?: number,
+  ): Promise<DomainPageResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    const url = qs ? `/page?${qs}` : "/page";
+    return this.get(url, DomainPage);
   }
 
   async getDomain(id: number): Promise<Domain> {

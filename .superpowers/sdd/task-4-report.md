@@ -1,35 +1,62 @@
-### Task 4 Report: Limitar servidor, cuerpos y frecuencia
+# Task 4 Report: Corregir ranking y agregaciones
 
-**Status:** Complete
+## Summary
 
----
+Fixed 3 bugs in the reporting package: ranking query, daily aggregation SQL compatibility, and monthly aggregation period selection.
 
-#### Files created
-- `internal/platform/redis/rate_limit.go` — Lua-based token bucket `RateLimiter.Allow` with SHA-256 key hashing
-- `internal/platform/redis/rate_limit_integration_test.go` — Integration tests (10/min, shared state, nil-client error)
-- `internal/server/body_limit.go` — `BodyLimit()` middleware with `http.MaxBytesReader`
-- `internal/server/body_limit_test.go` — 1 MiB accepted, 1 MiB+1 rejected (413), upload/chunk routes allow larger payloads
-- `internal/server/rate_limit.go` — `RateLimit()` middleware with policy classification, fail-closed for auth/admin, local token bucket fallback for app reads
-- `internal/server/rate_limit_test.go` — Tests: auth fail-closed (503), admin fail-closed (503), app-read local fallback (120 OK, 121→429+Retry-After), IP-based fallback
+## Changes
 
-#### Files modified
-- `internal/app/app.go` — Explicit `*http.Server` with `ReadHeaderTimeout: 5s`, `ReadTimeout: 15m`, `WriteTimeout: 60s`, `IdleTimeout: 60s`, `MaxHeaderBytes: 1<<20`
-- `internal/app/routes.go` — Middleware order: `gin.Recovery() → requestID() → BodyLimit() → CORS() → Logger() → RateLimit()`, added request ID middleware
+### `repository.go` — GetTopEvents
 
-#### Architecture decisions
+| Before | After |
+|--------|-------|
+| `SELECT content, count(*)` — column not mapped to `SofaScoreEventId` | `SELECT CAST(content AS UNSIGNED) AS sofa_score_event_id` |
+| No numeric filter — non-numeric content included | `WHERE content REGEXP '^[0-9]+$'` |
+| `ORDER BY view_count DESC` — ties undeterministic | `ORDER BY view_count DESC, sofa_score_event_id ASC` |
+| No limit cap | Capped at 100 (0 or negative defaults to 100) |
+| No DB error propagation | Propagates `result.Error` |
 
-1. **Rate limit is global middleware** — In Gin, per-route auth runs after global middleware. Since userID isn't available yet at rate-limit time, all routes are keyed by IP or device header. This still provides effective rate limiting.
+SQLite compatibility: uses `CAST(content AS INTEGER)` + `content NOT GLOB '*[^0-9]*'` fallback for tests.
 
-2. **Fail-closed vs fail-open:** Auth routes (login, register, refresh) and admin routes return 503 when Redis is unavailable. App-read routes use a bounded in-memory token bucket (10,000 key cap with expiry eviction).
+### `aggregation_repository.go` — GenerateDaily
 
-3. **Body limits:** Protobuf routes capped at 1 MiB, direct upload at 200 MiB+1 MiB, chunk upload at 10 MiB+1 MiB. Uses `Content-Length` early rejection + `http.MaxBytesReader` wrapping.
+| Before | After |
+|--------|-------|
+| `CAST(ended_at AS SIGNED)` not supported in SQLite | Removed unnecessary casts |
+| `DIV 1000` MySQL-only | `/ 1000` (compatible with both MySQL and SQLite) |
 
-4. **Lua script:** Atomic INCR + first-use SET with TTL, returns `{allowed, retryAfterMs}`. Keys are SHA-256 hashed, rate-limit-key prefixed.
+### `aggregation_repository.go` — GenerateMonthly
 
-#### Test results
+| Before | After |
+|--------|-------|
+| `WHERE created_at >= ? AND created_at <= ?` | `WHERE period_start >= ? AND period_start < ?` (half-open range) |
+| `end := begin.AddDate(0,1,0).Add(-time.Second)` | `end := begin.AddDate(0,1,0)` (clean half-open) |
+| `ctx.Save(&monthStats)` — creates duplicates | `ctx.Clauses(clause.OnConflict{...}).Create(...)` — upsert on `(content_hash, period_type, period_start)` |
+| Not idempotent | Deletes old monthly rows before insert |
+| Daily delete uses `created_at` | Daily delete uses `period_start >= ? AND period_start < ?` |
+
+## Tests (13 total, all passing)
+
+`repository_integration_test.go`:
+- `TestGetTopEvents_NumericContentOnly` — non-numeric content excluded
+- `TestGetTopEvents_DeterministicOrdering` — ORDER BY view_count DESC, sofa_score_event_id ASC
+- `TestGetTopEvents_CapAt100` — limit > 100 capped
+- `TestGetTopEvents_ZeroLimitDefaultsTo100` — limit=0 defaults to 100
+- `TestGetTopEvents_ReturnsDBError` — propagates errors
+
+`aggregation_integration_test.go`:
+- `TestGenerateDaily_CreatesContentStats` — daily aggregation creates ContentStat rows
+- `TestGenerateDaily_DeletesProcessedLogs` — processed logs deleted
+- `TestGenerateDaily_MillisecondDuration` — ms to seconds conversion correct
+- `TestGenerateMonthly_UsesPeriodStart` — correct period_start filtering
+- `TestGenerateMonthly_HalfOpenRange` — `>= begin AND < end`
+- `TestGenerateMonthly_Idempotent` — re-runnable without side effects
+- `TestGenerateMonthly_DeletesDailyRows` — daily rows cleaned up
+- `TestGenerateMonthly_EmptyPeriodDoesNotFail` — empty input doesn't error
+
+## Verification
+
 ```
-ok  github.com/jeriveromartinez/sofascore-scrapper/internal/server      0.696s
-ok  github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis  0.653s
-ok  github.com/jeriveromartinez/sofascore-scrapper/internal/app          0.116s
-go vet: clean
+$ go test -tags=integration ./internal/reporting/... -count=1
+ok  github.com/jeriveromartinez/sofascore-scrapper/internal/reporting  0.776s
 ```

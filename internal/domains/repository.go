@@ -1,6 +1,8 @@
 package domains
 
 import (
+	"context"
+
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"gorm.io/gorm"
 )
@@ -17,6 +19,23 @@ func (r *Repository) GetAll() ([]Domain, error) {
 	domains := make([]Domain, 0)
 	result := r.db.Preload("User").Order("domain ASC").Find(&domains)
 	return domains, result.Error
+}
+
+func (r *Repository) ListPage(ctx context.Context, domainStr string, id uint, limit int) ([]Domain, bool, error) {
+	query := r.db.WithContext(ctx).Preload("User").Order("domain ASC, id ASC")
+	if domainStr != "" {
+		query = query.Where("domain > ? OR (domain = ? AND id > ?)", domainStr, domainStr, id)
+	}
+	var rows []Domain
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
 }
 
 func (r *Repository) GetByID(id uint) (*Domain, error) {

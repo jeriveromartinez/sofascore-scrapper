@@ -2,12 +2,10 @@
 // versions:
 //   protoc-gen-ts_proto  v2.11.5
 //   protoc               v4.24.3
-// source: proto/api.proto
+// source: api.proto
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-
-export const protobufPackage = "sofascore";
 
 export interface ErrorResponse {
   error: string;
@@ -24,29 +22,29 @@ export interface StatusResponse {
 export interface AuthRequest {
   email: string;
   password: string;
-  invitationToken: string;
+  invitation_token: string;
 }
 
 export interface CreateInvitationRequest {
-  ttlSeconds: number;
+  ttl_seconds: number;
 }
 
 export interface InvitationResponse {
   token: string;
-  expiresAt: number;
+  expires_at: number;
 }
 
 export interface AuthResponse {
   id: number;
   email: string;
   token: string;
-  refreshToken: string;
+  refresh_token: string;
 }
 
 export interface User {
   id: number;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
   email: string;
 }
 
@@ -60,8 +58,8 @@ export interface UserWriteRequest {
 }
 
 export interface CursorPageInfo {
-  nextCursor: string;
-  hasMore: boolean;
+  next_cursor: string;
+  has_more: boolean;
 }
 
 export interface UserPage {
@@ -71,10 +69,10 @@ export interface UserPage {
 
 export interface Domain {
   id: number;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
   domain: string;
-  userId: number;
+  user_id: number;
   user: User | undefined;
 }
 
@@ -82,9 +80,14 @@ export interface DomainList {
   domains: Domain[];
 }
 
+export interface DomainPage {
+  data: Domain[];
+  page: CursorPageInfo | undefined;
+}
+
 export interface DomainRequest {
   domain: string;
-  userId: number;
+  user_id: number;
 }
 
 export interface DeviceRegisterRequest {
@@ -96,14 +99,14 @@ export interface DeviceRegisterRequest {
 
 export interface Device {
   id: number;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
   token: string;
   platform: string;
   name: string;
-  lastSeen: number;
+  last_seen: number;
   version: string;
-  iptvUrl: string;
+  iptv_url: string;
 }
 
 export interface DeviceList {
@@ -111,7 +114,12 @@ export interface DeviceList {
   page: number;
   limit: number;
   total: number;
-  totalPages: number;
+  total_pages: number;
+}
+
+export interface DevicePage {
+  data: Device[];
+  page: CursorPageInfo | undefined;
 }
 
 export interface DeviceUrl {
@@ -125,8 +133,8 @@ export interface TournamentRequest {
 
 export interface Tournament {
   id: number;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
   name: string;
   slug: string;
   region: string;
@@ -136,34 +144,44 @@ export interface TournamentList {
   tournaments: Tournament[];
 }
 
+export interface TournamentPage {
+  data: Tournament[];
+  page: CursorPageInfo | undefined;
+}
+
 export interface AssignTournamentRequest {
-  deviceId: number;
-  tournamentId: number;
+  device_id: number;
+  tournament_id: number;
 }
 
 export interface SetTournamentIdsRequest {
-  tournamentIds: number[];
+  tournament_ids: number[];
 }
 
 export interface DeviceTournament {
   id: number;
-  createdAt: string;
-  updatedAt: string;
-  deviceId: number;
-  tournamentId: number;
+  created_at: string;
+  updated_at: string;
+  device_id: number;
+  tournament_id: number;
   device: Device | undefined;
   tournament: Tournament | undefined;
 }
 
 export interface DeviceTournamentList {
-  deviceTournaments: DeviceTournament[];
+  device_tournaments: DeviceTournament[];
+}
+
+export interface DeviceTournamentPage {
+  data: DeviceTournament[];
+  page: CursorPageInfo | undefined;
 }
 
 export interface GlobalTournamentConfig {
   id: number;
-  createdAt: string;
-  updatedAt: string;
-  tournamentId: number;
+  created_at: string;
+  updated_at: string;
+  tournament_id: number;
   tournament: Tournament | undefined;
 }
 
@@ -173,33 +191,33 @@ export interface GlobalTournamentConfigList {
 
 export interface Team {
   id: number;
-  teamId: number;
-  logoUrl: string;
-  primaryColor: string;
-  secondaryColor: string;
-  textColor: string;
+  team_id: number;
+  logo_url: string;
+  primary_color: string;
+  secondary_color: string;
+  text_color: string;
   name: string;
 }
 
 export interface SofaScoreEvent {
   id: number;
-  createdAt: string;
-  updatedAt: string;
-  sofaScoreEventId: number;
+  created_at: string;
+  updated_at: string;
+  sofa_score_event_id: number;
   sport: string;
-  homeScore: number;
-  homeTeamId: number;
-  awayScore: number;
-  awayTeamId: number;
-  scrapedAt: number;
+  home_score: number;
+  home_team_id: number;
+  away_score: number;
+  away_team_id: number;
+  scraped_at: number;
   category: string;
-  startTimestamp: number;
-  currentPeriodStartTimestamp: number;
+  start_timestamp: number;
+  current_period_start_timestamp: number;
   slug: string;
-  teamHome: Team | undefined;
-  teamAway: Team | undefined;
+  team_home: Team | undefined;
+  team_away: Team | undefined;
   league: Tournament | undefined;
-  statusType: string;
+  status_type: string;
 }
 
 export interface EventsList {
@@ -207,27 +225,32 @@ export interface EventsList {
   page: number;
   limit: number;
   total: number;
-  totalPages: number;
+  total_pages: number;
+}
+
+export interface EventPage {
+  data: SofaScoreEvent[];
+  page: CursorPageInfo | undefined;
 }
 
 export interface LogPlaybackRequest {
-  deviceToken: string;
+  device_token: string;
   content: string;
-  startedAt: number;
+  started_at: number;
 }
 
 export interface UpdatePlaybackRequest {
-  endedAt: number;
+  ended_at: number;
 }
 
 export interface PlaybackLog {
   id: number;
-  createdAt: string;
-  updatedAt: string;
-  deviceId: number;
+  created_at: string;
+  updated_at: string;
+  device_id: number;
   content: string;
-  startedAt: number;
-  endedAt: number;
+  started_at: number;
+  ended_at: number;
 }
 
 export interface PlaybackLogList {
@@ -235,9 +258,14 @@ export interface PlaybackLogList {
   total: number;
 }
 
+export interface PlaybackPage {
+  data: PlaybackLog[];
+  page: CursorPageInfo | undefined;
+}
+
 export interface EventStats {
-  sofaScoreEventId: number;
-  viewCount: number;
+  sofa_score_event_id: number;
+  view_count: number;
 }
 
 export interface TopEventsResponse {
@@ -247,50 +275,55 @@ export interface TopEventsResponse {
 export interface ApkInfo {
   id: number;
   version: string;
-  fileName: string;
-  fileSize: number;
+  file_name: string;
+  file_size: number;
   description: string;
-  packageName: string;
-  versionCode: number;
-  minSdkVersion: number;
-  targetSdkVersion: number;
-  downloadToken: string;
-  downloadUrl: string;
-  createdAt: string;
-  isActive: boolean;
+  package_name: string;
+  version_code: number;
+  min_sdk_version: number;
+  target_sdk_version: number;
+  download_token: string;
+  download_url: string;
+  created_at: string;
+  is_active: boolean;
   downloads: number;
-  panelUrl: string;
+  panel_url: string;
 }
 
 export interface ApkList {
   versions: ApkInfo[];
 }
 
+export interface ApkPage {
+  data: ApkInfo[];
+  page: CursorPageInfo | undefined;
+}
+
 export interface ApkUploadResponse {
   id: number;
   version: string;
-  fileName: string;
-  fileSize: number;
+  file_name: string;
+  file_size: number;
   description: string;
-  packageName: string;
-  versionCode: number;
-  minSdkVersion: number;
-  targetSdkVersion: number;
-  downloadToken: string;
-  downloadUrl: string;
-  createdAt: string;
+  package_name: string;
+  version_code: number;
+  min_sdk_version: number;
+  target_sdk_version: number;
+  download_token: string;
+  download_url: string;
+  created_at: string;
 }
 
 export interface ApkUpdateCheckResponse {
-  updateAvailable: boolean;
-  latestVersion: string;
-  packageName: string;
-  versionCode: number;
-  downloadUrl: string;
+  update_available: boolean;
+  latest_version: string;
+  package_name: string;
+  version_code: number;
+  download_url: string;
   description: string;
-  fileSize: number;
-  minSdkVersion: number;
-  targetSdkVersion: number;
+  file_size: number;
+  min_sdk_version: number;
+  target_sdk_version: number;
 }
 
 export interface ApkVersion {
@@ -473,7 +506,7 @@ export const StatusResponse: MessageFns<StatusResponse> = {
 };
 
 function createBaseAuthRequest(): AuthRequest {
-  return { email: "", password: "", invitationToken: "" };
+  return { email: "", password: "", invitation_token: "" };
 }
 
 export const AuthRequest: MessageFns<AuthRequest> = {
@@ -484,8 +517,8 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     if (message.password !== "") {
       writer.uint32(18).string(message.password);
     }
-    if (message.invitationToken !== "") {
-      writer.uint32(26).string(message.invitationToken);
+    if (message.invitation_token !== "") {
+      writer.uint32(26).string(message.invitation_token);
     }
     return writer;
   },
@@ -518,7 +551,7 @@ export const AuthRequest: MessageFns<AuthRequest> = {
             break;
           }
 
-          message.invitationToken = reader.string();
+          message.invitation_token = reader.string();
           continue;
         }
       }
@@ -534,7 +567,7 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     return {
       email: isSet(object.email) ? globalThis.String(object.email) : "",
       password: isSet(object.password) ? globalThis.String(object.password) : "",
-      invitationToken: isSet(object.invitationToken)
+      invitation_token: isSet(object.invitationToken)
         ? globalThis.String(object.invitationToken)
         : isSet(object.invitation_token)
         ? globalThis.String(object.invitation_token)
@@ -550,8 +583,8 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     if (message.password !== "") {
       obj.password = message.password;
     }
-    if (message.invitationToken !== "") {
-      obj.invitationToken = message.invitationToken;
+    if (message.invitation_token !== "") {
+      obj.invitationToken = message.invitation_token;
     }
     return obj;
   },
@@ -563,19 +596,19 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     const message = createBaseAuthRequest();
     message.email = object.email ?? "";
     message.password = object.password ?? "";
-    message.invitationToken = object.invitationToken ?? "";
+    message.invitation_token = object.invitation_token ?? "";
     return message;
   },
 };
 
 function createBaseCreateInvitationRequest(): CreateInvitationRequest {
-  return { ttlSeconds: 0 };
+  return { ttl_seconds: 0 };
 }
 
 export const CreateInvitationRequest: MessageFns<CreateInvitationRequest> = {
   encode(message: CreateInvitationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.ttlSeconds !== 0) {
-      writer.uint32(8).int64(message.ttlSeconds);
+    if (message.ttl_seconds !== 0) {
+      writer.uint32(8).int64(message.ttl_seconds);
     }
     return writer;
   },
@@ -592,7 +625,7 @@ export const CreateInvitationRequest: MessageFns<CreateInvitationRequest> = {
             break;
           }
 
-          message.ttlSeconds = longToNumber(reader.int64());
+          message.ttl_seconds = longToNumber(reader.int64());
           continue;
         }
       }
@@ -606,7 +639,7 @@ export const CreateInvitationRequest: MessageFns<CreateInvitationRequest> = {
 
   fromJSON(object: any): CreateInvitationRequest {
     return {
-      ttlSeconds: isSet(object.ttlSeconds)
+      ttl_seconds: isSet(object.ttlSeconds)
         ? globalThis.Number(object.ttlSeconds)
         : isSet(object.ttl_seconds)
         ? globalThis.Number(object.ttl_seconds)
@@ -616,8 +649,8 @@ export const CreateInvitationRequest: MessageFns<CreateInvitationRequest> = {
 
   toJSON(message: CreateInvitationRequest): unknown {
     const obj: any = {};
-    if (message.ttlSeconds !== 0) {
-      obj.ttlSeconds = Math.round(message.ttlSeconds);
+    if (message.ttl_seconds !== 0) {
+      obj.ttlSeconds = Math.round(message.ttl_seconds);
     }
     return obj;
   },
@@ -627,13 +660,13 @@ export const CreateInvitationRequest: MessageFns<CreateInvitationRequest> = {
   },
   fromPartial<I extends Exact<DeepPartial<CreateInvitationRequest>, I>>(object: I): CreateInvitationRequest {
     const message = createBaseCreateInvitationRequest();
-    message.ttlSeconds = object.ttlSeconds ?? 0;
+    message.ttl_seconds = object.ttl_seconds ?? 0;
     return message;
   },
 };
 
 function createBaseInvitationResponse(): InvitationResponse {
-  return { token: "", expiresAt: 0 };
+  return { token: "", expires_at: 0 };
 }
 
 export const InvitationResponse: MessageFns<InvitationResponse> = {
@@ -641,8 +674,8 @@ export const InvitationResponse: MessageFns<InvitationResponse> = {
     if (message.token !== "") {
       writer.uint32(10).string(message.token);
     }
-    if (message.expiresAt !== 0) {
-      writer.uint32(16).int64(message.expiresAt);
+    if (message.expires_at !== 0) {
+      writer.uint32(16).int64(message.expires_at);
     }
     return writer;
   },
@@ -667,7 +700,7 @@ export const InvitationResponse: MessageFns<InvitationResponse> = {
             break;
           }
 
-          message.expiresAt = longToNumber(reader.int64());
+          message.expires_at = longToNumber(reader.int64());
           continue;
         }
       }
@@ -682,7 +715,7 @@ export const InvitationResponse: MessageFns<InvitationResponse> = {
   fromJSON(object: any): InvitationResponse {
     return {
       token: isSet(object.token) ? globalThis.String(object.token) : "",
-      expiresAt: isSet(object.expiresAt)
+      expires_at: isSet(object.expiresAt)
         ? globalThis.Number(object.expiresAt)
         : isSet(object.expires_at)
         ? globalThis.Number(object.expires_at)
@@ -695,8 +728,8 @@ export const InvitationResponse: MessageFns<InvitationResponse> = {
     if (message.token !== "") {
       obj.token = message.token;
     }
-    if (message.expiresAt !== 0) {
-      obj.expiresAt = Math.round(message.expiresAt);
+    if (message.expires_at !== 0) {
+      obj.expiresAt = Math.round(message.expires_at);
     }
     return obj;
   },
@@ -707,13 +740,13 @@ export const InvitationResponse: MessageFns<InvitationResponse> = {
   fromPartial<I extends Exact<DeepPartial<InvitationResponse>, I>>(object: I): InvitationResponse {
     const message = createBaseInvitationResponse();
     message.token = object.token ?? "";
-    message.expiresAt = object.expiresAt ?? 0;
+    message.expires_at = object.expires_at ?? 0;
     return message;
   },
 };
 
 function createBaseAuthResponse(): AuthResponse {
-  return { id: 0, email: "", token: "", refreshToken: "" };
+  return { id: 0, email: "", token: "", refresh_token: "" };
 }
 
 export const AuthResponse: MessageFns<AuthResponse> = {
@@ -727,8 +760,8 @@ export const AuthResponse: MessageFns<AuthResponse> = {
     if (message.token !== "") {
       writer.uint32(26).string(message.token);
     }
-    if (message.refreshToken !== "") {
-      writer.uint32(34).string(message.refreshToken);
+    if (message.refresh_token !== "") {
+      writer.uint32(34).string(message.refresh_token);
     }
     return writer;
   },
@@ -769,7 +802,7 @@ export const AuthResponse: MessageFns<AuthResponse> = {
             break;
           }
 
-          message.refreshToken = reader.string();
+          message.refresh_token = reader.string();
           continue;
         }
       }
@@ -786,7 +819,7 @@ export const AuthResponse: MessageFns<AuthResponse> = {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       email: isSet(object.email) ? globalThis.String(object.email) : "",
       token: isSet(object.token) ? globalThis.String(object.token) : "",
-      refreshToken: isSet(object.refreshToken)
+      refresh_token: isSet(object.refreshToken)
         ? globalThis.String(object.refreshToken)
         : isSet(object.refresh_token)
         ? globalThis.String(object.refresh_token)
@@ -805,8 +838,8 @@ export const AuthResponse: MessageFns<AuthResponse> = {
     if (message.token !== "") {
       obj.token = message.token;
     }
-    if (message.refreshToken !== "") {
-      obj.refreshToken = message.refreshToken;
+    if (message.refresh_token !== "") {
+      obj.refreshToken = message.refresh_token;
     }
     return obj;
   },
@@ -819,13 +852,13 @@ export const AuthResponse: MessageFns<AuthResponse> = {
     message.id = object.id ?? 0;
     message.email = object.email ?? "";
     message.token = object.token ?? "";
-    message.refreshToken = object.refreshToken ?? "";
+    message.refresh_token = object.refresh_token ?? "";
     return message;
   },
 };
 
 function createBaseUser(): User {
-  return { id: 0, createdAt: "", updatedAt: "", email: "" };
+  return { id: 0, created_at: "", updated_at: "", email: "" };
 }
 
 export const User: MessageFns<User> = {
@@ -833,11 +866,11 @@ export const User: MessageFns<User> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
     if (message.email !== "") {
       writer.uint32(34).string(message.email);
@@ -865,7 +898,7 @@ export const User: MessageFns<User> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -873,7 +906,7 @@ export const User: MessageFns<User> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -896,12 +929,12 @@ export const User: MessageFns<User> = {
   fromJSON(object: any): User {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
@@ -915,11 +948,11 @@ export const User: MessageFns<User> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
     if (message.email !== "") {
       obj.email = message.email;
@@ -933,8 +966,8 @@ export const User: MessageFns<User> = {
   fromPartial<I extends Exact<DeepPartial<User>, I>>(object: I): User {
     const message = createBaseUser();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
     message.email = object.email ?? "";
     return message;
   },
@@ -1075,16 +1108,16 @@ export const UserWriteRequest: MessageFns<UserWriteRequest> = {
 };
 
 function createBaseCursorPageInfo(): CursorPageInfo {
-  return { nextCursor: "", hasMore: false };
+  return { next_cursor: "", has_more: false };
 }
 
 export const CursorPageInfo: MessageFns<CursorPageInfo> = {
   encode(message: CursorPageInfo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.nextCursor !== "") {
-      writer.uint32(10).string(message.nextCursor);
+    if (message.next_cursor !== "") {
+      writer.uint32(10).string(message.next_cursor);
     }
-    if (message.hasMore !== false) {
-      writer.uint32(16).bool(message.hasMore);
+    if (message.has_more !== false) {
+      writer.uint32(16).bool(message.has_more);
     }
     return writer;
   },
@@ -1101,7 +1134,7 @@ export const CursorPageInfo: MessageFns<CursorPageInfo> = {
             break;
           }
 
-          message.nextCursor = reader.string();
+          message.next_cursor = reader.string();
           continue;
         }
         case 2: {
@@ -1109,7 +1142,7 @@ export const CursorPageInfo: MessageFns<CursorPageInfo> = {
             break;
           }
 
-          message.hasMore = reader.bool();
+          message.has_more = reader.bool();
           continue;
         }
       }
@@ -1123,12 +1156,12 @@ export const CursorPageInfo: MessageFns<CursorPageInfo> = {
 
   fromJSON(object: any): CursorPageInfo {
     return {
-      nextCursor: isSet(object.nextCursor)
+      next_cursor: isSet(object.nextCursor)
         ? globalThis.String(object.nextCursor)
         : isSet(object.next_cursor)
         ? globalThis.String(object.next_cursor)
         : "",
-      hasMore: isSet(object.hasMore)
+      has_more: isSet(object.hasMore)
         ? globalThis.Boolean(object.hasMore)
         : isSet(object.has_more)
         ? globalThis.Boolean(object.has_more)
@@ -1138,11 +1171,11 @@ export const CursorPageInfo: MessageFns<CursorPageInfo> = {
 
   toJSON(message: CursorPageInfo): unknown {
     const obj: any = {};
-    if (message.nextCursor !== "") {
-      obj.nextCursor = message.nextCursor;
+    if (message.next_cursor !== "") {
+      obj.nextCursor = message.next_cursor;
     }
-    if (message.hasMore !== false) {
-      obj.hasMore = message.hasMore;
+    if (message.has_more !== false) {
+      obj.hasMore = message.has_more;
     }
     return obj;
   },
@@ -1152,8 +1185,8 @@ export const CursorPageInfo: MessageFns<CursorPageInfo> = {
   },
   fromPartial<I extends Exact<DeepPartial<CursorPageInfo>, I>>(object: I): CursorPageInfo {
     const message = createBaseCursorPageInfo();
-    message.nextCursor = object.nextCursor ?? "";
-    message.hasMore = object.hasMore ?? false;
+    message.next_cursor = object.next_cursor ?? "";
+    message.has_more = object.has_more ?? false;
     return message;
   },
 };
@@ -1237,7 +1270,7 @@ export const UserPage: MessageFns<UserPage> = {
 };
 
 function createBaseDomain(): Domain {
-  return { id: 0, createdAt: "", updatedAt: "", domain: "", userId: 0, user: undefined };
+  return { id: 0, created_at: "", updated_at: "", domain: "", user_id: 0, user: undefined };
 }
 
 export const Domain: MessageFns<Domain> = {
@@ -1245,17 +1278,17 @@ export const Domain: MessageFns<Domain> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
     if (message.domain !== "") {
       writer.uint32(34).string(message.domain);
     }
-    if (message.userId !== 0) {
-      writer.uint32(40).uint32(message.userId);
+    if (message.user_id !== 0) {
+      writer.uint32(40).uint32(message.user_id);
     }
     if (message.user !== undefined) {
       User.encode(message.user, writer.uint32(50).fork()).join();
@@ -1283,7 +1316,7 @@ export const Domain: MessageFns<Domain> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -1291,7 +1324,7 @@ export const Domain: MessageFns<Domain> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -1307,7 +1340,7 @@ export const Domain: MessageFns<Domain> = {
             break;
           }
 
-          message.userId = reader.uint32();
+          message.user_id = reader.uint32();
           continue;
         }
         case 6: {
@@ -1330,18 +1363,18 @@ export const Domain: MessageFns<Domain> = {
   fromJSON(object: any): Domain {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
         : "",
       domain: isSet(object.domain) ? globalThis.String(object.domain) : "",
-      userId: isSet(object.userId)
+      user_id: isSet(object.userId)
         ? globalThis.Number(object.userId)
         : isSet(object.user_id)
         ? globalThis.Number(object.user_id)
@@ -1355,17 +1388,17 @@ export const Domain: MessageFns<Domain> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
     if (message.domain !== "") {
       obj.domain = message.domain;
     }
-    if (message.userId !== 0) {
-      obj.userId = Math.round(message.userId);
+    if (message.user_id !== 0) {
+      obj.userId = Math.round(message.user_id);
     }
     if (message.user !== undefined) {
       obj.user = User.toJSON(message.user);
@@ -1379,10 +1412,10 @@ export const Domain: MessageFns<Domain> = {
   fromPartial<I extends Exact<DeepPartial<Domain>, I>>(object: I): Domain {
     const message = createBaseDomain();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
     message.domain = object.domain ?? "";
-    message.userId = object.userId ?? 0;
+    message.user_id = object.user_id ?? 0;
     message.user = (object.user !== undefined && object.user !== null) ? User.fromPartial(object.user) : undefined;
     return message;
   },
@@ -1448,8 +1481,86 @@ export const DomainList: MessageFns<DomainList> = {
   },
 };
 
+function createBaseDomainPage(): DomainPage {
+  return { data: [], page: undefined };
+}
+
+export const DomainPage: MessageFns<DomainPage> = {
+  encode(message: DomainPage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      Domain.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DomainPage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDomainPage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(Domain.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DomainPage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => Domain.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: DomainPage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => Domain.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DomainPage>, I>>(base?: I): DomainPage {
+    return DomainPage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DomainPage>, I>>(object: I): DomainPage {
+    const message = createBaseDomainPage();
+    message.data = object.data?.map((e) => Domain.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseDomainRequest(): DomainRequest {
-  return { domain: "", userId: 0 };
+  return { domain: "", user_id: 0 };
 }
 
 export const DomainRequest: MessageFns<DomainRequest> = {
@@ -1457,8 +1568,8 @@ export const DomainRequest: MessageFns<DomainRequest> = {
     if (message.domain !== "") {
       writer.uint32(10).string(message.domain);
     }
-    if (message.userId !== 0) {
-      writer.uint32(16).uint32(message.userId);
+    if (message.user_id !== 0) {
+      writer.uint32(16).uint32(message.user_id);
     }
     return writer;
   },
@@ -1483,7 +1594,7 @@ export const DomainRequest: MessageFns<DomainRequest> = {
             break;
           }
 
-          message.userId = reader.uint32();
+          message.user_id = reader.uint32();
           continue;
         }
       }
@@ -1498,7 +1609,7 @@ export const DomainRequest: MessageFns<DomainRequest> = {
   fromJSON(object: any): DomainRequest {
     return {
       domain: isSet(object.domain) ? globalThis.String(object.domain) : "",
-      userId: isSet(object.userId)
+      user_id: isSet(object.userId)
         ? globalThis.Number(object.userId)
         : isSet(object.user_id)
         ? globalThis.Number(object.user_id)
@@ -1511,8 +1622,8 @@ export const DomainRequest: MessageFns<DomainRequest> = {
     if (message.domain !== "") {
       obj.domain = message.domain;
     }
-    if (message.userId !== 0) {
-      obj.userId = Math.round(message.userId);
+    if (message.user_id !== 0) {
+      obj.userId = Math.round(message.user_id);
     }
     return obj;
   },
@@ -1523,7 +1634,7 @@ export const DomainRequest: MessageFns<DomainRequest> = {
   fromPartial<I extends Exact<DeepPartial<DomainRequest>, I>>(object: I): DomainRequest {
     const message = createBaseDomainRequest();
     message.domain = object.domain ?? "";
-    message.userId = object.userId ?? 0;
+    message.user_id = object.user_id ?? 0;
     return message;
   },
 };
@@ -1639,14 +1750,14 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
 function createBaseDevice(): Device {
   return {
     id: 0,
-    createdAt: "",
-    updatedAt: "",
+    created_at: "",
+    updated_at: "",
     token: "",
     platform: "",
     name: "",
-    lastSeen: 0,
+    last_seen: 0,
     version: "",
-    iptvUrl: "",
+    iptv_url: "",
   };
 }
 
@@ -1655,11 +1766,11 @@ export const Device: MessageFns<Device> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
     if (message.token !== "") {
       writer.uint32(34).string(message.token);
@@ -1670,14 +1781,14 @@ export const Device: MessageFns<Device> = {
     if (message.name !== "") {
       writer.uint32(50).string(message.name);
     }
-    if (message.lastSeen !== 0) {
-      writer.uint32(56).int64(message.lastSeen);
+    if (message.last_seen !== 0) {
+      writer.uint32(56).int64(message.last_seen);
     }
     if (message.version !== "") {
       writer.uint32(66).string(message.version);
     }
-    if (message.iptvUrl !== "") {
-      writer.uint32(74).string(message.iptvUrl);
+    if (message.iptv_url !== "") {
+      writer.uint32(74).string(message.iptv_url);
     }
     return writer;
   },
@@ -1702,7 +1813,7 @@ export const Device: MessageFns<Device> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -1710,7 +1821,7 @@ export const Device: MessageFns<Device> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -1742,7 +1853,7 @@ export const Device: MessageFns<Device> = {
             break;
           }
 
-          message.lastSeen = longToNumber(reader.int64());
+          message.last_seen = longToNumber(reader.int64());
           continue;
         }
         case 8: {
@@ -1758,7 +1869,7 @@ export const Device: MessageFns<Device> = {
             break;
           }
 
-          message.iptvUrl = reader.string();
+          message.iptv_url = reader.string();
           continue;
         }
       }
@@ -1773,12 +1884,12 @@ export const Device: MessageFns<Device> = {
   fromJSON(object: any): Device {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
@@ -1786,13 +1897,13 @@ export const Device: MessageFns<Device> = {
       token: isSet(object.token) ? globalThis.String(object.token) : "",
       platform: isSet(object.platform) ? globalThis.String(object.platform) : "",
       name: isSet(object.name) ? globalThis.String(object.name) : "",
-      lastSeen: isSet(object.lastSeen)
+      last_seen: isSet(object.lastSeen)
         ? globalThis.Number(object.lastSeen)
         : isSet(object.last_seen)
         ? globalThis.Number(object.last_seen)
         : 0,
       version: isSet(object.version) ? globalThis.String(object.version) : "",
-      iptvUrl: isSet(object.iptvUrl)
+      iptv_url: isSet(object.iptvUrl)
         ? globalThis.String(object.iptvUrl)
         : isSet(object.iptv_url)
         ? globalThis.String(object.iptv_url)
@@ -1805,11 +1916,11 @@ export const Device: MessageFns<Device> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
     if (message.token !== "") {
       obj.token = message.token;
@@ -1820,14 +1931,14 @@ export const Device: MessageFns<Device> = {
     if (message.name !== "") {
       obj.name = message.name;
     }
-    if (message.lastSeen !== 0) {
-      obj.lastSeen = Math.round(message.lastSeen);
+    if (message.last_seen !== 0) {
+      obj.lastSeen = Math.round(message.last_seen);
     }
     if (message.version !== "") {
       obj.version = message.version;
     }
-    if (message.iptvUrl !== "") {
-      obj.iptvUrl = message.iptvUrl;
+    if (message.iptv_url !== "") {
+      obj.iptvUrl = message.iptv_url;
     }
     return obj;
   },
@@ -1838,20 +1949,20 @@ export const Device: MessageFns<Device> = {
   fromPartial<I extends Exact<DeepPartial<Device>, I>>(object: I): Device {
     const message = createBaseDevice();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
     message.token = object.token ?? "";
     message.platform = object.platform ?? "";
     message.name = object.name ?? "";
-    message.lastSeen = object.lastSeen ?? 0;
+    message.last_seen = object.last_seen ?? 0;
     message.version = object.version ?? "";
-    message.iptvUrl = object.iptvUrl ?? "";
+    message.iptv_url = object.iptv_url ?? "";
     return message;
   },
 };
 
 function createBaseDeviceList(): DeviceList {
-  return { data: [], page: 0, limit: 0, total: 0, totalPages: 0 };
+  return { data: [], page: 0, limit: 0, total: 0, total_pages: 0 };
 }
 
 export const DeviceList: MessageFns<DeviceList> = {
@@ -1868,8 +1979,8 @@ export const DeviceList: MessageFns<DeviceList> = {
     if (message.total !== 0) {
       writer.uint32(32).int64(message.total);
     }
-    if (message.totalPages !== 0) {
-      writer.uint32(40).int32(message.totalPages);
+    if (message.total_pages !== 0) {
+      writer.uint32(40).int32(message.total_pages);
     }
     return writer;
   },
@@ -1918,7 +2029,7 @@ export const DeviceList: MessageFns<DeviceList> = {
             break;
           }
 
-          message.totalPages = reader.int32();
+          message.total_pages = reader.int32();
           continue;
         }
       }
@@ -1936,7 +2047,7 @@ export const DeviceList: MessageFns<DeviceList> = {
       page: isSet(object.page) ? globalThis.Number(object.page) : 0,
       limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
       total: isSet(object.total) ? globalThis.Number(object.total) : 0,
-      totalPages: isSet(object.totalPages)
+      total_pages: isSet(object.totalPages)
         ? globalThis.Number(object.totalPages)
         : isSet(object.total_pages)
         ? globalThis.Number(object.total_pages)
@@ -1958,8 +2069,8 @@ export const DeviceList: MessageFns<DeviceList> = {
     if (message.total !== 0) {
       obj.total = Math.round(message.total);
     }
-    if (message.totalPages !== 0) {
-      obj.totalPages = Math.round(message.totalPages);
+    if (message.total_pages !== 0) {
+      obj.totalPages = Math.round(message.total_pages);
     }
     return obj;
   },
@@ -1973,7 +2084,85 @@ export const DeviceList: MessageFns<DeviceList> = {
     message.page = object.page ?? 0;
     message.limit = object.limit ?? 0;
     message.total = object.total ?? 0;
-    message.totalPages = object.totalPages ?? 0;
+    message.total_pages = object.total_pages ?? 0;
+    return message;
+  },
+};
+
+function createBaseDevicePage(): DevicePage {
+  return { data: [], page: undefined };
+}
+
+export const DevicePage: MessageFns<DevicePage> = {
+  encode(message: DevicePage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      Device.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DevicePage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDevicePage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(Device.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DevicePage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => Device.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: DevicePage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => Device.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DevicePage>, I>>(base?: I): DevicePage {
+    return DevicePage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DevicePage>, I>>(object: I): DevicePage {
+    const message = createBaseDevicePage();
+    message.data = object.data?.map((e) => Device.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
     return message;
   },
 };
@@ -2113,7 +2302,7 @@ export const TournamentRequest: MessageFns<TournamentRequest> = {
 };
 
 function createBaseTournament(): Tournament {
-  return { id: 0, createdAt: "", updatedAt: "", name: "", slug: "", region: "" };
+  return { id: 0, created_at: "", updated_at: "", name: "", slug: "", region: "" };
 }
 
 export const Tournament: MessageFns<Tournament> = {
@@ -2121,11 +2310,11 @@ export const Tournament: MessageFns<Tournament> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
     if (message.name !== "") {
       writer.uint32(34).string(message.name);
@@ -2159,7 +2348,7 @@ export const Tournament: MessageFns<Tournament> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -2167,7 +2356,7 @@ export const Tournament: MessageFns<Tournament> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -2206,12 +2395,12 @@ export const Tournament: MessageFns<Tournament> = {
   fromJSON(object: any): Tournament {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
@@ -2227,11 +2416,11 @@ export const Tournament: MessageFns<Tournament> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
     if (message.name !== "") {
       obj.name = message.name;
@@ -2251,8 +2440,8 @@ export const Tournament: MessageFns<Tournament> = {
   fromPartial<I extends Exact<DeepPartial<Tournament>, I>>(object: I): Tournament {
     const message = createBaseTournament();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
     message.name = object.name ?? "";
     message.slug = object.slug ?? "";
     message.region = object.region ?? "";
@@ -2322,17 +2511,95 @@ export const TournamentList: MessageFns<TournamentList> = {
   },
 };
 
+function createBaseTournamentPage(): TournamentPage {
+  return { data: [], page: undefined };
+}
+
+export const TournamentPage: MessageFns<TournamentPage> = {
+  encode(message: TournamentPage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      Tournament.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TournamentPage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTournamentPage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(Tournament.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TournamentPage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => Tournament.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: TournamentPage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => Tournament.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TournamentPage>, I>>(base?: I): TournamentPage {
+    return TournamentPage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TournamentPage>, I>>(object: I): TournamentPage {
+    const message = createBaseTournamentPage();
+    message.data = object.data?.map((e) => Tournament.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseAssignTournamentRequest(): AssignTournamentRequest {
-  return { deviceId: 0, tournamentId: 0 };
+  return { device_id: 0, tournament_id: 0 };
 }
 
 export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
   encode(message: AssignTournamentRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.deviceId !== 0) {
-      writer.uint32(8).uint32(message.deviceId);
+    if (message.device_id !== 0) {
+      writer.uint32(8).uint32(message.device_id);
     }
-    if (message.tournamentId !== 0) {
-      writer.uint32(16).uint32(message.tournamentId);
+    if (message.tournament_id !== 0) {
+      writer.uint32(16).uint32(message.tournament_id);
     }
     return writer;
   },
@@ -2349,7 +2616,7 @@ export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
             break;
           }
 
-          message.deviceId = reader.uint32();
+          message.device_id = reader.uint32();
           continue;
         }
         case 2: {
@@ -2357,7 +2624,7 @@ export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
             break;
           }
 
-          message.tournamentId = reader.uint32();
+          message.tournament_id = reader.uint32();
           continue;
         }
       }
@@ -2371,12 +2638,12 @@ export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
 
   fromJSON(object: any): AssignTournamentRequest {
     return {
-      deviceId: isSet(object.deviceId)
+      device_id: isSet(object.deviceId)
         ? globalThis.Number(object.deviceId)
         : isSet(object.device_id)
         ? globalThis.Number(object.device_id)
         : 0,
-      tournamentId: isSet(object.tournamentId)
+      tournament_id: isSet(object.tournamentId)
         ? globalThis.Number(object.tournamentId)
         : isSet(object.tournament_id)
         ? globalThis.Number(object.tournament_id)
@@ -2386,11 +2653,11 @@ export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
 
   toJSON(message: AssignTournamentRequest): unknown {
     const obj: any = {};
-    if (message.deviceId !== 0) {
-      obj.deviceId = Math.round(message.deviceId);
+    if (message.device_id !== 0) {
+      obj.deviceId = Math.round(message.device_id);
     }
-    if (message.tournamentId !== 0) {
-      obj.tournamentId = Math.round(message.tournamentId);
+    if (message.tournament_id !== 0) {
+      obj.tournamentId = Math.round(message.tournament_id);
     }
     return obj;
   },
@@ -2400,20 +2667,20 @@ export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
   },
   fromPartial<I extends Exact<DeepPartial<AssignTournamentRequest>, I>>(object: I): AssignTournamentRequest {
     const message = createBaseAssignTournamentRequest();
-    message.deviceId = object.deviceId ?? 0;
-    message.tournamentId = object.tournamentId ?? 0;
+    message.device_id = object.device_id ?? 0;
+    message.tournament_id = object.tournament_id ?? 0;
     return message;
   },
 };
 
 function createBaseSetTournamentIdsRequest(): SetTournamentIdsRequest {
-  return { tournamentIds: [] };
+  return { tournament_ids: [] };
 }
 
 export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
   encode(message: SetTournamentIdsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     writer.uint32(10).fork();
-    for (const v of message.tournamentIds) {
+    for (const v of message.tournament_ids) {
       writer.uint32(v);
     }
     writer.join();
@@ -2429,7 +2696,7 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
       switch (tag >>> 3) {
         case 1: {
           if (tag === 8) {
-            message.tournamentIds.push(reader.uint32());
+            message.tournament_ids.push(reader.uint32());
 
             continue;
           }
@@ -2437,7 +2704,7 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
           if (tag === 10) {
             const end2 = reader.uint32() + reader.pos;
             while (reader.pos < end2) {
-              message.tournamentIds.push(reader.uint32());
+              message.tournament_ids.push(reader.uint32());
             }
 
             continue;
@@ -2456,7 +2723,7 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
 
   fromJSON(object: any): SetTournamentIdsRequest {
     return {
-      tournamentIds: globalThis.Array.isArray(object?.tournamentIds)
+      tournament_ids: globalThis.Array.isArray(object?.tournamentIds)
         ? object.tournamentIds.map((e: any) => globalThis.Number(e))
         : globalThis.Array.isArray(object?.tournament_ids)
         ? object.tournament_ids.map((e: any) => globalThis.Number(e))
@@ -2466,8 +2733,8 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
 
   toJSON(message: SetTournamentIdsRequest): unknown {
     const obj: any = {};
-    if (message.tournamentIds?.length) {
-      obj.tournamentIds = message.tournamentIds.map((e) => Math.round(e));
+    if (message.tournament_ids?.length) {
+      obj.tournamentIds = message.tournament_ids.map((e) => Math.round(e));
     }
     return obj;
   },
@@ -2477,7 +2744,7 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
   },
   fromPartial<I extends Exact<DeepPartial<SetTournamentIdsRequest>, I>>(object: I): SetTournamentIdsRequest {
     const message = createBaseSetTournamentIdsRequest();
-    message.tournamentIds = object.tournamentIds?.map((e) => e) || [];
+    message.tournament_ids = object.tournament_ids?.map((e) => e) || [];
     return message;
   },
 };
@@ -2485,10 +2752,10 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
 function createBaseDeviceTournament(): DeviceTournament {
   return {
     id: 0,
-    createdAt: "",
-    updatedAt: "",
-    deviceId: 0,
-    tournamentId: 0,
+    created_at: "",
+    updated_at: "",
+    device_id: 0,
+    tournament_id: 0,
     device: undefined,
     tournament: undefined,
   };
@@ -2499,17 +2766,17 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
-    if (message.deviceId !== 0) {
-      writer.uint32(32).uint32(message.deviceId);
+    if (message.device_id !== 0) {
+      writer.uint32(32).uint32(message.device_id);
     }
-    if (message.tournamentId !== 0) {
-      writer.uint32(40).uint32(message.tournamentId);
+    if (message.tournament_id !== 0) {
+      writer.uint32(40).uint32(message.tournament_id);
     }
     if (message.device !== undefined) {
       Device.encode(message.device, writer.uint32(50).fork()).join();
@@ -2540,7 +2807,7 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -2548,7 +2815,7 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -2556,7 +2823,7 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
             break;
           }
 
-          message.deviceId = reader.uint32();
+          message.device_id = reader.uint32();
           continue;
         }
         case 5: {
@@ -2564,7 +2831,7 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
             break;
           }
 
-          message.tournamentId = reader.uint32();
+          message.tournament_id = reader.uint32();
           continue;
         }
         case 6: {
@@ -2595,22 +2862,22 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
   fromJSON(object: any): DeviceTournament {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
         : "",
-      deviceId: isSet(object.deviceId)
+      device_id: isSet(object.deviceId)
         ? globalThis.Number(object.deviceId)
         : isSet(object.device_id)
         ? globalThis.Number(object.device_id)
         : 0,
-      tournamentId: isSet(object.tournamentId)
+      tournament_id: isSet(object.tournamentId)
         ? globalThis.Number(object.tournamentId)
         : isSet(object.tournament_id)
         ? globalThis.Number(object.tournament_id)
@@ -2625,17 +2892,17 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
-    if (message.deviceId !== 0) {
-      obj.deviceId = Math.round(message.deviceId);
+    if (message.device_id !== 0) {
+      obj.deviceId = Math.round(message.device_id);
     }
-    if (message.tournamentId !== 0) {
-      obj.tournamentId = Math.round(message.tournamentId);
+    if (message.tournament_id !== 0) {
+      obj.tournamentId = Math.round(message.tournament_id);
     }
     if (message.device !== undefined) {
       obj.device = Device.toJSON(message.device);
@@ -2652,10 +2919,10 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
   fromPartial<I extends Exact<DeepPartial<DeviceTournament>, I>>(object: I): DeviceTournament {
     const message = createBaseDeviceTournament();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
-    message.deviceId = object.deviceId ?? 0;
-    message.tournamentId = object.tournamentId ?? 0;
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
+    message.device_id = object.device_id ?? 0;
+    message.tournament_id = object.tournament_id ?? 0;
     message.device = (object.device !== undefined && object.device !== null)
       ? Device.fromPartial(object.device)
       : undefined;
@@ -2667,12 +2934,12 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
 };
 
 function createBaseDeviceTournamentList(): DeviceTournamentList {
-  return { deviceTournaments: [] };
+  return { device_tournaments: [] };
 }
 
 export const DeviceTournamentList: MessageFns<DeviceTournamentList> = {
   encode(message: DeviceTournamentList, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.deviceTournaments) {
+    for (const v of message.device_tournaments) {
       DeviceTournament.encode(v!, writer.uint32(10).fork()).join();
     }
     return writer;
@@ -2690,7 +2957,7 @@ export const DeviceTournamentList: MessageFns<DeviceTournamentList> = {
             break;
           }
 
-          message.deviceTournaments.push(DeviceTournament.decode(reader, reader.uint32()));
+          message.device_tournaments.push(DeviceTournament.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -2704,7 +2971,7 @@ export const DeviceTournamentList: MessageFns<DeviceTournamentList> = {
 
   fromJSON(object: any): DeviceTournamentList {
     return {
-      deviceTournaments: globalThis.Array.isArray(object?.deviceTournaments)
+      device_tournaments: globalThis.Array.isArray(object?.deviceTournaments)
         ? object.deviceTournaments.map((e: any) => DeviceTournament.fromJSON(e))
         : globalThis.Array.isArray(object?.device_tournaments)
         ? object.device_tournaments.map((e: any) => DeviceTournament.fromJSON(e))
@@ -2714,8 +2981,8 @@ export const DeviceTournamentList: MessageFns<DeviceTournamentList> = {
 
   toJSON(message: DeviceTournamentList): unknown {
     const obj: any = {};
-    if (message.deviceTournaments?.length) {
-      obj.deviceTournaments = message.deviceTournaments.map((e) => DeviceTournament.toJSON(e));
+    if (message.device_tournaments?.length) {
+      obj.deviceTournaments = message.device_tournaments.map((e) => DeviceTournament.toJSON(e));
     }
     return obj;
   },
@@ -2725,13 +2992,91 @@ export const DeviceTournamentList: MessageFns<DeviceTournamentList> = {
   },
   fromPartial<I extends Exact<DeepPartial<DeviceTournamentList>, I>>(object: I): DeviceTournamentList {
     const message = createBaseDeviceTournamentList();
-    message.deviceTournaments = object.deviceTournaments?.map((e) => DeviceTournament.fromPartial(e)) || [];
+    message.device_tournaments = object.device_tournaments?.map((e) => DeviceTournament.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseDeviceTournamentPage(): DeviceTournamentPage {
+  return { data: [], page: undefined };
+}
+
+export const DeviceTournamentPage: MessageFns<DeviceTournamentPage> = {
+  encode(message: DeviceTournamentPage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      DeviceTournament.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeviceTournamentPage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeviceTournamentPage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(DeviceTournament.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeviceTournamentPage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => DeviceTournament.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: DeviceTournamentPage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => DeviceTournament.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeviceTournamentPage>, I>>(base?: I): DeviceTournamentPage {
+    return DeviceTournamentPage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeviceTournamentPage>, I>>(object: I): DeviceTournamentPage {
+    const message = createBaseDeviceTournamentPage();
+    message.data = object.data?.map((e) => DeviceTournament.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
     return message;
   },
 };
 
 function createBaseGlobalTournamentConfig(): GlobalTournamentConfig {
-  return { id: 0, createdAt: "", updatedAt: "", tournamentId: 0, tournament: undefined };
+  return { id: 0, created_at: "", updated_at: "", tournament_id: 0, tournament: undefined };
 }
 
 export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
@@ -2739,14 +3084,14 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
-    if (message.tournamentId !== 0) {
-      writer.uint32(32).uint32(message.tournamentId);
+    if (message.tournament_id !== 0) {
+      writer.uint32(32).uint32(message.tournament_id);
     }
     if (message.tournament !== undefined) {
       Tournament.encode(message.tournament, writer.uint32(42).fork()).join();
@@ -2774,7 +3119,7 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -2782,7 +3127,7 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -2790,7 +3135,7 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
             break;
           }
 
-          message.tournamentId = reader.uint32();
+          message.tournament_id = reader.uint32();
           continue;
         }
         case 5: {
@@ -2813,17 +3158,17 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
   fromJSON(object: any): GlobalTournamentConfig {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
         : "",
-      tournamentId: isSet(object.tournamentId)
+      tournament_id: isSet(object.tournamentId)
         ? globalThis.Number(object.tournamentId)
         : isSet(object.tournament_id)
         ? globalThis.Number(object.tournament_id)
@@ -2837,14 +3182,14 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
-    if (message.tournamentId !== 0) {
-      obj.tournamentId = Math.round(message.tournamentId);
+    if (message.tournament_id !== 0) {
+      obj.tournamentId = Math.round(message.tournament_id);
     }
     if (message.tournament !== undefined) {
       obj.tournament = Tournament.toJSON(message.tournament);
@@ -2858,9 +3203,9 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
   fromPartial<I extends Exact<DeepPartial<GlobalTournamentConfig>, I>>(object: I): GlobalTournamentConfig {
     const message = createBaseGlobalTournamentConfig();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
-    message.tournamentId = object.tournamentId ?? 0;
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
+    message.tournament_id = object.tournament_id ?? 0;
     message.tournament = (object.tournament !== undefined && object.tournament !== null)
       ? Tournament.fromPartial(object.tournament)
       : undefined;
@@ -2931,7 +3276,7 @@ export const GlobalTournamentConfigList: MessageFns<GlobalTournamentConfigList> 
 };
 
 function createBaseTeam(): Team {
-  return { id: 0, teamId: 0, logoUrl: "", primaryColor: "", secondaryColor: "", textColor: "", name: "" };
+  return { id: 0, team_id: 0, logo_url: "", primary_color: "", secondary_color: "", text_color: "", name: "" };
 }
 
 export const Team: MessageFns<Team> = {
@@ -2939,20 +3284,20 @@ export const Team: MessageFns<Team> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.teamId !== 0) {
-      writer.uint32(16).int64(message.teamId);
+    if (message.team_id !== 0) {
+      writer.uint32(16).int64(message.team_id);
     }
-    if (message.logoUrl !== "") {
-      writer.uint32(26).string(message.logoUrl);
+    if (message.logo_url !== "") {
+      writer.uint32(26).string(message.logo_url);
     }
-    if (message.primaryColor !== "") {
-      writer.uint32(34).string(message.primaryColor);
+    if (message.primary_color !== "") {
+      writer.uint32(34).string(message.primary_color);
     }
-    if (message.secondaryColor !== "") {
-      writer.uint32(42).string(message.secondaryColor);
+    if (message.secondary_color !== "") {
+      writer.uint32(42).string(message.secondary_color);
     }
-    if (message.textColor !== "") {
-      writer.uint32(50).string(message.textColor);
+    if (message.text_color !== "") {
+      writer.uint32(50).string(message.text_color);
     }
     if (message.name !== "") {
       writer.uint32(58).string(message.name);
@@ -2980,7 +3325,7 @@ export const Team: MessageFns<Team> = {
             break;
           }
 
-          message.teamId = longToNumber(reader.int64());
+          message.team_id = longToNumber(reader.int64());
           continue;
         }
         case 3: {
@@ -2988,7 +3333,7 @@ export const Team: MessageFns<Team> = {
             break;
           }
 
-          message.logoUrl = reader.string();
+          message.logo_url = reader.string();
           continue;
         }
         case 4: {
@@ -2996,7 +3341,7 @@ export const Team: MessageFns<Team> = {
             break;
           }
 
-          message.primaryColor = reader.string();
+          message.primary_color = reader.string();
           continue;
         }
         case 5: {
@@ -3004,7 +3349,7 @@ export const Team: MessageFns<Team> = {
             break;
           }
 
-          message.secondaryColor = reader.string();
+          message.secondary_color = reader.string();
           continue;
         }
         case 6: {
@@ -3012,7 +3357,7 @@ export const Team: MessageFns<Team> = {
             break;
           }
 
-          message.textColor = reader.string();
+          message.text_color = reader.string();
           continue;
         }
         case 7: {
@@ -3035,27 +3380,27 @@ export const Team: MessageFns<Team> = {
   fromJSON(object: any): Team {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      teamId: isSet(object.teamId)
+      team_id: isSet(object.teamId)
         ? globalThis.Number(object.teamId)
         : isSet(object.team_id)
         ? globalThis.Number(object.team_id)
         : 0,
-      logoUrl: isSet(object.logoUrl)
+      logo_url: isSet(object.logoUrl)
         ? globalThis.String(object.logoUrl)
         : isSet(object.logo_url)
         ? globalThis.String(object.logo_url)
         : "",
-      primaryColor: isSet(object.primaryColor)
+      primary_color: isSet(object.primaryColor)
         ? globalThis.String(object.primaryColor)
         : isSet(object.primary_color)
         ? globalThis.String(object.primary_color)
         : "",
-      secondaryColor: isSet(object.secondaryColor)
+      secondary_color: isSet(object.secondaryColor)
         ? globalThis.String(object.secondaryColor)
         : isSet(object.secondary_color)
         ? globalThis.String(object.secondary_color)
         : "",
-      textColor: isSet(object.textColor)
+      text_color: isSet(object.textColor)
         ? globalThis.String(object.textColor)
         : isSet(object.text_color)
         ? globalThis.String(object.text_color)
@@ -3069,20 +3414,20 @@ export const Team: MessageFns<Team> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.teamId !== 0) {
-      obj.teamId = Math.round(message.teamId);
+    if (message.team_id !== 0) {
+      obj.teamId = Math.round(message.team_id);
     }
-    if (message.logoUrl !== "") {
-      obj.logoUrl = message.logoUrl;
+    if (message.logo_url !== "") {
+      obj.logoUrl = message.logo_url;
     }
-    if (message.primaryColor !== "") {
-      obj.primaryColor = message.primaryColor;
+    if (message.primary_color !== "") {
+      obj.primaryColor = message.primary_color;
     }
-    if (message.secondaryColor !== "") {
-      obj.secondaryColor = message.secondaryColor;
+    if (message.secondary_color !== "") {
+      obj.secondaryColor = message.secondary_color;
     }
-    if (message.textColor !== "") {
-      obj.textColor = message.textColor;
+    if (message.text_color !== "") {
+      obj.textColor = message.text_color;
     }
     if (message.name !== "") {
       obj.name = message.name;
@@ -3096,11 +3441,11 @@ export const Team: MessageFns<Team> = {
   fromPartial<I extends Exact<DeepPartial<Team>, I>>(object: I): Team {
     const message = createBaseTeam();
     message.id = object.id ?? 0;
-    message.teamId = object.teamId ?? 0;
-    message.logoUrl = object.logoUrl ?? "";
-    message.primaryColor = object.primaryColor ?? "";
-    message.secondaryColor = object.secondaryColor ?? "";
-    message.textColor = object.textColor ?? "";
+    message.team_id = object.team_id ?? 0;
+    message.logo_url = object.logo_url ?? "";
+    message.primary_color = object.primary_color ?? "";
+    message.secondary_color = object.secondary_color ?? "";
+    message.text_color = object.text_color ?? "";
     message.name = object.name ?? "";
     return message;
   },
@@ -3109,23 +3454,23 @@ export const Team: MessageFns<Team> = {
 function createBaseSofaScoreEvent(): SofaScoreEvent {
   return {
     id: 0,
-    createdAt: "",
-    updatedAt: "",
-    sofaScoreEventId: 0,
+    created_at: "",
+    updated_at: "",
+    sofa_score_event_id: 0,
     sport: "",
-    homeScore: 0,
-    homeTeamId: 0,
-    awayScore: 0,
-    awayTeamId: 0,
-    scrapedAt: 0,
+    home_score: 0,
+    home_team_id: 0,
+    away_score: 0,
+    away_team_id: 0,
+    scraped_at: 0,
     category: "",
-    startTimestamp: 0,
-    currentPeriodStartTimestamp: 0,
+    start_timestamp: 0,
+    current_period_start_timestamp: 0,
     slug: "",
-    teamHome: undefined,
-    teamAway: undefined,
+    team_home: undefined,
+    team_away: undefined,
     league: undefined,
-    statusType: "",
+    status_type: "",
   };
 }
 
@@ -3134,56 +3479,56 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
-    if (message.sofaScoreEventId !== 0) {
-      writer.uint32(32).int64(message.sofaScoreEventId);
+    if (message.sofa_score_event_id !== 0) {
+      writer.uint32(32).int64(message.sofa_score_event_id);
     }
     if (message.sport !== "") {
       writer.uint32(42).string(message.sport);
     }
-    if (message.homeScore !== 0) {
-      writer.uint32(48).int32(message.homeScore);
+    if (message.home_score !== 0) {
+      writer.uint32(48).int32(message.home_score);
     }
-    if (message.homeTeamId !== 0) {
-      writer.uint32(56).int64(message.homeTeamId);
+    if (message.home_team_id !== 0) {
+      writer.uint32(56).int64(message.home_team_id);
     }
-    if (message.awayScore !== 0) {
-      writer.uint32(64).int32(message.awayScore);
+    if (message.away_score !== 0) {
+      writer.uint32(64).int32(message.away_score);
     }
-    if (message.awayTeamId !== 0) {
-      writer.uint32(72).int64(message.awayTeamId);
+    if (message.away_team_id !== 0) {
+      writer.uint32(72).int64(message.away_team_id);
     }
-    if (message.scrapedAt !== 0) {
-      writer.uint32(80).int64(message.scrapedAt);
+    if (message.scraped_at !== 0) {
+      writer.uint32(80).int64(message.scraped_at);
     }
     if (message.category !== "") {
       writer.uint32(90).string(message.category);
     }
-    if (message.startTimestamp !== 0) {
-      writer.uint32(96).int64(message.startTimestamp);
+    if (message.start_timestamp !== 0) {
+      writer.uint32(96).int64(message.start_timestamp);
     }
-    if (message.currentPeriodStartTimestamp !== 0) {
-      writer.uint32(104).int64(message.currentPeriodStartTimestamp);
+    if (message.current_period_start_timestamp !== 0) {
+      writer.uint32(104).int64(message.current_period_start_timestamp);
     }
     if (message.slug !== "") {
       writer.uint32(114).string(message.slug);
     }
-    if (message.teamHome !== undefined) {
-      Team.encode(message.teamHome, writer.uint32(122).fork()).join();
+    if (message.team_home !== undefined) {
+      Team.encode(message.team_home, writer.uint32(122).fork()).join();
     }
-    if (message.teamAway !== undefined) {
-      Team.encode(message.teamAway, writer.uint32(130).fork()).join();
+    if (message.team_away !== undefined) {
+      Team.encode(message.team_away, writer.uint32(130).fork()).join();
     }
     if (message.league !== undefined) {
       Tournament.encode(message.league, writer.uint32(138).fork()).join();
     }
-    if (message.statusType !== "") {
-      writer.uint32(146).string(message.statusType);
+    if (message.status_type !== "") {
+      writer.uint32(146).string(message.status_type);
     }
     return writer;
   },
@@ -3208,7 +3553,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -3216,7 +3561,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -3224,7 +3569,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.sofaScoreEventId = longToNumber(reader.int64());
+          message.sofa_score_event_id = longToNumber(reader.int64());
           continue;
         }
         case 5: {
@@ -3240,7 +3585,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.homeScore = reader.int32();
+          message.home_score = reader.int32();
           continue;
         }
         case 7: {
@@ -3248,7 +3593,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.homeTeamId = longToNumber(reader.int64());
+          message.home_team_id = longToNumber(reader.int64());
           continue;
         }
         case 8: {
@@ -3256,7 +3601,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.awayScore = reader.int32();
+          message.away_score = reader.int32();
           continue;
         }
         case 9: {
@@ -3264,7 +3609,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.awayTeamId = longToNumber(reader.int64());
+          message.away_team_id = longToNumber(reader.int64());
           continue;
         }
         case 10: {
@@ -3272,7 +3617,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.scrapedAt = longToNumber(reader.int64());
+          message.scraped_at = longToNumber(reader.int64());
           continue;
         }
         case 11: {
@@ -3288,7 +3633,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.startTimestamp = longToNumber(reader.int64());
+          message.start_timestamp = longToNumber(reader.int64());
           continue;
         }
         case 13: {
@@ -3296,7 +3641,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.currentPeriodStartTimestamp = longToNumber(reader.int64());
+          message.current_period_start_timestamp = longToNumber(reader.int64());
           continue;
         }
         case 14: {
@@ -3312,7 +3657,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.teamHome = Team.decode(reader, reader.uint32());
+          message.team_home = Team.decode(reader, reader.uint32());
           continue;
         }
         case 16: {
@@ -3320,7 +3665,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.teamAway = Team.decode(reader, reader.uint32());
+          message.team_away = Team.decode(reader, reader.uint32());
           continue;
         }
         case 17: {
@@ -3336,7 +3681,7 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
             break;
           }
 
-          message.statusType = reader.string();
+          message.status_type = reader.string();
           continue;
         }
       }
@@ -3351,71 +3696,71 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
   fromJSON(object: any): SofaScoreEvent {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
         : "",
-      sofaScoreEventId: isSet(object.sofaScoreEventId)
+      sofa_score_event_id: isSet(object.sofaScoreEventId)
         ? globalThis.Number(object.sofaScoreEventId)
         : isSet(object.sofa_score_event_id)
         ? globalThis.Number(object.sofa_score_event_id)
         : 0,
       sport: isSet(object.sport) ? globalThis.String(object.sport) : "",
-      homeScore: isSet(object.homeScore)
+      home_score: isSet(object.homeScore)
         ? globalThis.Number(object.homeScore)
         : isSet(object.home_score)
         ? globalThis.Number(object.home_score)
         : 0,
-      homeTeamId: isSet(object.homeTeamId)
+      home_team_id: isSet(object.homeTeamId)
         ? globalThis.Number(object.homeTeamId)
         : isSet(object.home_team_id)
         ? globalThis.Number(object.home_team_id)
         : 0,
-      awayScore: isSet(object.awayScore)
+      away_score: isSet(object.awayScore)
         ? globalThis.Number(object.awayScore)
         : isSet(object.away_score)
         ? globalThis.Number(object.away_score)
         : 0,
-      awayTeamId: isSet(object.awayTeamId)
+      away_team_id: isSet(object.awayTeamId)
         ? globalThis.Number(object.awayTeamId)
         : isSet(object.away_team_id)
         ? globalThis.Number(object.away_team_id)
         : 0,
-      scrapedAt: isSet(object.scrapedAt)
+      scraped_at: isSet(object.scrapedAt)
         ? globalThis.Number(object.scrapedAt)
         : isSet(object.scraped_at)
         ? globalThis.Number(object.scraped_at)
         : 0,
       category: isSet(object.category) ? globalThis.String(object.category) : "",
-      startTimestamp: isSet(object.startTimestamp)
+      start_timestamp: isSet(object.startTimestamp)
         ? globalThis.Number(object.startTimestamp)
         : isSet(object.start_timestamp)
         ? globalThis.Number(object.start_timestamp)
         : 0,
-      currentPeriodStartTimestamp: isSet(object.currentPeriodStartTimestamp)
+      current_period_start_timestamp: isSet(object.currentPeriodStartTimestamp)
         ? globalThis.Number(object.currentPeriodStartTimestamp)
         : isSet(object.current_period_start_timestamp)
         ? globalThis.Number(object.current_period_start_timestamp)
         : 0,
       slug: isSet(object.slug) ? globalThis.String(object.slug) : "",
-      teamHome: isSet(object.teamHome)
+      team_home: isSet(object.teamHome)
         ? Team.fromJSON(object.teamHome)
         : isSet(object.team_home)
         ? Team.fromJSON(object.team_home)
         : undefined,
-      teamAway: isSet(object.teamAway)
+      team_away: isSet(object.teamAway)
         ? Team.fromJSON(object.teamAway)
         : isSet(object.team_away)
         ? Team.fromJSON(object.team_away)
         : undefined,
       league: isSet(object.league) ? Tournament.fromJSON(object.league) : undefined,
-      statusType: isSet(object.statusType)
+      status_type: isSet(object.statusType)
         ? globalThis.String(object.statusType)
         : isSet(object.status_type)
         ? globalThis.String(object.status_type)
@@ -3428,56 +3773,56 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
-    if (message.sofaScoreEventId !== 0) {
-      obj.sofaScoreEventId = Math.round(message.sofaScoreEventId);
+    if (message.sofa_score_event_id !== 0) {
+      obj.sofaScoreEventId = Math.round(message.sofa_score_event_id);
     }
     if (message.sport !== "") {
       obj.sport = message.sport;
     }
-    if (message.homeScore !== 0) {
-      obj.homeScore = Math.round(message.homeScore);
+    if (message.home_score !== 0) {
+      obj.homeScore = Math.round(message.home_score);
     }
-    if (message.homeTeamId !== 0) {
-      obj.homeTeamId = Math.round(message.homeTeamId);
+    if (message.home_team_id !== 0) {
+      obj.homeTeamId = Math.round(message.home_team_id);
     }
-    if (message.awayScore !== 0) {
-      obj.awayScore = Math.round(message.awayScore);
+    if (message.away_score !== 0) {
+      obj.awayScore = Math.round(message.away_score);
     }
-    if (message.awayTeamId !== 0) {
-      obj.awayTeamId = Math.round(message.awayTeamId);
+    if (message.away_team_id !== 0) {
+      obj.awayTeamId = Math.round(message.away_team_id);
     }
-    if (message.scrapedAt !== 0) {
-      obj.scrapedAt = Math.round(message.scrapedAt);
+    if (message.scraped_at !== 0) {
+      obj.scrapedAt = Math.round(message.scraped_at);
     }
     if (message.category !== "") {
       obj.category = message.category;
     }
-    if (message.startTimestamp !== 0) {
-      obj.startTimestamp = Math.round(message.startTimestamp);
+    if (message.start_timestamp !== 0) {
+      obj.startTimestamp = Math.round(message.start_timestamp);
     }
-    if (message.currentPeriodStartTimestamp !== 0) {
-      obj.currentPeriodStartTimestamp = Math.round(message.currentPeriodStartTimestamp);
+    if (message.current_period_start_timestamp !== 0) {
+      obj.currentPeriodStartTimestamp = Math.round(message.current_period_start_timestamp);
     }
     if (message.slug !== "") {
       obj.slug = message.slug;
     }
-    if (message.teamHome !== undefined) {
-      obj.teamHome = Team.toJSON(message.teamHome);
+    if (message.team_home !== undefined) {
+      obj.teamHome = Team.toJSON(message.team_home);
     }
-    if (message.teamAway !== undefined) {
-      obj.teamAway = Team.toJSON(message.teamAway);
+    if (message.team_away !== undefined) {
+      obj.teamAway = Team.toJSON(message.team_away);
     }
     if (message.league !== undefined) {
       obj.league = Tournament.toJSON(message.league);
     }
-    if (message.statusType !== "") {
-      obj.statusType = message.statusType;
+    if (message.status_type !== "") {
+      obj.statusType = message.status_type;
     }
     return obj;
   },
@@ -3488,35 +3833,35 @@ export const SofaScoreEvent: MessageFns<SofaScoreEvent> = {
   fromPartial<I extends Exact<DeepPartial<SofaScoreEvent>, I>>(object: I): SofaScoreEvent {
     const message = createBaseSofaScoreEvent();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
-    message.sofaScoreEventId = object.sofaScoreEventId ?? 0;
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
+    message.sofa_score_event_id = object.sofa_score_event_id ?? 0;
     message.sport = object.sport ?? "";
-    message.homeScore = object.homeScore ?? 0;
-    message.homeTeamId = object.homeTeamId ?? 0;
-    message.awayScore = object.awayScore ?? 0;
-    message.awayTeamId = object.awayTeamId ?? 0;
-    message.scrapedAt = object.scrapedAt ?? 0;
+    message.home_score = object.home_score ?? 0;
+    message.home_team_id = object.home_team_id ?? 0;
+    message.away_score = object.away_score ?? 0;
+    message.away_team_id = object.away_team_id ?? 0;
+    message.scraped_at = object.scraped_at ?? 0;
     message.category = object.category ?? "";
-    message.startTimestamp = object.startTimestamp ?? 0;
-    message.currentPeriodStartTimestamp = object.currentPeriodStartTimestamp ?? 0;
+    message.start_timestamp = object.start_timestamp ?? 0;
+    message.current_period_start_timestamp = object.current_period_start_timestamp ?? 0;
     message.slug = object.slug ?? "";
-    message.teamHome = (object.teamHome !== undefined && object.teamHome !== null)
-      ? Team.fromPartial(object.teamHome)
+    message.team_home = (object.team_home !== undefined && object.team_home !== null)
+      ? Team.fromPartial(object.team_home)
       : undefined;
-    message.teamAway = (object.teamAway !== undefined && object.teamAway !== null)
-      ? Team.fromPartial(object.teamAway)
+    message.team_away = (object.team_away !== undefined && object.team_away !== null)
+      ? Team.fromPartial(object.team_away)
       : undefined;
     message.league = (object.league !== undefined && object.league !== null)
       ? Tournament.fromPartial(object.league)
       : undefined;
-    message.statusType = object.statusType ?? "";
+    message.status_type = object.status_type ?? "";
     return message;
   },
 };
 
 function createBaseEventsList(): EventsList {
-  return { data: [], page: 0, limit: 0, total: 0, totalPages: 0 };
+  return { data: [], page: 0, limit: 0, total: 0, total_pages: 0 };
 }
 
 export const EventsList: MessageFns<EventsList> = {
@@ -3533,8 +3878,8 @@ export const EventsList: MessageFns<EventsList> = {
     if (message.total !== 0) {
       writer.uint32(32).int64(message.total);
     }
-    if (message.totalPages !== 0) {
-      writer.uint32(40).int32(message.totalPages);
+    if (message.total_pages !== 0) {
+      writer.uint32(40).int32(message.total_pages);
     }
     return writer;
   },
@@ -3583,7 +3928,7 @@ export const EventsList: MessageFns<EventsList> = {
             break;
           }
 
-          message.totalPages = reader.int32();
+          message.total_pages = reader.int32();
           continue;
         }
       }
@@ -3601,7 +3946,7 @@ export const EventsList: MessageFns<EventsList> = {
       page: isSet(object.page) ? globalThis.Number(object.page) : 0,
       limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
       total: isSet(object.total) ? globalThis.Number(object.total) : 0,
-      totalPages: isSet(object.totalPages)
+      total_pages: isSet(object.totalPages)
         ? globalThis.Number(object.totalPages)
         : isSet(object.total_pages)
         ? globalThis.Number(object.total_pages)
@@ -3623,8 +3968,8 @@ export const EventsList: MessageFns<EventsList> = {
     if (message.total !== 0) {
       obj.total = Math.round(message.total);
     }
-    if (message.totalPages !== 0) {
-      obj.totalPages = Math.round(message.totalPages);
+    if (message.total_pages !== 0) {
+      obj.totalPages = Math.round(message.total_pages);
     }
     return obj;
   },
@@ -3638,25 +3983,103 @@ export const EventsList: MessageFns<EventsList> = {
     message.page = object.page ?? 0;
     message.limit = object.limit ?? 0;
     message.total = object.total ?? 0;
-    message.totalPages = object.totalPages ?? 0;
+    message.total_pages = object.total_pages ?? 0;
+    return message;
+  },
+};
+
+function createBaseEventPage(): EventPage {
+  return { data: [], page: undefined };
+}
+
+export const EventPage: MessageFns<EventPage> = {
+  encode(message: EventPage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      SofaScoreEvent.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EventPage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEventPage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(SofaScoreEvent.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EventPage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => SofaScoreEvent.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: EventPage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => SofaScoreEvent.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EventPage>, I>>(base?: I): EventPage {
+    return EventPage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EventPage>, I>>(object: I): EventPage {
+    const message = createBaseEventPage();
+    message.data = object.data?.map((e) => SofaScoreEvent.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
     return message;
   },
 };
 
 function createBaseLogPlaybackRequest(): LogPlaybackRequest {
-  return { deviceToken: "", content: "", startedAt: 0 };
+  return { device_token: "", content: "", started_at: 0 };
 }
 
 export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
   encode(message: LogPlaybackRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.deviceToken !== "") {
-      writer.uint32(10).string(message.deviceToken);
+    if (message.device_token !== "") {
+      writer.uint32(10).string(message.device_token);
     }
     if (message.content !== "") {
       writer.uint32(18).string(message.content);
     }
-    if (message.startedAt !== 0) {
-      writer.uint32(24).int64(message.startedAt);
+    if (message.started_at !== 0) {
+      writer.uint32(24).int64(message.started_at);
     }
     return writer;
   },
@@ -3673,7 +4096,7 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
             break;
           }
 
-          message.deviceToken = reader.string();
+          message.device_token = reader.string();
           continue;
         }
         case 2: {
@@ -3689,7 +4112,7 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
             break;
           }
 
-          message.startedAt = longToNumber(reader.int64());
+          message.started_at = longToNumber(reader.int64());
           continue;
         }
       }
@@ -3703,13 +4126,13 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
 
   fromJSON(object: any): LogPlaybackRequest {
     return {
-      deviceToken: isSet(object.deviceToken)
+      device_token: isSet(object.deviceToken)
         ? globalThis.String(object.deviceToken)
         : isSet(object.device_token)
         ? globalThis.String(object.device_token)
         : "",
       content: isSet(object.content) ? globalThis.String(object.content) : "",
-      startedAt: isSet(object.startedAt)
+      started_at: isSet(object.startedAt)
         ? globalThis.Number(object.startedAt)
         : isSet(object.started_at)
         ? globalThis.Number(object.started_at)
@@ -3719,14 +4142,14 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
 
   toJSON(message: LogPlaybackRequest): unknown {
     const obj: any = {};
-    if (message.deviceToken !== "") {
-      obj.deviceToken = message.deviceToken;
+    if (message.device_token !== "") {
+      obj.deviceToken = message.device_token;
     }
     if (message.content !== "") {
       obj.content = message.content;
     }
-    if (message.startedAt !== 0) {
-      obj.startedAt = Math.round(message.startedAt);
+    if (message.started_at !== 0) {
+      obj.startedAt = Math.round(message.started_at);
     }
     return obj;
   },
@@ -3736,21 +4159,21 @@ export const LogPlaybackRequest: MessageFns<LogPlaybackRequest> = {
   },
   fromPartial<I extends Exact<DeepPartial<LogPlaybackRequest>, I>>(object: I): LogPlaybackRequest {
     const message = createBaseLogPlaybackRequest();
-    message.deviceToken = object.deviceToken ?? "";
+    message.device_token = object.device_token ?? "";
     message.content = object.content ?? "";
-    message.startedAt = object.startedAt ?? 0;
+    message.started_at = object.started_at ?? 0;
     return message;
   },
 };
 
 function createBaseUpdatePlaybackRequest(): UpdatePlaybackRequest {
-  return { endedAt: 0 };
+  return { ended_at: 0 };
 }
 
 export const UpdatePlaybackRequest: MessageFns<UpdatePlaybackRequest> = {
   encode(message: UpdatePlaybackRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.endedAt !== 0) {
-      writer.uint32(8).int64(message.endedAt);
+    if (message.ended_at !== 0) {
+      writer.uint32(8).int64(message.ended_at);
     }
     return writer;
   },
@@ -3767,7 +4190,7 @@ export const UpdatePlaybackRequest: MessageFns<UpdatePlaybackRequest> = {
             break;
           }
 
-          message.endedAt = longToNumber(reader.int64());
+          message.ended_at = longToNumber(reader.int64());
           continue;
         }
       }
@@ -3781,7 +4204,7 @@ export const UpdatePlaybackRequest: MessageFns<UpdatePlaybackRequest> = {
 
   fromJSON(object: any): UpdatePlaybackRequest {
     return {
-      endedAt: isSet(object.endedAt)
+      ended_at: isSet(object.endedAt)
         ? globalThis.Number(object.endedAt)
         : isSet(object.ended_at)
         ? globalThis.Number(object.ended_at)
@@ -3791,8 +4214,8 @@ export const UpdatePlaybackRequest: MessageFns<UpdatePlaybackRequest> = {
 
   toJSON(message: UpdatePlaybackRequest): unknown {
     const obj: any = {};
-    if (message.endedAt !== 0) {
-      obj.endedAt = Math.round(message.endedAt);
+    if (message.ended_at !== 0) {
+      obj.endedAt = Math.round(message.ended_at);
     }
     return obj;
   },
@@ -3802,13 +4225,13 @@ export const UpdatePlaybackRequest: MessageFns<UpdatePlaybackRequest> = {
   },
   fromPartial<I extends Exact<DeepPartial<UpdatePlaybackRequest>, I>>(object: I): UpdatePlaybackRequest {
     const message = createBaseUpdatePlaybackRequest();
-    message.endedAt = object.endedAt ?? 0;
+    message.ended_at = object.ended_at ?? 0;
     return message;
   },
 };
 
 function createBasePlaybackLog(): PlaybackLog {
-  return { id: 0, createdAt: "", updatedAt: "", deviceId: 0, content: "", startedAt: 0, endedAt: 0 };
+  return { id: 0, created_at: "", updated_at: "", device_id: 0, content: "", started_at: 0, ended_at: 0 };
 }
 
 export const PlaybackLog: MessageFns<PlaybackLog> = {
@@ -3816,23 +4239,23 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
     if (message.id !== 0) {
       writer.uint32(8).uint32(message.id);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(18).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(18).string(message.created_at);
     }
-    if (message.updatedAt !== "") {
-      writer.uint32(26).string(message.updatedAt);
+    if (message.updated_at !== "") {
+      writer.uint32(26).string(message.updated_at);
     }
-    if (message.deviceId !== 0) {
-      writer.uint32(32).uint32(message.deviceId);
+    if (message.device_id !== 0) {
+      writer.uint32(32).uint32(message.device_id);
     }
     if (message.content !== "") {
       writer.uint32(42).string(message.content);
     }
-    if (message.startedAt !== 0) {
-      writer.uint32(48).int64(message.startedAt);
+    if (message.started_at !== 0) {
+      writer.uint32(48).int64(message.started_at);
     }
-    if (message.endedAt !== 0) {
-      writer.uint32(56).int64(message.endedAt);
+    if (message.ended_at !== 0) {
+      writer.uint32(56).int64(message.ended_at);
     }
     return writer;
   },
@@ -3857,7 +4280,7 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 3: {
@@ -3865,7 +4288,7 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
             break;
           }
 
-          message.updatedAt = reader.string();
+          message.updated_at = reader.string();
           continue;
         }
         case 4: {
@@ -3873,7 +4296,7 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
             break;
           }
 
-          message.deviceId = reader.uint32();
+          message.device_id = reader.uint32();
           continue;
         }
         case 5: {
@@ -3889,7 +4312,7 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
             break;
           }
 
-          message.startedAt = longToNumber(reader.int64());
+          message.started_at = longToNumber(reader.int64());
           continue;
         }
         case 7: {
@@ -3897,7 +4320,7 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
             break;
           }
 
-          message.endedAt = longToNumber(reader.int64());
+          message.ended_at = longToNumber(reader.int64());
           continue;
         }
       }
@@ -3912,28 +4335,28 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
   fromJSON(object: any): PlaybackLog {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      updatedAt: isSet(object.updatedAt)
+      updated_at: isSet(object.updatedAt)
         ? globalThis.String(object.updatedAt)
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
         : "",
-      deviceId: isSet(object.deviceId)
+      device_id: isSet(object.deviceId)
         ? globalThis.Number(object.deviceId)
         : isSet(object.device_id)
         ? globalThis.Number(object.device_id)
         : 0,
       content: isSet(object.content) ? globalThis.String(object.content) : "",
-      startedAt: isSet(object.startedAt)
+      started_at: isSet(object.startedAt)
         ? globalThis.Number(object.startedAt)
         : isSet(object.started_at)
         ? globalThis.Number(object.started_at)
         : 0,
-      endedAt: isSet(object.endedAt)
+      ended_at: isSet(object.endedAt)
         ? globalThis.Number(object.endedAt)
         : isSet(object.ended_at)
         ? globalThis.Number(object.ended_at)
@@ -3946,23 +4369,23 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
     if (message.id !== 0) {
       obj.id = Math.round(message.id);
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.updatedAt !== "") {
-      obj.updatedAt = message.updatedAt;
+    if (message.updated_at !== "") {
+      obj.updatedAt = message.updated_at;
     }
-    if (message.deviceId !== 0) {
-      obj.deviceId = Math.round(message.deviceId);
+    if (message.device_id !== 0) {
+      obj.deviceId = Math.round(message.device_id);
     }
     if (message.content !== "") {
       obj.content = message.content;
     }
-    if (message.startedAt !== 0) {
-      obj.startedAt = Math.round(message.startedAt);
+    if (message.started_at !== 0) {
+      obj.startedAt = Math.round(message.started_at);
     }
-    if (message.endedAt !== 0) {
-      obj.endedAt = Math.round(message.endedAt);
+    if (message.ended_at !== 0) {
+      obj.endedAt = Math.round(message.ended_at);
     }
     return obj;
   },
@@ -3973,12 +4396,12 @@ export const PlaybackLog: MessageFns<PlaybackLog> = {
   fromPartial<I extends Exact<DeepPartial<PlaybackLog>, I>>(object: I): PlaybackLog {
     const message = createBasePlaybackLog();
     message.id = object.id ?? 0;
-    message.createdAt = object.createdAt ?? "";
-    message.updatedAt = object.updatedAt ?? "";
-    message.deviceId = object.deviceId ?? 0;
+    message.created_at = object.created_at ?? "";
+    message.updated_at = object.updated_at ?? "";
+    message.device_id = object.device_id ?? 0;
     message.content = object.content ?? "";
-    message.startedAt = object.startedAt ?? 0;
-    message.endedAt = object.endedAt ?? 0;
+    message.started_at = object.started_at ?? 0;
+    message.ended_at = object.ended_at ?? 0;
     return message;
   },
 };
@@ -4059,17 +4482,95 @@ export const PlaybackLogList: MessageFns<PlaybackLogList> = {
   },
 };
 
+function createBasePlaybackPage(): PlaybackPage {
+  return { data: [], page: undefined };
+}
+
+export const PlaybackPage: MessageFns<PlaybackPage> = {
+  encode(message: PlaybackPage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      PlaybackLog.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlaybackPage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePlaybackPage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(PlaybackLog.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PlaybackPage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => PlaybackLog.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: PlaybackPage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => PlaybackLog.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PlaybackPage>, I>>(base?: I): PlaybackPage {
+    return PlaybackPage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PlaybackPage>, I>>(object: I): PlaybackPage {
+    const message = createBasePlaybackPage();
+    message.data = object.data?.map((e) => PlaybackLog.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseEventStats(): EventStats {
-  return { sofaScoreEventId: 0, viewCount: 0 };
+  return { sofa_score_event_id: 0, view_count: 0 };
 }
 
 export const EventStats: MessageFns<EventStats> = {
   encode(message: EventStats, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.sofaScoreEventId !== 0) {
-      writer.uint32(8).int64(message.sofaScoreEventId);
+    if (message.sofa_score_event_id !== 0) {
+      writer.uint32(8).int64(message.sofa_score_event_id);
     }
-    if (message.viewCount !== 0) {
-      writer.uint32(16).int64(message.viewCount);
+    if (message.view_count !== 0) {
+      writer.uint32(16).int64(message.view_count);
     }
     return writer;
   },
@@ -4086,7 +4587,7 @@ export const EventStats: MessageFns<EventStats> = {
             break;
           }
 
-          message.sofaScoreEventId = longToNumber(reader.int64());
+          message.sofa_score_event_id = longToNumber(reader.int64());
           continue;
         }
         case 2: {
@@ -4094,7 +4595,7 @@ export const EventStats: MessageFns<EventStats> = {
             break;
           }
 
-          message.viewCount = longToNumber(reader.int64());
+          message.view_count = longToNumber(reader.int64());
           continue;
         }
       }
@@ -4108,12 +4609,12 @@ export const EventStats: MessageFns<EventStats> = {
 
   fromJSON(object: any): EventStats {
     return {
-      sofaScoreEventId: isSet(object.sofaScoreEventId)
+      sofa_score_event_id: isSet(object.sofaScoreEventId)
         ? globalThis.Number(object.sofaScoreEventId)
         : isSet(object.sofa_score_event_id)
         ? globalThis.Number(object.sofa_score_event_id)
         : 0,
-      viewCount: isSet(object.viewCount)
+      view_count: isSet(object.viewCount)
         ? globalThis.Number(object.viewCount)
         : isSet(object.view_count)
         ? globalThis.Number(object.view_count)
@@ -4123,11 +4624,11 @@ export const EventStats: MessageFns<EventStats> = {
 
   toJSON(message: EventStats): unknown {
     const obj: any = {};
-    if (message.sofaScoreEventId !== 0) {
-      obj.sofaScoreEventId = Math.round(message.sofaScoreEventId);
+    if (message.sofa_score_event_id !== 0) {
+      obj.sofaScoreEventId = Math.round(message.sofa_score_event_id);
     }
-    if (message.viewCount !== 0) {
-      obj.viewCount = Math.round(message.viewCount);
+    if (message.view_count !== 0) {
+      obj.viewCount = Math.round(message.view_count);
     }
     return obj;
   },
@@ -4137,8 +4638,8 @@ export const EventStats: MessageFns<EventStats> = {
   },
   fromPartial<I extends Exact<DeepPartial<EventStats>, I>>(object: I): EventStats {
     const message = createBaseEventStats();
-    message.sofaScoreEventId = object.sofaScoreEventId ?? 0;
-    message.viewCount = object.viewCount ?? 0;
+    message.sofa_score_event_id = object.sofa_score_event_id ?? 0;
+    message.view_count = object.view_count ?? 0;
     return message;
   },
 };
@@ -4207,19 +4708,19 @@ function createBaseApkInfo(): ApkInfo {
   return {
     id: 0,
     version: "",
-    fileName: "",
-    fileSize: 0,
+    file_name: "",
+    file_size: 0,
     description: "",
-    packageName: "",
-    versionCode: 0,
-    minSdkVersion: 0,
-    targetSdkVersion: 0,
-    downloadToken: "",
-    downloadUrl: "",
-    createdAt: "",
-    isActive: false,
+    package_name: "",
+    version_code: 0,
+    min_sdk_version: 0,
+    target_sdk_version: 0,
+    download_token: "",
+    download_url: "",
+    created_at: "",
+    is_active: false,
     downloads: 0,
-    panelUrl: "",
+    panel_url: "",
   };
 }
 
@@ -4231,44 +4732,44 @@ export const ApkInfo: MessageFns<ApkInfo> = {
     if (message.version !== "") {
       writer.uint32(18).string(message.version);
     }
-    if (message.fileName !== "") {
-      writer.uint32(26).string(message.fileName);
+    if (message.file_name !== "") {
+      writer.uint32(26).string(message.file_name);
     }
-    if (message.fileSize !== 0) {
-      writer.uint32(32).int64(message.fileSize);
+    if (message.file_size !== 0) {
+      writer.uint32(32).int64(message.file_size);
     }
     if (message.description !== "") {
       writer.uint32(42).string(message.description);
     }
-    if (message.packageName !== "") {
-      writer.uint32(50).string(message.packageName);
+    if (message.package_name !== "") {
+      writer.uint32(50).string(message.package_name);
     }
-    if (message.versionCode !== 0) {
-      writer.uint32(56).int32(message.versionCode);
+    if (message.version_code !== 0) {
+      writer.uint32(56).int32(message.version_code);
     }
-    if (message.minSdkVersion !== 0) {
-      writer.uint32(64).int32(message.minSdkVersion);
+    if (message.min_sdk_version !== 0) {
+      writer.uint32(64).int32(message.min_sdk_version);
     }
-    if (message.targetSdkVersion !== 0) {
-      writer.uint32(72).int32(message.targetSdkVersion);
+    if (message.target_sdk_version !== 0) {
+      writer.uint32(72).int32(message.target_sdk_version);
     }
-    if (message.downloadToken !== "") {
-      writer.uint32(82).string(message.downloadToken);
+    if (message.download_token !== "") {
+      writer.uint32(82).string(message.download_token);
     }
-    if (message.downloadUrl !== "") {
-      writer.uint32(90).string(message.downloadUrl);
+    if (message.download_url !== "") {
+      writer.uint32(90).string(message.download_url);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(98).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(98).string(message.created_at);
     }
-    if (message.isActive !== false) {
-      writer.uint32(104).bool(message.isActive);
+    if (message.is_active !== false) {
+      writer.uint32(104).bool(message.is_active);
     }
     if (message.downloads !== 0) {
       writer.uint32(112).int32(message.downloads);
     }
-    if (message.panelUrl !== "") {
-      writer.uint32(122).string(message.panelUrl);
+    if (message.panel_url !== "") {
+      writer.uint32(122).string(message.panel_url);
     }
     return writer;
   },
@@ -4301,7 +4802,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.fileName = reader.string();
+          message.file_name = reader.string();
           continue;
         }
         case 4: {
@@ -4309,7 +4810,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.fileSize = longToNumber(reader.int64());
+          message.file_size = longToNumber(reader.int64());
           continue;
         }
         case 5: {
@@ -4325,7 +4826,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.packageName = reader.string();
+          message.package_name = reader.string();
           continue;
         }
         case 7: {
@@ -4333,7 +4834,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.versionCode = reader.int32();
+          message.version_code = reader.int32();
           continue;
         }
         case 8: {
@@ -4341,7 +4842,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.minSdkVersion = reader.int32();
+          message.min_sdk_version = reader.int32();
           continue;
         }
         case 9: {
@@ -4349,7 +4850,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.targetSdkVersion = reader.int32();
+          message.target_sdk_version = reader.int32();
           continue;
         }
         case 10: {
@@ -4357,7 +4858,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.downloadToken = reader.string();
+          message.download_token = reader.string();
           continue;
         }
         case 11: {
@@ -4365,7 +4866,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.downloadUrl = reader.string();
+          message.download_url = reader.string();
           continue;
         }
         case 12: {
@@ -4373,7 +4874,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
         case 13: {
@@ -4381,7 +4882,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.isActive = reader.bool();
+          message.is_active = reader.bool();
           continue;
         }
         case 14: {
@@ -4397,7 +4898,7 @@ export const ApkInfo: MessageFns<ApkInfo> = {
             break;
           }
 
-          message.panelUrl = reader.string();
+          message.panel_url = reader.string();
           continue;
         }
       }
@@ -4413,59 +4914,59 @@ export const ApkInfo: MessageFns<ApkInfo> = {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       version: isSet(object.version) ? globalThis.String(object.version) : "",
-      fileName: isSet(object.fileName)
+      file_name: isSet(object.fileName)
         ? globalThis.String(object.fileName)
         : isSet(object.file_name)
         ? globalThis.String(object.file_name)
         : "",
-      fileSize: isSet(object.fileSize)
+      file_size: isSet(object.fileSize)
         ? globalThis.Number(object.fileSize)
         : isSet(object.file_size)
         ? globalThis.Number(object.file_size)
         : 0,
       description: isSet(object.description) ? globalThis.String(object.description) : "",
-      packageName: isSet(object.packageName)
+      package_name: isSet(object.packageName)
         ? globalThis.String(object.packageName)
         : isSet(object.package_name)
         ? globalThis.String(object.package_name)
         : "",
-      versionCode: isSet(object.versionCode)
+      version_code: isSet(object.versionCode)
         ? globalThis.Number(object.versionCode)
         : isSet(object.version_code)
         ? globalThis.Number(object.version_code)
         : 0,
-      minSdkVersion: isSet(object.minSdkVersion)
+      min_sdk_version: isSet(object.minSdkVersion)
         ? globalThis.Number(object.minSdkVersion)
         : isSet(object.min_sdk_version)
         ? globalThis.Number(object.min_sdk_version)
         : 0,
-      targetSdkVersion: isSet(object.targetSdkVersion)
+      target_sdk_version: isSet(object.targetSdkVersion)
         ? globalThis.Number(object.targetSdkVersion)
         : isSet(object.target_sdk_version)
         ? globalThis.Number(object.target_sdk_version)
         : 0,
-      downloadToken: isSet(object.downloadToken)
+      download_token: isSet(object.downloadToken)
         ? globalThis.String(object.downloadToken)
         : isSet(object.download_token)
         ? globalThis.String(object.download_token)
         : "",
-      downloadUrl: isSet(object.downloadUrl)
+      download_url: isSet(object.downloadUrl)
         ? globalThis.String(object.downloadUrl)
         : isSet(object.download_url)
         ? globalThis.String(object.download_url)
         : "",
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
         : "",
-      isActive: isSet(object.isActive)
+      is_active: isSet(object.isActive)
         ? globalThis.Boolean(object.isActive)
         : isSet(object.is_active)
         ? globalThis.Boolean(object.is_active)
         : false,
       downloads: isSet(object.downloads) ? globalThis.Number(object.downloads) : 0,
-      panelUrl: isSet(object.panelUrl)
+      panel_url: isSet(object.panelUrl)
         ? globalThis.String(object.panelUrl)
         : isSet(object.panel_url)
         ? globalThis.String(object.panel_url)
@@ -4481,44 +4982,44 @@ export const ApkInfo: MessageFns<ApkInfo> = {
     if (message.version !== "") {
       obj.version = message.version;
     }
-    if (message.fileName !== "") {
-      obj.fileName = message.fileName;
+    if (message.file_name !== "") {
+      obj.fileName = message.file_name;
     }
-    if (message.fileSize !== 0) {
-      obj.fileSize = Math.round(message.fileSize);
+    if (message.file_size !== 0) {
+      obj.fileSize = Math.round(message.file_size);
     }
     if (message.description !== "") {
       obj.description = message.description;
     }
-    if (message.packageName !== "") {
-      obj.packageName = message.packageName;
+    if (message.package_name !== "") {
+      obj.packageName = message.package_name;
     }
-    if (message.versionCode !== 0) {
-      obj.versionCode = Math.round(message.versionCode);
+    if (message.version_code !== 0) {
+      obj.versionCode = Math.round(message.version_code);
     }
-    if (message.minSdkVersion !== 0) {
-      obj.minSdkVersion = Math.round(message.minSdkVersion);
+    if (message.min_sdk_version !== 0) {
+      obj.minSdkVersion = Math.round(message.min_sdk_version);
     }
-    if (message.targetSdkVersion !== 0) {
-      obj.targetSdkVersion = Math.round(message.targetSdkVersion);
+    if (message.target_sdk_version !== 0) {
+      obj.targetSdkVersion = Math.round(message.target_sdk_version);
     }
-    if (message.downloadToken !== "") {
-      obj.downloadToken = message.downloadToken;
+    if (message.download_token !== "") {
+      obj.downloadToken = message.download_token;
     }
-    if (message.downloadUrl !== "") {
-      obj.downloadUrl = message.downloadUrl;
+    if (message.download_url !== "") {
+      obj.downloadUrl = message.download_url;
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
-    if (message.isActive !== false) {
-      obj.isActive = message.isActive;
+    if (message.is_active !== false) {
+      obj.isActive = message.is_active;
     }
     if (message.downloads !== 0) {
       obj.downloads = Math.round(message.downloads);
     }
-    if (message.panelUrl !== "") {
-      obj.panelUrl = message.panelUrl;
+    if (message.panel_url !== "") {
+      obj.panelUrl = message.panel_url;
     }
     return obj;
   },
@@ -4530,19 +5031,19 @@ export const ApkInfo: MessageFns<ApkInfo> = {
     const message = createBaseApkInfo();
     message.id = object.id ?? 0;
     message.version = object.version ?? "";
-    message.fileName = object.fileName ?? "";
-    message.fileSize = object.fileSize ?? 0;
+    message.file_name = object.file_name ?? "";
+    message.file_size = object.file_size ?? 0;
     message.description = object.description ?? "";
-    message.packageName = object.packageName ?? "";
-    message.versionCode = object.versionCode ?? 0;
-    message.minSdkVersion = object.minSdkVersion ?? 0;
-    message.targetSdkVersion = object.targetSdkVersion ?? 0;
-    message.downloadToken = object.downloadToken ?? "";
-    message.downloadUrl = object.downloadUrl ?? "";
-    message.createdAt = object.createdAt ?? "";
-    message.isActive = object.isActive ?? false;
+    message.package_name = object.package_name ?? "";
+    message.version_code = object.version_code ?? 0;
+    message.min_sdk_version = object.min_sdk_version ?? 0;
+    message.target_sdk_version = object.target_sdk_version ?? 0;
+    message.download_token = object.download_token ?? "";
+    message.download_url = object.download_url ?? "";
+    message.created_at = object.created_at ?? "";
+    message.is_active = object.is_active ?? false;
     message.downloads = object.downloads ?? 0;
-    message.panelUrl = object.panelUrl ?? "";
+    message.panel_url = object.panel_url ?? "";
     return message;
   },
 };
@@ -4607,20 +5108,98 @@ export const ApkList: MessageFns<ApkList> = {
   },
 };
 
+function createBaseApkPage(): ApkPage {
+  return { data: [], page: undefined };
+}
+
+export const ApkPage: MessageFns<ApkPage> = {
+  encode(message: ApkPage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.data) {
+      ApkInfo.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      CursorPageInfo.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ApkPage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseApkPage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.data.push(ApkInfo.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = CursorPageInfo.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ApkPage {
+    return {
+      data: globalThis.Array.isArray(object?.data) ? object.data.map((e: any) => ApkInfo.fromJSON(e)) : [],
+      page: isSet(object.page) ? CursorPageInfo.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ApkPage): unknown {
+    const obj: any = {};
+    if (message.data?.length) {
+      obj.data = message.data.map((e) => ApkInfo.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = CursorPageInfo.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ApkPage>, I>>(base?: I): ApkPage {
+    return ApkPage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ApkPage>, I>>(object: I): ApkPage {
+    const message = createBaseApkPage();
+    message.data = object.data?.map((e) => ApkInfo.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? CursorPageInfo.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseApkUploadResponse(): ApkUploadResponse {
   return {
     id: 0,
     version: "",
-    fileName: "",
-    fileSize: 0,
+    file_name: "",
+    file_size: 0,
     description: "",
-    packageName: "",
-    versionCode: 0,
-    minSdkVersion: 0,
-    targetSdkVersion: 0,
-    downloadToken: "",
-    downloadUrl: "",
-    createdAt: "",
+    package_name: "",
+    version_code: 0,
+    min_sdk_version: 0,
+    target_sdk_version: 0,
+    download_token: "",
+    download_url: "",
+    created_at: "",
   };
 }
 
@@ -4632,35 +5211,35 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
     if (message.version !== "") {
       writer.uint32(18).string(message.version);
     }
-    if (message.fileName !== "") {
-      writer.uint32(26).string(message.fileName);
+    if (message.file_name !== "") {
+      writer.uint32(26).string(message.file_name);
     }
-    if (message.fileSize !== 0) {
-      writer.uint32(32).int64(message.fileSize);
+    if (message.file_size !== 0) {
+      writer.uint32(32).int64(message.file_size);
     }
     if (message.description !== "") {
       writer.uint32(42).string(message.description);
     }
-    if (message.packageName !== "") {
-      writer.uint32(50).string(message.packageName);
+    if (message.package_name !== "") {
+      writer.uint32(50).string(message.package_name);
     }
-    if (message.versionCode !== 0) {
-      writer.uint32(56).int32(message.versionCode);
+    if (message.version_code !== 0) {
+      writer.uint32(56).int32(message.version_code);
     }
-    if (message.minSdkVersion !== 0) {
-      writer.uint32(64).int32(message.minSdkVersion);
+    if (message.min_sdk_version !== 0) {
+      writer.uint32(64).int32(message.min_sdk_version);
     }
-    if (message.targetSdkVersion !== 0) {
-      writer.uint32(72).int32(message.targetSdkVersion);
+    if (message.target_sdk_version !== 0) {
+      writer.uint32(72).int32(message.target_sdk_version);
     }
-    if (message.downloadToken !== "") {
-      writer.uint32(82).string(message.downloadToken);
+    if (message.download_token !== "") {
+      writer.uint32(82).string(message.download_token);
     }
-    if (message.downloadUrl !== "") {
-      writer.uint32(90).string(message.downloadUrl);
+    if (message.download_url !== "") {
+      writer.uint32(90).string(message.download_url);
     }
-    if (message.createdAt !== "") {
-      writer.uint32(98).string(message.createdAt);
+    if (message.created_at !== "") {
+      writer.uint32(98).string(message.created_at);
     }
     return writer;
   },
@@ -4693,7 +5272,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.fileName = reader.string();
+          message.file_name = reader.string();
           continue;
         }
         case 4: {
@@ -4701,7 +5280,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.fileSize = longToNumber(reader.int64());
+          message.file_size = longToNumber(reader.int64());
           continue;
         }
         case 5: {
@@ -4717,7 +5296,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.packageName = reader.string();
+          message.package_name = reader.string();
           continue;
         }
         case 7: {
@@ -4725,7 +5304,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.versionCode = reader.int32();
+          message.version_code = reader.int32();
           continue;
         }
         case 8: {
@@ -4733,7 +5312,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.minSdkVersion = reader.int32();
+          message.min_sdk_version = reader.int32();
           continue;
         }
         case 9: {
@@ -4741,7 +5320,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.targetSdkVersion = reader.int32();
+          message.target_sdk_version = reader.int32();
           continue;
         }
         case 10: {
@@ -4749,7 +5328,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.downloadToken = reader.string();
+          message.download_token = reader.string();
           continue;
         }
         case 11: {
@@ -4757,7 +5336,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.downloadUrl = reader.string();
+          message.download_url = reader.string();
           continue;
         }
         case 12: {
@@ -4765,7 +5344,7 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
             break;
           }
 
-          message.createdAt = reader.string();
+          message.created_at = reader.string();
           continue;
         }
       }
@@ -4781,48 +5360,48 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
     return {
       id: isSet(object.id) ? globalThis.Number(object.id) : 0,
       version: isSet(object.version) ? globalThis.String(object.version) : "",
-      fileName: isSet(object.fileName)
+      file_name: isSet(object.fileName)
         ? globalThis.String(object.fileName)
         : isSet(object.file_name)
         ? globalThis.String(object.file_name)
         : "",
-      fileSize: isSet(object.fileSize)
+      file_size: isSet(object.fileSize)
         ? globalThis.Number(object.fileSize)
         : isSet(object.file_size)
         ? globalThis.Number(object.file_size)
         : 0,
       description: isSet(object.description) ? globalThis.String(object.description) : "",
-      packageName: isSet(object.packageName)
+      package_name: isSet(object.packageName)
         ? globalThis.String(object.packageName)
         : isSet(object.package_name)
         ? globalThis.String(object.package_name)
         : "",
-      versionCode: isSet(object.versionCode)
+      version_code: isSet(object.versionCode)
         ? globalThis.Number(object.versionCode)
         : isSet(object.version_code)
         ? globalThis.Number(object.version_code)
         : 0,
-      minSdkVersion: isSet(object.minSdkVersion)
+      min_sdk_version: isSet(object.minSdkVersion)
         ? globalThis.Number(object.minSdkVersion)
         : isSet(object.min_sdk_version)
         ? globalThis.Number(object.min_sdk_version)
         : 0,
-      targetSdkVersion: isSet(object.targetSdkVersion)
+      target_sdk_version: isSet(object.targetSdkVersion)
         ? globalThis.Number(object.targetSdkVersion)
         : isSet(object.target_sdk_version)
         ? globalThis.Number(object.target_sdk_version)
         : 0,
-      downloadToken: isSet(object.downloadToken)
+      download_token: isSet(object.downloadToken)
         ? globalThis.String(object.downloadToken)
         : isSet(object.download_token)
         ? globalThis.String(object.download_token)
         : "",
-      downloadUrl: isSet(object.downloadUrl)
+      download_url: isSet(object.downloadUrl)
         ? globalThis.String(object.downloadUrl)
         : isSet(object.download_url)
         ? globalThis.String(object.download_url)
         : "",
-      createdAt: isSet(object.createdAt)
+      created_at: isSet(object.createdAt)
         ? globalThis.String(object.createdAt)
         : isSet(object.created_at)
         ? globalThis.String(object.created_at)
@@ -4838,35 +5417,35 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
     if (message.version !== "") {
       obj.version = message.version;
     }
-    if (message.fileName !== "") {
-      obj.fileName = message.fileName;
+    if (message.file_name !== "") {
+      obj.fileName = message.file_name;
     }
-    if (message.fileSize !== 0) {
-      obj.fileSize = Math.round(message.fileSize);
+    if (message.file_size !== 0) {
+      obj.fileSize = Math.round(message.file_size);
     }
     if (message.description !== "") {
       obj.description = message.description;
     }
-    if (message.packageName !== "") {
-      obj.packageName = message.packageName;
+    if (message.package_name !== "") {
+      obj.packageName = message.package_name;
     }
-    if (message.versionCode !== 0) {
-      obj.versionCode = Math.round(message.versionCode);
+    if (message.version_code !== 0) {
+      obj.versionCode = Math.round(message.version_code);
     }
-    if (message.minSdkVersion !== 0) {
-      obj.minSdkVersion = Math.round(message.minSdkVersion);
+    if (message.min_sdk_version !== 0) {
+      obj.minSdkVersion = Math.round(message.min_sdk_version);
     }
-    if (message.targetSdkVersion !== 0) {
-      obj.targetSdkVersion = Math.round(message.targetSdkVersion);
+    if (message.target_sdk_version !== 0) {
+      obj.targetSdkVersion = Math.round(message.target_sdk_version);
     }
-    if (message.downloadToken !== "") {
-      obj.downloadToken = message.downloadToken;
+    if (message.download_token !== "") {
+      obj.downloadToken = message.download_token;
     }
-    if (message.downloadUrl !== "") {
-      obj.downloadUrl = message.downloadUrl;
+    if (message.download_url !== "") {
+      obj.downloadUrl = message.download_url;
     }
-    if (message.createdAt !== "") {
-      obj.createdAt = message.createdAt;
+    if (message.created_at !== "") {
+      obj.createdAt = message.created_at;
     }
     return obj;
   },
@@ -4878,62 +5457,62 @@ export const ApkUploadResponse: MessageFns<ApkUploadResponse> = {
     const message = createBaseApkUploadResponse();
     message.id = object.id ?? 0;
     message.version = object.version ?? "";
-    message.fileName = object.fileName ?? "";
-    message.fileSize = object.fileSize ?? 0;
+    message.file_name = object.file_name ?? "";
+    message.file_size = object.file_size ?? 0;
     message.description = object.description ?? "";
-    message.packageName = object.packageName ?? "";
-    message.versionCode = object.versionCode ?? 0;
-    message.minSdkVersion = object.minSdkVersion ?? 0;
-    message.targetSdkVersion = object.targetSdkVersion ?? 0;
-    message.downloadToken = object.downloadToken ?? "";
-    message.downloadUrl = object.downloadUrl ?? "";
-    message.createdAt = object.createdAt ?? "";
+    message.package_name = object.package_name ?? "";
+    message.version_code = object.version_code ?? 0;
+    message.min_sdk_version = object.min_sdk_version ?? 0;
+    message.target_sdk_version = object.target_sdk_version ?? 0;
+    message.download_token = object.download_token ?? "";
+    message.download_url = object.download_url ?? "";
+    message.created_at = object.created_at ?? "";
     return message;
   },
 };
 
 function createBaseApkUpdateCheckResponse(): ApkUpdateCheckResponse {
   return {
-    updateAvailable: false,
-    latestVersion: "",
-    packageName: "",
-    versionCode: 0,
-    downloadUrl: "",
+    update_available: false,
+    latest_version: "",
+    package_name: "",
+    version_code: 0,
+    download_url: "",
     description: "",
-    fileSize: 0,
-    minSdkVersion: 0,
-    targetSdkVersion: 0,
+    file_size: 0,
+    min_sdk_version: 0,
+    target_sdk_version: 0,
   };
 }
 
 export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
   encode(message: ApkUpdateCheckResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.updateAvailable !== false) {
-      writer.uint32(8).bool(message.updateAvailable);
+    if (message.update_available !== false) {
+      writer.uint32(8).bool(message.update_available);
     }
-    if (message.latestVersion !== "") {
-      writer.uint32(18).string(message.latestVersion);
+    if (message.latest_version !== "") {
+      writer.uint32(18).string(message.latest_version);
     }
-    if (message.packageName !== "") {
-      writer.uint32(26).string(message.packageName);
+    if (message.package_name !== "") {
+      writer.uint32(26).string(message.package_name);
     }
-    if (message.versionCode !== 0) {
-      writer.uint32(32).int32(message.versionCode);
+    if (message.version_code !== 0) {
+      writer.uint32(32).int32(message.version_code);
     }
-    if (message.downloadUrl !== "") {
-      writer.uint32(42).string(message.downloadUrl);
+    if (message.download_url !== "") {
+      writer.uint32(42).string(message.download_url);
     }
     if (message.description !== "") {
       writer.uint32(50).string(message.description);
     }
-    if (message.fileSize !== 0) {
-      writer.uint32(56).int64(message.fileSize);
+    if (message.file_size !== 0) {
+      writer.uint32(56).int64(message.file_size);
     }
-    if (message.minSdkVersion !== 0) {
-      writer.uint32(64).int32(message.minSdkVersion);
+    if (message.min_sdk_version !== 0) {
+      writer.uint32(64).int32(message.min_sdk_version);
     }
-    if (message.targetSdkVersion !== 0) {
-      writer.uint32(72).int32(message.targetSdkVersion);
+    if (message.target_sdk_version !== 0) {
+      writer.uint32(72).int32(message.target_sdk_version);
     }
     return writer;
   },
@@ -4950,7 +5529,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.updateAvailable = reader.bool();
+          message.update_available = reader.bool();
           continue;
         }
         case 2: {
@@ -4958,7 +5537,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.latestVersion = reader.string();
+          message.latest_version = reader.string();
           continue;
         }
         case 3: {
@@ -4966,7 +5545,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.packageName = reader.string();
+          message.package_name = reader.string();
           continue;
         }
         case 4: {
@@ -4974,7 +5553,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.versionCode = reader.int32();
+          message.version_code = reader.int32();
           continue;
         }
         case 5: {
@@ -4982,7 +5561,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.downloadUrl = reader.string();
+          message.download_url = reader.string();
           continue;
         }
         case 6: {
@@ -4998,7 +5577,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.fileSize = longToNumber(reader.int64());
+          message.file_size = longToNumber(reader.int64());
           continue;
         }
         case 8: {
@@ -5006,7 +5585,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.minSdkVersion = reader.int32();
+          message.min_sdk_version = reader.int32();
           continue;
         }
         case 9: {
@@ -5014,7 +5593,7 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
             break;
           }
 
-          message.targetSdkVersion = reader.int32();
+          message.target_sdk_version = reader.int32();
           continue;
         }
       }
@@ -5028,43 +5607,43 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
 
   fromJSON(object: any): ApkUpdateCheckResponse {
     return {
-      updateAvailable: isSet(object.updateAvailable)
+      update_available: isSet(object.updateAvailable)
         ? globalThis.Boolean(object.updateAvailable)
         : isSet(object.update_available)
         ? globalThis.Boolean(object.update_available)
         : false,
-      latestVersion: isSet(object.latestVersion)
+      latest_version: isSet(object.latestVersion)
         ? globalThis.String(object.latestVersion)
         : isSet(object.latest_version)
         ? globalThis.String(object.latest_version)
         : "",
-      packageName: isSet(object.packageName)
+      package_name: isSet(object.packageName)
         ? globalThis.String(object.packageName)
         : isSet(object.package_name)
         ? globalThis.String(object.package_name)
         : "",
-      versionCode: isSet(object.versionCode)
+      version_code: isSet(object.versionCode)
         ? globalThis.Number(object.versionCode)
         : isSet(object.version_code)
         ? globalThis.Number(object.version_code)
         : 0,
-      downloadUrl: isSet(object.downloadUrl)
+      download_url: isSet(object.downloadUrl)
         ? globalThis.String(object.downloadUrl)
         : isSet(object.download_url)
         ? globalThis.String(object.download_url)
         : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
-      fileSize: isSet(object.fileSize)
+      file_size: isSet(object.fileSize)
         ? globalThis.Number(object.fileSize)
         : isSet(object.file_size)
         ? globalThis.Number(object.file_size)
         : 0,
-      minSdkVersion: isSet(object.minSdkVersion)
+      min_sdk_version: isSet(object.minSdkVersion)
         ? globalThis.Number(object.minSdkVersion)
         : isSet(object.min_sdk_version)
         ? globalThis.Number(object.min_sdk_version)
         : 0,
-      targetSdkVersion: isSet(object.targetSdkVersion)
+      target_sdk_version: isSet(object.targetSdkVersion)
         ? globalThis.Number(object.targetSdkVersion)
         : isSet(object.target_sdk_version)
         ? globalThis.Number(object.target_sdk_version)
@@ -5074,32 +5653,32 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
 
   toJSON(message: ApkUpdateCheckResponse): unknown {
     const obj: any = {};
-    if (message.updateAvailable !== false) {
-      obj.updateAvailable = message.updateAvailable;
+    if (message.update_available !== false) {
+      obj.updateAvailable = message.update_available;
     }
-    if (message.latestVersion !== "") {
-      obj.latestVersion = message.latestVersion;
+    if (message.latest_version !== "") {
+      obj.latestVersion = message.latest_version;
     }
-    if (message.packageName !== "") {
-      obj.packageName = message.packageName;
+    if (message.package_name !== "") {
+      obj.packageName = message.package_name;
     }
-    if (message.versionCode !== 0) {
-      obj.versionCode = Math.round(message.versionCode);
+    if (message.version_code !== 0) {
+      obj.versionCode = Math.round(message.version_code);
     }
-    if (message.downloadUrl !== "") {
-      obj.downloadUrl = message.downloadUrl;
+    if (message.download_url !== "") {
+      obj.downloadUrl = message.download_url;
     }
     if (message.description !== "") {
       obj.description = message.description;
     }
-    if (message.fileSize !== 0) {
-      obj.fileSize = Math.round(message.fileSize);
+    if (message.file_size !== 0) {
+      obj.fileSize = Math.round(message.file_size);
     }
-    if (message.minSdkVersion !== 0) {
-      obj.minSdkVersion = Math.round(message.minSdkVersion);
+    if (message.min_sdk_version !== 0) {
+      obj.minSdkVersion = Math.round(message.min_sdk_version);
     }
-    if (message.targetSdkVersion !== 0) {
-      obj.targetSdkVersion = Math.round(message.targetSdkVersion);
+    if (message.target_sdk_version !== 0) {
+      obj.targetSdkVersion = Math.round(message.target_sdk_version);
     }
     return obj;
   },
@@ -5109,15 +5688,15 @@ export const ApkUpdateCheckResponse: MessageFns<ApkUpdateCheckResponse> = {
   },
   fromPartial<I extends Exact<DeepPartial<ApkUpdateCheckResponse>, I>>(object: I): ApkUpdateCheckResponse {
     const message = createBaseApkUpdateCheckResponse();
-    message.updateAvailable = object.updateAvailable ?? false;
-    message.latestVersion = object.latestVersion ?? "";
-    message.packageName = object.packageName ?? "";
-    message.versionCode = object.versionCode ?? 0;
-    message.downloadUrl = object.downloadUrl ?? "";
+    message.update_available = object.update_available ?? false;
+    message.latest_version = object.latest_version ?? "";
+    message.package_name = object.package_name ?? "";
+    message.version_code = object.version_code ?? 0;
+    message.download_url = object.download_url ?? "";
     message.description = object.description ?? "";
-    message.fileSize = object.fileSize ?? 0;
-    message.minSdkVersion = object.minSdkVersion ?? 0;
-    message.targetSdkVersion = object.targetSdkVersion ?? 0;
+    message.file_size = object.file_size ?? 0;
+    message.min_sdk_version = object.min_sdk_version ?? 0;
+    message.target_sdk_version = object.target_sdk_version ?? 0;
     return message;
   },
 };
@@ -5200,14 +5779,14 @@ export const ApkVersion: MessageFns<ApkVersion> = {
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 
-export type DeepPartial<T> = T extends Builtin ? T
+type DeepPartial<T> = T extends Builtin ? T
   : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
   : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
 
 type KeysOfUnion<T> = T extends T ? keyof T : never;
-export type Exact<P, I extends P> = P extends Builtin ? P
+type Exact<P, I extends P> = P extends Builtin ? P
   : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
 
 function longToNumber(int64: { toString(): string }): number {
@@ -5225,7 +5804,7 @@ function isSet(value: any): boolean {
   return value !== null && value !== undefined;
 }
 
-export interface MessageFns<T> {
+interface MessageFns<T> {
   encode(message: T, writer?: BinaryWriter): BinaryWriter;
   decode(input: BinaryReader | Uint8Array, length?: number): T;
   fromJSON(object: any): T;
