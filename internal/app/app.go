@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
@@ -24,6 +25,11 @@ type App struct {
 }
 
 func New(cfg config.Config) (*App, error) {
+	tokens, err := auth.NewTokenService(cfg.JWTSecret)
+	if err != nil {
+		return nil, err
+	}
+
 	db, err := database.Open(cfg.Database)
 	if err != nil {
 		return nil, err
@@ -38,7 +44,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	router := NewRouter(db, cfg)
+	router := NewRouter(db, cfg, tokens)
 	httpServer := &http.Server{
 		Addr:    cfg.APIAddr,
 		Handler: router,

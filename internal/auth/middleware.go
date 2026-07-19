@@ -7,7 +7,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 )
 
-func AuthMiddleware() gin.HandlerFunc {
+func AuthMiddleware(ts *TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr, ok := ExtractBearerToken(c)
 		if !ok {
@@ -16,7 +16,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		claims, err := parseToken(tokenStr, accessTokenType)
+		claims, err := ts.ParseAccessToken(tokenStr)
 		if err != nil {
 			server.RespondError(c, http.StatusUnauthorized, "invalid token")
 			c.Abort()
