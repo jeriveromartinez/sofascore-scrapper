@@ -27,6 +27,14 @@ func IsNewerVersion(current, candidate string) (bool, error) {
 	return false, nil
 }
 
+func ParseSemverComponents(v string) (major, minor, patch uint64, err error) {
+	parts, err := parseVersion(v)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return uint64(parts[0]), uint64(parts[1]), uint64(parts[2]), nil
+}
+
 func parseVersion(v string) ([3]int, error) {
 	parts := strings.Split(v, ".")
 	if len(parts) != 3 {

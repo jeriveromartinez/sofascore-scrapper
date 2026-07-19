@@ -3,6 +3,7 @@ package apk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -19,6 +20,10 @@ func NewRepository(db *gorm.DB) *Repository {
 }
 
 func (r *Repository) Create(version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
+	major, minor, patch, err := ParseSemverComponents(version)
+	if err != nil {
+		return nil, fmt.Errorf("invalid semver %q: %w", version, err)
+	}
 	apk := &ApkVersion{
 		Version:          version,
 		FileName:         fileName,
@@ -31,6 +36,9 @@ func (r *Repository) Create(version, fileName, filePath, description, packageNam
 		MinSDKVersion:    minSDK,
 		TargetSDKVersion: targetSDK,
 		DownloadToken:    uuid.New().String(),
+		VersionMajor:     major,
+		VersionMinor:     minor,
+		VersionPatch:     patch,
 	}
 
 	lastVersion, err := r.GetLatest(apk.PackageName)
@@ -46,25 +54,18 @@ func (r *Repository) Create(version, fileName, filePath, description, packageNam
 }
 
 func (r *Repository) GetLatest(packageName string) (*ApkVersion, error) {
-	var versions []ApkVersion
-	if err := r.db.Where("is_active = ? AND package_name = ?", true, packageName).Find(&versions).Error; err != nil {
+	var apk ApkVersion
+	err := r.db.Where("package_name = ? AND is_active = ?", packageName, true).
+		Order("version_major DESC, version_minor DESC, version_patch DESC, id DESC").
+		Limit(1).
+		First(&apk).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("no active APK version found")
+		}
 		return nil, err
 	}
-	if len(versions) == 0 {
-		return nil, errors.New("no active APK version found")
-	}
-
-	latest := &versions[0]
-	for i := 1; i < len(versions); i++ {
-		newer, err := IsNewerVersion(latest.Version, versions[i].Version)
-		if err != nil {
-			continue
-		}
-		if newer {
-			latest = &versions[i]
-		}
-	}
-	return latest, nil
+	return &apk, nil
 }
 
 func (r *Repository) GetByID(id uint) (*ApkVersion, error) {
