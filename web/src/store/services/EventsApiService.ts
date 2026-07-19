@@ -1,6 +1,6 @@
 import { BaseApiService } from "./BaseApiService";
-import { EventsList } from "../../proto/api";
-import type { EventsQuery, EventsResponse } from "./models";
+import { EventsList, EventPage } from "../../proto/api";
+import type { EventsQuery, EventsResponse, EventPageResponse } from "./models";
 
 function toQueryString(query: EventsQuery): string {
   const params = new URLSearchParams();
@@ -21,6 +21,18 @@ export class EventsApiService extends BaseApiService {
 
   async getEvents(query: EventsQuery = {}): Promise<EventsResponse> {
     return this.get(toQueryString(query), EventsList);
+  }
+
+  async getEventPage(
+    cursor?: string,
+    limit?: number,
+  ): Promise<EventPageResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    const url = qs ? `/page?${qs}` : "/page";
+    return this.get(url, EventPage);
   }
 }
 
