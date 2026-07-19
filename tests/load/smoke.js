@@ -1,5 +1,5 @@
 import http from "k6/http";
-import { check } from "k6";
+import { check, sleep } from "k6";
 import {
   BASE_URL,
   thresholds,
@@ -8,7 +8,11 @@ import {
   makeAuthHeaders,
   encodeLoginRequest,
   encodeAuthRequest,
+  decodeProtoStringField,
 } from "./common.js";
+
+// AuthResponse.token is protobuf field 3.
+const AUTH_TOKEN_FIELD = 3;
 
 export { thresholds };
 
@@ -26,30 +30,35 @@ const LOGIN_PASSWORD = __ENV.TEST_PASSWORD || "admin123";
 const INVITE_TOKEN = __ENV.INVITE_TOKEN || "";
 
 export function setup() {
-  const loginURL = `${BASE_URL}/api/web/v1/users/login`;
-  let loginRes = http.post(loginURL, encodeLoginRequest(LOGIN_EMAIL, LOGIN_PASSWORD), {
-    headers: HEADERS_PROTOBUF,
-  });
+  // Responses are protobuf; request binary bodies and decode the token field.
+  const params = { headers: HEADERS_PROTOBUF, responseType: "binary" };
+  let res = http.post(
+    `${BASE_URL}/api/web/v1/users/login`,
+    encodeLoginRequest(LOGIN_EMAIL, LOGIN_PASSWORD),
+    params,
+  );
 
   // On a fresh stack the operator does not exist yet; register it with the
   // bootstrap invitation. The first account is promoted to admin server-side,
   // which is required for the admin endpoints exercised below.
-  if (loginRes.status !== 200 && INVITE_TOKEN) {
-    const regRes = http.post(
+  if (res.status !== 200 && INVITE_TOKEN) {
+    res = http.post(
       `${BASE_URL}/api/web/v1/users/register`,
       encodeAuthRequest(LOGIN_EMAIL, LOGIN_PASSWORD, INVITE_TOKEN),
-      { headers: HEADERS_PROTOBUF },
+      params,
     );
-    if (regRes.status === 201) {
-      return { token: regRes.json("token") };
+    if (res.status !== 201) {
+      throw new Error(`setup register failed: ${res.status}`);
     }
-    throw new Error(`setup register failed: ${regRes.status} ${regRes.body}`);
+  } else if (res.status !== 200) {
+    throw new Error(`setup login failed: ${res.status}`);
   }
 
-  if (loginRes.status !== 200) {
-    throw new Error(`setup login failed: ${loginRes.status} ${loginRes.body}`);
+  const token = decodeProtoStringField(res.body, AUTH_TOKEN_FIELD);
+  if (!token) {
+    throw new Error("setup could not extract token from auth response");
   }
-  return { token: loginRes.json("token") };
+  return { token };
 }
 
 export default function (data) {
@@ -87,6 +96,10 @@ export default function (data) {
   checks["stats top-events"] = checkStatus200(top);
 
   check(null, checks);
+
+  // Think-time keeps the shared admin bucket (RateLimitAdmin = 300/min, keyed
+  // per user) from tripping: 5 VUs x 4 admin calls / 5s ~= 240 req/min.
+  sleep(5);
 }
 
 export function teardown() {}

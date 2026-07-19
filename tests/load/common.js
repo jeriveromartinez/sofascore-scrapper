@@ -137,6 +137,54 @@ export function encodeLoginRequest(email, password) {
   );
 }
 
+// Minimal protobuf reader: extracts a length-delimited (string) field by number
+// from a binary response body. Responses are protobuf-only (no JSON mode), so
+// res.json() cannot be used; request with responseType: "binary".
+export function decodeProtoStringField(buffer, targetField) {
+  const bytes = new Uint8Array(buffer);
+  let i = 0;
+  while (i < bytes.length) {
+    let tag = 0;
+    let shift = 0;
+    while (i < bytes.length) {
+      const b = bytes[i++];
+      tag |= (b & 0x7f) << shift;
+      if ((b & 0x80) === 0) break;
+      shift += 7;
+    }
+    const fieldNum = tag >> 3;
+    const wireType = tag & 0x7;
+    if (wireType === 2) {
+      let len = 0;
+      shift = 0;
+      while (i < bytes.length) {
+        const b = bytes[i++];
+        len |= (b & 0x7f) << shift;
+        if ((b & 0x80) === 0) break;
+        shift += 7;
+      }
+      if (fieldNum === targetField) {
+        let s = "";
+        for (let j = 0; j < len; j++) {
+          s += String.fromCharCode(bytes[i + j]);
+        }
+        return s;
+      }
+      i += len;
+    } else if (wireType === 0) {
+      while (i < bytes.length && (bytes[i] & 0x80) !== 0) i++;
+      i++;
+    } else if (wireType === 5) {
+      i += 4;
+    } else if (wireType === 1) {
+      i += 8;
+    } else {
+      break;
+    }
+  }
+  return "";
+}
+
 export function encodeAuthRequest(email, password, invitationToken) {
   return toArrayBuffer(
     concatByteArrays(
