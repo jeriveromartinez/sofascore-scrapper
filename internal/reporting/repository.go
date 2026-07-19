@@ -1,6 +1,10 @@
 package reporting
 
-import "gorm.io/gorm"
+import (
+	"strings"
+
+	"gorm.io/gorm"
+)
 
 type EventStats struct {
 	SofaScoreEventId int64
@@ -20,12 +24,34 @@ func (r *Repository) SaveCrash(report CrashReport) error {
 }
 
 func (r *Repository) GetTopEvents(limit int) ([]EventStats, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
 	var stats []EventStats
-	result := r.db.Table("playback_logs").
-		Select("content, count(*) as view_count").
-		Group("content").
-		Order("view_count desc").
-		Limit(limit).
-		Scan(&stats)
+	var result *gorm.DB
+
+	if strings.Contains(r.db.Dialector.Name(), "sqlite") {
+		result = r.db.Raw(`
+			SELECT CAST(content AS INTEGER) AS sofa_score_event_id,
+			       COUNT(*) AS view_count
+			FROM playback_logs
+			WHERE content NOT GLOB '*[^0-9]*' AND content != ''
+			GROUP BY content
+			ORDER BY view_count DESC, sofa_score_event_id ASC
+			LIMIT ?
+		`, limit).Scan(&stats)
+	} else {
+		result = r.db.Raw(`
+			SELECT CAST(content AS UNSIGNED) AS sofa_score_event_id,
+			       COUNT(*) AS view_count
+			FROM playback_logs
+			WHERE content REGEXP '^[0-9]+$'
+			GROUP BY content
+			ORDER BY view_count DESC, sofa_score_event_id ASC
+			LIMIT ?
+		`, limit).Scan(&stats)
+	}
+
 	return stats, result.Error
 }
