@@ -1,10 +1,5 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 
-type Tournament struct {
-	gorm.Model
-	Name   string `json:"name"`
-	Slug   string `json:"slug"`
-	Region string `json:"region"`
-}
+type Tournament = tournaments.Tournament
