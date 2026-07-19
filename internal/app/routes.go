@@ -31,6 +31,9 @@ func requestID() gin.HandlerFunc {
 }
 
 func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService) *gin.Engine {
+	if cfg.ScrapeBatchSize <= 0 {
+		cfg.ScrapeBatchSize = 500
+	}
 	router := gin.New()
 
 	router.Use(gin.Recovery())
@@ -123,9 +126,9 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int) (*scraper.Service, *reporting.AggregationRepository) {
 	eventsRepo := events.NewRepository(db)
-	scrapeSvc := scraper.NewService(eventsRepo)
+	scrapeSvc := scraper.NewService(eventsRepo, batchSize)
 	aggRepo := reporting.NewAggregationRepository(db)
 	return scrapeSvc, aggRepo
 }

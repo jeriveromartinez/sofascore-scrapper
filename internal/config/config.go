@@ -45,6 +45,7 @@ type Config struct {
 	Database         Database
 	Redis            Redis
 	HTTP             HTTP
+	ScrapeBatchSize  int
 }
 
 func Load() (Config, error) {
@@ -58,6 +59,7 @@ func Load() (Config, error) {
 		JWTSecret:        secret,
 		APKStoragePath:   getEnv("APK_STORAGE_PATH", "./apk_storage"),
 		ImageStoragePath: getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
+		ScrapeBatchSize:  getInt("SCRAPE_BATCH_SIZE", 500),
 		Database: Database{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "3306"),
