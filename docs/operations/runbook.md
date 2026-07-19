@@ -301,7 +301,7 @@ Verification and diagnostics:
 
 ```bash
 systemctl --user status iptv.service --no-pager
-curl --fail http://127.0.0.1:8080/health/ready
+curl --fail http://127.0.0.1:9065/health/ready
 journalctl --user -u iptv.service -n 100 --no-pager
 ```
 
@@ -316,7 +316,7 @@ docker compose -f deployments/docker/compose.dev.yml up --build
 # Native production service
 systemctl --user restart iptv.service
 systemctl --user status iptv.service --no-pager
-curl --fail http://127.0.0.1:8080/health/ready
+curl --fail http://127.0.0.1:9065/health/ready
 
 # Run tests (requires compose.test.yml services up)
 docker compose -f deployments/docker/compose.test.yml up -d mariadb redis
