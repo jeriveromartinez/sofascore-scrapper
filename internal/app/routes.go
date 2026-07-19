@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
@@ -94,7 +96,10 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	statsHandler.RegisterRoutes(webV1, reporting.StatsHandlerDeps{AuthMiddleware: authThenRl})
 
 	eventsRepo := events.NewRepository(db)
-	eventsAppHandler := events.NewAppHandler(eventsRepo)
+	eventsCache := events.NewCurrentEventsCache(redisClient)
+	eventsEpoch := events.NewEpochStore(redisClient)
+	eventsService := events.NewService(eventsRepo, eventsCache, eventsEpoch)
+	eventsAppHandler := events.NewAppHandler(eventsService)
 	eventsAppHandler.RegisterRoutes(appV1, events.AppHandlerDeps{AppMiddleware: appMw})
 
 	eventsAdminHandler := events.NewAdminHandler(db)
@@ -118,10 +123,18 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 
 	deviceAssignmentsRepo := tournaments.NewDeviceAssignmentsRepository(db)
 	deviceAssignmentsHandler := tournaments.NewDeviceAssignmentsHandler(deviceAssignmentsRepo)
+	deviceAssignmentsHandler.SetOnChange(func(ctx context.Context) error {
+		_, err := eventsEpoch.Increment(ctx)
+		return err
+	})
 	deviceAssignmentsHandler.RegisterRoutes(webV1, tournaments.DeviceAssignmentsHandlerDeps{AuthMiddleware: authThenRl})
 
 	globalConfigRepo := tournaments.NewGlobalConfigRepository(db)
 	globalConfigHandler := tournaments.NewGlobalConfigHandler(globalConfigRepo)
+	globalConfigHandler.SetOnChange(func(ctx context.Context) error {
+		_, err := eventsEpoch.Increment(ctx)
+		return err
+	})
 	globalConfigHandler.RegisterRoutes(webV1, tournaments.GlobalConfigHandlerDeps{AuthMiddleware: authThenRl})
 
 	domainRepo := domains.NewRepository(db)
@@ -133,7 +146,7 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore) (*scraper.Service, *reporting.AggregationRepository) {
 	client, err := scraper.NewClient(scraper.ClientConfig{})
 	if err != nil {
 		panic("scraper: failed to create client: " + err.Error())
@@ -143,6 +156,10 @@ func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int) (*scraper.S
 	if err != nil {
 		panic("scraper: failed to create service: " + err.Error())
 	}
+	scrapeSvc.SetOnScrapeComplete(func(ctx context.Context) error {
+		_, err := epoch.Increment(ctx)
+		return err
+	})
 	aggRepo := reporting.NewAggregationRepository(db)
 	return scrapeSvc, aggRepo
 }

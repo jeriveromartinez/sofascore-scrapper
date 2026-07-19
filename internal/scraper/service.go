@@ -17,10 +17,11 @@ const (
 )
 
 type Service struct {
-	repo      *events.Repository
-	client    SofaScoreClient
-	batchSize int
-	concur    int
+	repo             *events.Repository
+	client           SofaScoreClient
+	batchSize        int
+	concur           int
+	onScrapeComplete func(context.Context) error
 }
 
 func NewService(repo *events.Repository, client SofaScoreClient, batchSize int, concurrency int) (*Service, error) {
@@ -38,6 +39,10 @@ func NewService(repo *events.Repository, client SofaScoreClient, batchSize int, 
 	}, nil
 }
 
+func (s *Service) SetOnScrapeComplete(fn func(context.Context) error) {
+	s.onScrapeComplete = fn
+}
+
 func (s *Service) Scrape(ctx context.Context, sport string, date time.Time) error {
 	apiEvents, err := s.client.ScheduledEvents(ctx, sport, date)
 	if err != nil {
@@ -46,6 +51,9 @@ func (s *Service) Scrape(ctx context.Context, sport string, date time.Time) erro
 	batch := ToScrapeBatch(apiEvents, sport)
 	if err := s.repo.UpsertScrapeBatch(ctx, batch, s.batchSize); err != nil {
 		return fmt.Errorf("scraper: upsert %s on %s: %w", sport, date.Format("2006-01-02"), err)
+	}
+	if s.onScrapeComplete != nil {
+		_ = s.onScrapeComplete(ctx)
 	}
 	log.Printf("scraper: scraped %d events for %s on %s", len(apiEvents), sport, date.Format("2006-01-02"))
 	return nil
@@ -59,6 +67,9 @@ func (s *Service) ScrapeCountry(ctx context.Context, countryCode string) error {
 	batch := ToScrapeBatch(events, countryCode)
 	if err := s.repo.UpsertScrapeBatch(ctx, batch, s.batchSize); err != nil {
 		return fmt.Errorf("scraper: upsert country %s: %w", countryCode, err)
+	}
+	if s.onScrapeComplete != nil {
+		_ = s.onScrapeComplete(ctx)
 	}
 	log.Printf("scraper: scraped %d events for country %s", len(events), countryCode)
 	return nil

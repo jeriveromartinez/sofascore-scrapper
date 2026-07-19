@@ -1,6 +1,7 @@
 package tournaments
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,11 +14,16 @@ type GlobalConfigHandlerDeps struct {
 }
 
 type GlobalConfigHandler struct {
-	repo *GlobalConfigRepository
+	repo     *GlobalConfigRepository
+	onChange func(context.Context) error
 }
 
 func NewGlobalConfigHandler(repo *GlobalConfigRepository) *GlobalConfigHandler {
 	return &GlobalConfigHandler{repo: repo}
+}
+
+func (h *GlobalConfigHandler) SetOnChange(fn func(context.Context) error) {
+	h.onChange = fn
 }
 
 func (h *GlobalConfigHandler) RegisterRoutes(group *gin.RouterGroup, deps GlobalConfigHandlerDeps) {
@@ -52,6 +58,9 @@ func (h *GlobalConfigHandler) handleAdd(c *gin.Context) {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if h.onChange != nil {
+		_ = h.onChange(c.Request.Context())
+	}
 	server.RespondProto(c, http.StatusCreated, &pb.GlobalTournamentConfigList{Configs: GlobalConfigPtrsToProto(configs)})
 }
 
@@ -65,6 +74,9 @@ func (h *GlobalConfigHandler) handleRemove(c *gin.Context) {
 	if err := h.repo.Remove(tournamentID); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if h.onChange != nil {
+		_ = h.onChange(c.Request.Context())
 	}
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament removed from global config"})
 }

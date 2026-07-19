@@ -15,11 +15,11 @@ type AppHandlerDeps struct {
 }
 
 type AppHandler struct {
-	repo *Repository
+	svc *Service
 }
 
-func NewAppHandler(repo *Repository) *AppHandler {
-	return &AppHandler{repo: repo}
+func NewAppHandler(svc *Service) *AppHandler {
+	return &AppHandler{svc: svc}
 }
 
 func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup, deps AppHandlerDeps) {
@@ -35,7 +35,7 @@ func (h *AppHandler) handleGetCurrentEvents(c *gin.Context) {
 		}
 	}
 
-	events, err := h.repo.GetCurrentAndUpcoming(c.Request.Context(), device.ID, limit)
+	events, err := h.svc.GetCurrentAndUpcoming(c.Request.Context(), device.ID, limit)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "unable to fetch events")
 		return
