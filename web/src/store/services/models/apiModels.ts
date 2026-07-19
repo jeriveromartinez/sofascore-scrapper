@@ -22,6 +22,7 @@ import type {
   EventStats as ProtoEventStats,
   User as ProtoUser,
   UserList,
+  UserPage as ProtoUserPage,
   UserWriteRequest,
 } from "../../../proto/api";
 
@@ -30,6 +31,7 @@ export type SofaScoreEvent = ProtoSofaScoreEvent;
 export type EventsResponse = EventsList;
 export type DeviceResponse = DeviceList;
 export type UsersResponse = UserList;
+export type UserPageResponse = ProtoUserPage;
 export type DomainsResponse = DomainList;
 
 export interface EventsQuery {

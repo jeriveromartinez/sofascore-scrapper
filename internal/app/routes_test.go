@@ -33,6 +33,7 @@ func TestRouteCompatibility(t *testing.T) {
 		"POST /api/web/v1/users/logout",
 		"POST /api/web/v1/users/invitations",
 		"GET /api/web/v1/users",
+		"GET /api/web/v1/users/page",
 		"GET /api/web/v1/users/:id",
 		"POST /api/web/v1/users",
 		"PUT /api/web/v1/users/:id",
@@ -71,7 +72,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 47 {
-		t.Fatalf("got %d routes, want 47", len(got))
+	if len(got) != 48 {
+		t.Fatalf("got %d routes, want 48", len(got))
 	}
 }

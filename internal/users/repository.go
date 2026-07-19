@@ -1,6 +1,8 @@
 package users
 
 import (
+	"context"
+
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -17,6 +19,23 @@ func (r *Repository) GetAll() ([]User, error) {
 	var users []User
 	result := r.db.Order("email ASC").Find(&users)
 	return users, result.Error
+}
+
+func (r *Repository) ListPage(ctx context.Context, email string, id uint, limit int) ([]User, bool, error) {
+	query := r.db.WithContext(ctx).Order("email ASC, id ASC")
+	if email != "" {
+		query = query.Where("email > ? OR (email = ? AND id > ?)", email, email, id)
+	}
+	var rows []User
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
 }
 
 func (r *Repository) Create(email, password string) (*User, error) {
