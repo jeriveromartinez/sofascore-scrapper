@@ -3,13 +3,14 @@ package scheduler
 import (
 	"context"
 	"log"
+	"sync"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 )
 
-func startStats(ctx context.Context, db interface{}, aggRepo interface{}) {
+func startStats(ctx context.Context, db interface{}, aggRepo interface{}, wg *sync.WaitGroup) {
 	gormDB, ok := db.(*gorm.DB)
 	if !ok || gormDB == nil {
 		log.Printf("scheduler: no DB available for stats")
@@ -43,7 +44,9 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}) {
 
 	c.Start()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		<-ctx.Done()
 		c.Stop()
 	}()

@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
+	"sync/atomic"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
@@ -15,6 +13,9 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	goredis "github.com/redis/go-redis/v9"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -23,7 +24,13 @@ type App struct {
 	Scheduler *scheduler.Scheduler
 	DB        *gorm.DB
 	SQL       *sql.DB
+	Redis     *goredis.Client
+	ready     atomic.Bool
 	batchSize int
+}
+
+func (a *App) IsReady() bool {
+	return a.ready.Load()
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -46,8 +53,21 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
+	sched := scheduler.New()
+
+	app := &App{
+		Scheduler: sched,
+		DB:        db,
+		SQL:       sqlDB,
+		Redis:     redisClient,
+		batchSize: cfg.ScrapeBatchSize,
+	}
+	app.ready.Store(true)
+
 	router := NewRouter(db, redisClient, cfg, tokens)
-	httpServer := &http.Server{
+	router.Use(server.ReadinessMiddleware(&app.ready))
+
+	app.HTTP = &http.Server{
 		Addr:              cfg.APIAddr,
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -57,49 +77,22 @@ func New(cfg config.Config) (*App, error) {
 		MaxHeaderBytes:    1 << 20,
 	}
 
-	sched := scheduler.New()
-
-	return &App{
-		HTTP:      httpServer,
-		Scheduler: sched,
-		DB:        db,
-		SQL:       sqlDB,
-		batchSize: cfg.ScrapeBatchSize,
-	}, nil
+	return app, nil
 }
 
 func (a *App) Run(ctx context.Context) error {
 	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize)
-	a.Scheduler.Start(ctx, a.DB, scrapeSvc, aggRepo)
+	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo)
 
-	go func() {
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error {
 		log.Printf("API server listening on %s", a.HTTP.Addr)
-		if err := a.HTTP.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("API server error: %v", err)
-		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case sig := <-quit:
-		log.Printf("received signal %v, shutting down", sig)
-	case <-ctx.Done():
-		log.Println("context cancelled, shutting down")
-	}
-
-	a.Scheduler.Stop()
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := a.HTTP.Shutdown(shutdownCtx); err != nil {
-		return err
-	}
-
-	if err := a.SQL.Close(); err != nil {
-		return err
-	}
-
-	return nil
+		return a.HTTP.ListenAndServe()
+	})
+	group.Go(func() error { return a.Scheduler.Run(ctx) })
+	group.Go(func() error {
+		<-ctx.Done()
+		return a.shutdown()
+	})
+	return normalizeServerClosed(group.Wait())
 }

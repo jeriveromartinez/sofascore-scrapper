@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/app"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
@@ -30,7 +32,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := application.Run(context.Background()); err != nil {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	if err := application.Run(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
