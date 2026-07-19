@@ -28,8 +28,9 @@ type Event struct {
 	CurrentPeriodStartTimestamp int64
 	Slug                        string
 	LeagueId                    uint
-	HomeTeamModel               *Team                  `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
-	AwayTeamModel               *Team                  `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
+	StatusType                  string
+	HomeTeamModel               *Team                    `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
+	AwayTeamModel               *Team                    `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
 	League                      *tournaments.Tournament `gorm:"foreignKey:LeagueId" json:"league,omitempty"`
 }
 

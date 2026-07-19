@@ -54,7 +54,7 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 		limit = parsedLimit
 	}
 
-	query := h.db.Model(&Event{})
+	query := h.db.WithContext(c.Request.Context()).Model(&Event{})
 	if date != "" {
 		t, err := time.Parse("2006-01-02", date)
 		if err == nil {
@@ -73,13 +73,13 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		server.RespondError(c, http.StatusInternalServerError, "unable to count events")
 		return
 	}
 
 	var events []Event
 	if err := query.Offset((page - 1) * limit).Limit(limit).Preload("HomeTeamModel").Preload("AwayTeamModel").Preload("League").Order("start_timestamp ASC").Find(&events).Error; err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		server.RespondError(c, http.StatusInternalServerError, "unable to fetch events")
 		return
 	}
 

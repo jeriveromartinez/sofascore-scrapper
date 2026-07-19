@@ -1660,6 +1660,7 @@ type SofaScoreEvent struct {
 	TeamHome                    *Team                  `protobuf:"bytes,15,opt,name=team_home,json=teamHome,proto3" json:"team_home,omitempty"`
 	TeamAway                    *Team                  `protobuf:"bytes,16,opt,name=team_away,json=teamAway,proto3" json:"team_away,omitempty"`
 	League                      *Tournament            `protobuf:"bytes,17,opt,name=league,proto3" json:"league,omitempty"`
+	StatusType                  string                 `protobuf:"bytes,18,opt,name=status_type,json=statusType,proto3" json:"status_type,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -1811,6 +1812,13 @@ func (x *SofaScoreEvent) GetLeague() *Tournament {
 		return x.League
 	}
 	return nil
+}
+
+func (x *SofaScoreEvent) GetStatusType() string {
+	if x != nil {
+		return x.StatusType
+	}
+	return ""
 }
 
 type EventsList struct {
@@ -2860,7 +2868,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x0fsecondary_color\x18\x05 \x01(\tR\x0esecondaryColor\x12\x1d\n" +
 	"\n" +
 	"text_color\x18\x06 \x01(\tR\ttextColor\x12\x12\n" +
-	"\x04name\x18\a \x01(\tR\x04name\"\xed\x04\n" +
+	"\x04name\x18\a \x01(\tR\x04name\"\x8e\x05\n" +
 	"\x0eSofaScoreEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2886,7 +2894,9 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x04slug\x18\x0e \x01(\tR\x04slug\x12,\n" +
 	"\tteam_home\x18\x0f \x01(\v2\x0f.sofascore.TeamR\bteamHome\x12,\n" +
 	"\tteam_away\x18\x10 \x01(\v2\x0f.sofascore.TeamR\bteamAway\x12-\n" +
-	"\x06league\x18\x11 \x01(\v2\x15.sofascore.TournamentR\x06league\"\x9c\x01\n" +
+	"\x06league\x18\x11 \x01(\v2\x15.sofascore.TournamentR\x06league\x12\x1f\n" +
+	"\vstatus_type\x18\x12 \x01(\tR\n" +
+	"statusType\"\x9c\x01\n" +
 	"\n" +
 	"EventsList\x12-\n" +
 	"\x04data\x18\x01 \x03(\v2\x19.sofascore.SofaScoreEventR\x04data\x12\x12\n" +
