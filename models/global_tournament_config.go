@@ -1,11 +1,5 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 
-// GlobalTournamentConfig represents the global configuration for tournaments
-// that should be shown to devices without specific tournament assignments
-type GlobalTournamentConfig struct {
-	gorm.Model
-	TournamentID uint       `gorm:"not null;uniqueIndex" json:"tournament_id"`
-	Tournament   *Tournament `gorm:"foreignKey:TournamentID" json:"tournament,omitempty"`
-}
+type GlobalTournamentConfig = tournaments.GlobalTournamentConfig
