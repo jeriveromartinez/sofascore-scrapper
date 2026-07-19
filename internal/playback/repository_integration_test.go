@@ -3,6 +3,8 @@ package playback
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -13,7 +15,13 @@ import (
 
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	// A bare ":memory:" DSN gives every pooled connection its own private
+	// database, so concurrent goroutines (used by the lock tests) hit a
+	// connection without the migrated tables ("no such table: devices").
+	// A named shared-cache in-memory DSN keeps one database shared across the
+	// pool, while the unique per-test name preserves isolation between tests.
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open test db: %v", err)
 	}
