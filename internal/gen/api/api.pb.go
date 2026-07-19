@@ -154,11 +154,12 @@ func (x *StatusResponse) GetStatus() string {
 }
 
 type AuthRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Email           string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	Password        string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	InvitationToken string                 `protobuf:"bytes,3,opt,name=invitation_token,json=invitationToken,proto3" json:"invitation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AuthRequest) Reset() {
@@ -205,6 +206,109 @@ func (x *AuthRequest) GetPassword() string {
 	return ""
 }
 
+func (x *AuthRequest) GetInvitationToken() string {
+	if x != nil {
+		return x.InvitationToken
+	}
+	return ""
+}
+
+type CreateInvitationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TtlSeconds    int64                  `protobuf:"varint,1,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateInvitationRequest) Reset() {
+	*x = CreateInvitationRequest{}
+	mi := &file_proto_api_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateInvitationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateInvitationRequest) ProtoMessage() {}
+
+func (x *CreateInvitationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_api_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateInvitationRequest.ProtoReflect.Descriptor instead.
+func (*CreateInvitationRequest) Descriptor() ([]byte, []int) {
+	return file_proto_api_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CreateInvitationRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+type InvitationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvitationResponse) Reset() {
+	*x = InvitationResponse{}
+	mi := &file_proto_api_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvitationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvitationResponse) ProtoMessage() {}
+
+func (x *InvitationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_api_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvitationResponse.ProtoReflect.Descriptor instead.
+func (*InvitationResponse) Descriptor() ([]byte, []int) {
+	return file_proto_api_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *InvitationResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *InvitationResponse) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
 type AuthResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -217,7 +321,7 @@ type AuthResponse struct {
 
 func (x *AuthResponse) Reset() {
 	*x = AuthResponse{}
-	mi := &file_proto_api_proto_msgTypes[4]
+	mi := &file_proto_api_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -229,7 +333,7 @@ func (x *AuthResponse) String() string {
 func (*AuthResponse) ProtoMessage() {}
 
 func (x *AuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[4]
+	mi := &file_proto_api_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -242,7 +346,7 @@ func (x *AuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthResponse.ProtoReflect.Descriptor instead.
 func (*AuthResponse) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{4}
+	return file_proto_api_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AuthResponse) GetId() uint32 {
@@ -285,7 +389,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_proto_api_proto_msgTypes[5]
+	mi := &file_proto_api_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -297,7 +401,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[5]
+	mi := &file_proto_api_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -310,7 +414,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{5}
+	return file_proto_api_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *User) GetId() uint32 {
@@ -350,7 +454,7 @@ type UserList struct {
 
 func (x *UserList) Reset() {
 	*x = UserList{}
-	mi := &file_proto_api_proto_msgTypes[6]
+	mi := &file_proto_api_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -362,7 +466,7 @@ func (x *UserList) String() string {
 func (*UserList) ProtoMessage() {}
 
 func (x *UserList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[6]
+	mi := &file_proto_api_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -375,7 +479,7 @@ func (x *UserList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserList.ProtoReflect.Descriptor instead.
 func (*UserList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{6}
+	return file_proto_api_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UserList) GetUsers() []*User {
@@ -395,7 +499,7 @@ type UserWriteRequest struct {
 
 func (x *UserWriteRequest) Reset() {
 	*x = UserWriteRequest{}
-	mi := &file_proto_api_proto_msgTypes[7]
+	mi := &file_proto_api_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +511,7 @@ func (x *UserWriteRequest) String() string {
 func (*UserWriteRequest) ProtoMessage() {}
 
 func (x *UserWriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[7]
+	mi := &file_proto_api_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +524,7 @@ func (x *UserWriteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserWriteRequest.ProtoReflect.Descriptor instead.
 func (*UserWriteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{7}
+	return file_proto_api_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UserWriteRequest) GetEmail() string {
@@ -451,7 +555,7 @@ type Domain struct {
 
 func (x *Domain) Reset() {
 	*x = Domain{}
-	mi := &file_proto_api_proto_msgTypes[8]
+	mi := &file_proto_api_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -463,7 +567,7 @@ func (x *Domain) String() string {
 func (*Domain) ProtoMessage() {}
 
 func (x *Domain) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[8]
+	mi := &file_proto_api_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -476,7 +580,7 @@ func (x *Domain) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Domain.ProtoReflect.Descriptor instead.
 func (*Domain) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{8}
+	return file_proto_api_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Domain) GetId() uint32 {
@@ -530,7 +634,7 @@ type DomainList struct {
 
 func (x *DomainList) Reset() {
 	*x = DomainList{}
-	mi := &file_proto_api_proto_msgTypes[9]
+	mi := &file_proto_api_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -542,7 +646,7 @@ func (x *DomainList) String() string {
 func (*DomainList) ProtoMessage() {}
 
 func (x *DomainList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[9]
+	mi := &file_proto_api_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -555,7 +659,7 @@ func (x *DomainList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainList.ProtoReflect.Descriptor instead.
 func (*DomainList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{9}
+	return file_proto_api_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DomainList) GetDomains() []*Domain {
@@ -575,7 +679,7 @@ type DomainRequest struct {
 
 func (x *DomainRequest) Reset() {
 	*x = DomainRequest{}
-	mi := &file_proto_api_proto_msgTypes[10]
+	mi := &file_proto_api_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -587,7 +691,7 @@ func (x *DomainRequest) String() string {
 func (*DomainRequest) ProtoMessage() {}
 
 func (x *DomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[10]
+	mi := &file_proto_api_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -600,7 +704,7 @@ func (x *DomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainRequest.ProtoReflect.Descriptor instead.
 func (*DomainRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{10}
+	return file_proto_api_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DomainRequest) GetDomain() string {
@@ -629,7 +733,7 @@ type DeviceRegisterRequest struct {
 
 func (x *DeviceRegisterRequest) Reset() {
 	*x = DeviceRegisterRequest{}
-	mi := &file_proto_api_proto_msgTypes[11]
+	mi := &file_proto_api_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +745,7 @@ func (x *DeviceRegisterRequest) String() string {
 func (*DeviceRegisterRequest) ProtoMessage() {}
 
 func (x *DeviceRegisterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[11]
+	mi := &file_proto_api_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +758,7 @@ func (x *DeviceRegisterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceRegisterRequest.ProtoReflect.Descriptor instead.
 func (*DeviceRegisterRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{11}
+	return file_proto_api_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeviceRegisterRequest) GetToken() string {
@@ -702,7 +806,7 @@ type Device struct {
 
 func (x *Device) Reset() {
 	*x = Device{}
-	mi := &file_proto_api_proto_msgTypes[12]
+	mi := &file_proto_api_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -714,7 +818,7 @@ func (x *Device) String() string {
 func (*Device) ProtoMessage() {}
 
 func (x *Device) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[12]
+	mi := &file_proto_api_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -727,7 +831,7 @@ func (x *Device) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Device.ProtoReflect.Descriptor instead.
 func (*Device) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{12}
+	return file_proto_api_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Device) GetId() uint32 {
@@ -806,7 +910,7 @@ type DeviceList struct {
 
 func (x *DeviceList) Reset() {
 	*x = DeviceList{}
-	mi := &file_proto_api_proto_msgTypes[13]
+	mi := &file_proto_api_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -818,7 +922,7 @@ func (x *DeviceList) String() string {
 func (*DeviceList) ProtoMessage() {}
 
 func (x *DeviceList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[13]
+	mi := &file_proto_api_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -831,7 +935,7 @@ func (x *DeviceList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceList.ProtoReflect.Descriptor instead.
 func (*DeviceList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{13}
+	return file_proto_api_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DeviceList) GetData() []*Device {
@@ -878,7 +982,7 @@ type DeviceUrl struct {
 
 func (x *DeviceUrl) Reset() {
 	*x = DeviceUrl{}
-	mi := &file_proto_api_proto_msgTypes[14]
+	mi := &file_proto_api_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -890,7 +994,7 @@ func (x *DeviceUrl) String() string {
 func (*DeviceUrl) ProtoMessage() {}
 
 func (x *DeviceUrl) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[14]
+	mi := &file_proto_api_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -903,7 +1007,7 @@ func (x *DeviceUrl) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceUrl.ProtoReflect.Descriptor instead.
 func (*DeviceUrl) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{14}
+	return file_proto_api_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DeviceUrl) GetUrl() string {
@@ -923,7 +1027,7 @@ type TournamentRequest struct {
 
 func (x *TournamentRequest) Reset() {
 	*x = TournamentRequest{}
-	mi := &file_proto_api_proto_msgTypes[15]
+	mi := &file_proto_api_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -935,7 +1039,7 @@ func (x *TournamentRequest) String() string {
 func (*TournamentRequest) ProtoMessage() {}
 
 func (x *TournamentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[15]
+	mi := &file_proto_api_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -948,7 +1052,7 @@ func (x *TournamentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TournamentRequest.ProtoReflect.Descriptor instead.
 func (*TournamentRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{15}
+	return file_proto_api_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TournamentRequest) GetName() string {
@@ -979,7 +1083,7 @@ type Tournament struct {
 
 func (x *Tournament) Reset() {
 	*x = Tournament{}
-	mi := &file_proto_api_proto_msgTypes[16]
+	mi := &file_proto_api_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -991,7 +1095,7 @@ func (x *Tournament) String() string {
 func (*Tournament) ProtoMessage() {}
 
 func (x *Tournament) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[16]
+	mi := &file_proto_api_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1004,7 +1108,7 @@ func (x *Tournament) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tournament.ProtoReflect.Descriptor instead.
 func (*Tournament) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{16}
+	return file_proto_api_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Tournament) GetId() uint32 {
@@ -1058,7 +1162,7 @@ type TournamentList struct {
 
 func (x *TournamentList) Reset() {
 	*x = TournamentList{}
-	mi := &file_proto_api_proto_msgTypes[17]
+	mi := &file_proto_api_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1070,7 +1174,7 @@ func (x *TournamentList) String() string {
 func (*TournamentList) ProtoMessage() {}
 
 func (x *TournamentList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[17]
+	mi := &file_proto_api_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1083,7 +1187,7 @@ func (x *TournamentList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TournamentList.ProtoReflect.Descriptor instead.
 func (*TournamentList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{17}
+	return file_proto_api_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *TournamentList) GetTournaments() []*Tournament {
@@ -1103,7 +1207,7 @@ type AssignTournamentRequest struct {
 
 func (x *AssignTournamentRequest) Reset() {
 	*x = AssignTournamentRequest{}
-	mi := &file_proto_api_proto_msgTypes[18]
+	mi := &file_proto_api_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1115,7 +1219,7 @@ func (x *AssignTournamentRequest) String() string {
 func (*AssignTournamentRequest) ProtoMessage() {}
 
 func (x *AssignTournamentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[18]
+	mi := &file_proto_api_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1128,7 +1232,7 @@ func (x *AssignTournamentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignTournamentRequest.ProtoReflect.Descriptor instead.
 func (*AssignTournamentRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{18}
+	return file_proto_api_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *AssignTournamentRequest) GetDeviceId() uint32 {
@@ -1154,7 +1258,7 @@ type SetTournamentIdsRequest struct {
 
 func (x *SetTournamentIdsRequest) Reset() {
 	*x = SetTournamentIdsRequest{}
-	mi := &file_proto_api_proto_msgTypes[19]
+	mi := &file_proto_api_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1166,7 +1270,7 @@ func (x *SetTournamentIdsRequest) String() string {
 func (*SetTournamentIdsRequest) ProtoMessage() {}
 
 func (x *SetTournamentIdsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[19]
+	mi := &file_proto_api_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1179,7 +1283,7 @@ func (x *SetTournamentIdsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTournamentIdsRequest.ProtoReflect.Descriptor instead.
 func (*SetTournamentIdsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{19}
+	return file_proto_api_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetTournamentIdsRequest) GetTournamentIds() []uint32 {
@@ -1204,7 +1308,7 @@ type DeviceTournament struct {
 
 func (x *DeviceTournament) Reset() {
 	*x = DeviceTournament{}
-	mi := &file_proto_api_proto_msgTypes[20]
+	mi := &file_proto_api_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1216,7 +1320,7 @@ func (x *DeviceTournament) String() string {
 func (*DeviceTournament) ProtoMessage() {}
 
 func (x *DeviceTournament) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[20]
+	mi := &file_proto_api_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1229,7 +1333,7 @@ func (x *DeviceTournament) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceTournament.ProtoReflect.Descriptor instead.
 func (*DeviceTournament) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{20}
+	return file_proto_api_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *DeviceTournament) GetId() uint32 {
@@ -1290,7 +1394,7 @@ type DeviceTournamentList struct {
 
 func (x *DeviceTournamentList) Reset() {
 	*x = DeviceTournamentList{}
-	mi := &file_proto_api_proto_msgTypes[21]
+	mi := &file_proto_api_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +1406,7 @@ func (x *DeviceTournamentList) String() string {
 func (*DeviceTournamentList) ProtoMessage() {}
 
 func (x *DeviceTournamentList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[21]
+	mi := &file_proto_api_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +1419,7 @@ func (x *DeviceTournamentList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceTournamentList.ProtoReflect.Descriptor instead.
 func (*DeviceTournamentList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{21}
+	return file_proto_api_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DeviceTournamentList) GetDeviceTournaments() []*DeviceTournament {
@@ -1338,7 +1442,7 @@ type GlobalTournamentConfig struct {
 
 func (x *GlobalTournamentConfig) Reset() {
 	*x = GlobalTournamentConfig{}
-	mi := &file_proto_api_proto_msgTypes[22]
+	mi := &file_proto_api_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1350,7 +1454,7 @@ func (x *GlobalTournamentConfig) String() string {
 func (*GlobalTournamentConfig) ProtoMessage() {}
 
 func (x *GlobalTournamentConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[22]
+	mi := &file_proto_api_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1363,7 +1467,7 @@ func (x *GlobalTournamentConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GlobalTournamentConfig.ProtoReflect.Descriptor instead.
 func (*GlobalTournamentConfig) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{22}
+	return file_proto_api_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GlobalTournamentConfig) GetId() uint32 {
@@ -1410,7 +1514,7 @@ type GlobalTournamentConfigList struct {
 
 func (x *GlobalTournamentConfigList) Reset() {
 	*x = GlobalTournamentConfigList{}
-	mi := &file_proto_api_proto_msgTypes[23]
+	mi := &file_proto_api_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1422,7 +1526,7 @@ func (x *GlobalTournamentConfigList) String() string {
 func (*GlobalTournamentConfigList) ProtoMessage() {}
 
 func (x *GlobalTournamentConfigList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[23]
+	mi := &file_proto_api_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1435,7 +1539,7 @@ func (x *GlobalTournamentConfigList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GlobalTournamentConfigList.ProtoReflect.Descriptor instead.
 func (*GlobalTournamentConfigList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{23}
+	return file_proto_api_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GlobalTournamentConfigList) GetConfigs() []*GlobalTournamentConfig {
@@ -1460,7 +1564,7 @@ type Team struct {
 
 func (x *Team) Reset() {
 	*x = Team{}
-	mi := &file_proto_api_proto_msgTypes[24]
+	mi := &file_proto_api_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1472,7 +1576,7 @@ func (x *Team) String() string {
 func (*Team) ProtoMessage() {}
 
 func (x *Team) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[24]
+	mi := &file_proto_api_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1485,7 +1589,7 @@ func (x *Team) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Team.ProtoReflect.Descriptor instead.
 func (*Team) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{24}
+	return file_proto_api_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Team) GetId() uint32 {
@@ -1562,7 +1666,7 @@ type SofaScoreEvent struct {
 
 func (x *SofaScoreEvent) Reset() {
 	*x = SofaScoreEvent{}
-	mi := &file_proto_api_proto_msgTypes[25]
+	mi := &file_proto_api_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1574,7 +1678,7 @@ func (x *SofaScoreEvent) String() string {
 func (*SofaScoreEvent) ProtoMessage() {}
 
 func (x *SofaScoreEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[25]
+	mi := &file_proto_api_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1587,7 +1691,7 @@ func (x *SofaScoreEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SofaScoreEvent.ProtoReflect.Descriptor instead.
 func (*SofaScoreEvent) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{25}
+	return file_proto_api_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *SofaScoreEvent) GetId() uint32 {
@@ -1722,7 +1826,7 @@ type EventsList struct {
 
 func (x *EventsList) Reset() {
 	*x = EventsList{}
-	mi := &file_proto_api_proto_msgTypes[26]
+	mi := &file_proto_api_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1734,7 +1838,7 @@ func (x *EventsList) String() string {
 func (*EventsList) ProtoMessage() {}
 
 func (x *EventsList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[26]
+	mi := &file_proto_api_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1747,7 +1851,7 @@ func (x *EventsList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventsList.ProtoReflect.Descriptor instead.
 func (*EventsList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{26}
+	return file_proto_api_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *EventsList) GetData() []*SofaScoreEvent {
@@ -1796,7 +1900,7 @@ type LogPlaybackRequest struct {
 
 func (x *LogPlaybackRequest) Reset() {
 	*x = LogPlaybackRequest{}
-	mi := &file_proto_api_proto_msgTypes[27]
+	mi := &file_proto_api_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1808,7 +1912,7 @@ func (x *LogPlaybackRequest) String() string {
 func (*LogPlaybackRequest) ProtoMessage() {}
 
 func (x *LogPlaybackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[27]
+	mi := &file_proto_api_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1821,7 +1925,7 @@ func (x *LogPlaybackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogPlaybackRequest.ProtoReflect.Descriptor instead.
 func (*LogPlaybackRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{27}
+	return file_proto_api_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *LogPlaybackRequest) GetDeviceToken() string {
@@ -1854,7 +1958,7 @@ type UpdatePlaybackRequest struct {
 
 func (x *UpdatePlaybackRequest) Reset() {
 	*x = UpdatePlaybackRequest{}
-	mi := &file_proto_api_proto_msgTypes[28]
+	mi := &file_proto_api_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1866,7 +1970,7 @@ func (x *UpdatePlaybackRequest) String() string {
 func (*UpdatePlaybackRequest) ProtoMessage() {}
 
 func (x *UpdatePlaybackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[28]
+	mi := &file_proto_api_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1879,7 +1983,7 @@ func (x *UpdatePlaybackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePlaybackRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePlaybackRequest) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{28}
+	return file_proto_api_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UpdatePlaybackRequest) GetEndedAt() int64 {
@@ -1904,7 +2008,7 @@ type PlaybackLog struct {
 
 func (x *PlaybackLog) Reset() {
 	*x = PlaybackLog{}
-	mi := &file_proto_api_proto_msgTypes[29]
+	mi := &file_proto_api_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1916,7 +2020,7 @@ func (x *PlaybackLog) String() string {
 func (*PlaybackLog) ProtoMessage() {}
 
 func (x *PlaybackLog) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[29]
+	mi := &file_proto_api_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1929,7 +2033,7 @@ func (x *PlaybackLog) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlaybackLog.ProtoReflect.Descriptor instead.
 func (*PlaybackLog) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{29}
+	return file_proto_api_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *PlaybackLog) GetId() uint32 {
@@ -1991,7 +2095,7 @@ type PlaybackLogList struct {
 
 func (x *PlaybackLogList) Reset() {
 	*x = PlaybackLogList{}
-	mi := &file_proto_api_proto_msgTypes[30]
+	mi := &file_proto_api_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2003,7 +2107,7 @@ func (x *PlaybackLogList) String() string {
 func (*PlaybackLogList) ProtoMessage() {}
 
 func (x *PlaybackLogList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[30]
+	mi := &file_proto_api_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2016,7 +2120,7 @@ func (x *PlaybackLogList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlaybackLogList.ProtoReflect.Descriptor instead.
 func (*PlaybackLogList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{30}
+	return file_proto_api_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *PlaybackLogList) GetList() []*PlaybackLog {
@@ -2043,7 +2147,7 @@ type EventStats struct {
 
 func (x *EventStats) Reset() {
 	*x = EventStats{}
-	mi := &file_proto_api_proto_msgTypes[31]
+	mi := &file_proto_api_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2055,7 +2159,7 @@ func (x *EventStats) String() string {
 func (*EventStats) ProtoMessage() {}
 
 func (x *EventStats) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[31]
+	mi := &file_proto_api_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2068,7 +2172,7 @@ func (x *EventStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventStats.ProtoReflect.Descriptor instead.
 func (*EventStats) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{31}
+	return file_proto_api_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *EventStats) GetSofaScoreEventId() int64 {
@@ -2094,7 +2198,7 @@ type TopEventsResponse struct {
 
 func (x *TopEventsResponse) Reset() {
 	*x = TopEventsResponse{}
-	mi := &file_proto_api_proto_msgTypes[32]
+	mi := &file_proto_api_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2106,7 +2210,7 @@ func (x *TopEventsResponse) String() string {
 func (*TopEventsResponse) ProtoMessage() {}
 
 func (x *TopEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[32]
+	mi := &file_proto_api_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2119,7 +2223,7 @@ func (x *TopEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopEventsResponse.ProtoReflect.Descriptor instead.
 func (*TopEventsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{32}
+	return file_proto_api_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *TopEventsResponse) GetStats() []*EventStats {
@@ -2152,7 +2256,7 @@ type ApkInfo struct {
 
 func (x *ApkInfo) Reset() {
 	*x = ApkInfo{}
-	mi := &file_proto_api_proto_msgTypes[33]
+	mi := &file_proto_api_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2164,7 +2268,7 @@ func (x *ApkInfo) String() string {
 func (*ApkInfo) ProtoMessage() {}
 
 func (x *ApkInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[33]
+	mi := &file_proto_api_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2177,7 +2281,7 @@ func (x *ApkInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApkInfo.ProtoReflect.Descriptor instead.
 func (*ApkInfo) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{33}
+	return file_proto_api_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ApkInfo) GetId() uint32 {
@@ -2294,7 +2398,7 @@ type ApkList struct {
 
 func (x *ApkList) Reset() {
 	*x = ApkList{}
-	mi := &file_proto_api_proto_msgTypes[34]
+	mi := &file_proto_api_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2306,7 +2410,7 @@ func (x *ApkList) String() string {
 func (*ApkList) ProtoMessage() {}
 
 func (x *ApkList) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[34]
+	mi := &file_proto_api_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2319,7 +2423,7 @@ func (x *ApkList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApkList.ProtoReflect.Descriptor instead.
 func (*ApkList) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{34}
+	return file_proto_api_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ApkList) GetVersions() []*ApkInfo {
@@ -2349,7 +2453,7 @@ type ApkUploadResponse struct {
 
 func (x *ApkUploadResponse) Reset() {
 	*x = ApkUploadResponse{}
-	mi := &file_proto_api_proto_msgTypes[35]
+	mi := &file_proto_api_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2361,7 +2465,7 @@ func (x *ApkUploadResponse) String() string {
 func (*ApkUploadResponse) ProtoMessage() {}
 
 func (x *ApkUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[35]
+	mi := &file_proto_api_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2374,7 +2478,7 @@ func (x *ApkUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApkUploadResponse.ProtoReflect.Descriptor instead.
 func (*ApkUploadResponse) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{35}
+	return file_proto_api_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ApkUploadResponse) GetId() uint32 {
@@ -2478,7 +2582,7 @@ type ApkUpdateCheckResponse struct {
 
 func (x *ApkUpdateCheckResponse) Reset() {
 	*x = ApkUpdateCheckResponse{}
-	mi := &file_proto_api_proto_msgTypes[36]
+	mi := &file_proto_api_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2490,7 +2594,7 @@ func (x *ApkUpdateCheckResponse) String() string {
 func (*ApkUpdateCheckResponse) ProtoMessage() {}
 
 func (x *ApkUpdateCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[36]
+	mi := &file_proto_api_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2503,7 +2607,7 @@ func (x *ApkUpdateCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApkUpdateCheckResponse.ProtoReflect.Descriptor instead.
 func (*ApkUpdateCheckResponse) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{36}
+	return file_proto_api_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ApkUpdateCheckResponse) GetUpdateAvailable() bool {
@@ -2579,7 +2683,7 @@ type ApkVersion struct {
 
 func (x *ApkVersion) Reset() {
 	*x = ApkVersion{}
-	mi := &file_proto_api_proto_msgTypes[37]
+	mi := &file_proto_api_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2591,7 +2695,7 @@ func (x *ApkVersion) String() string {
 func (*ApkVersion) ProtoMessage() {}
 
 func (x *ApkVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[37]
+	mi := &file_proto_api_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2604,7 +2708,7 @@ func (x *ApkVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApkVersion.ProtoReflect.Descriptor instead.
 func (*ApkVersion) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{37}
+	return file_proto_api_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ApkVersion) GetId() uint32 {
@@ -2631,10 +2735,18 @@ const file_proto_api_proto_rawDesc = "" +
 	"\rStatusMessage\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"(\n" +
 	"\x0eStatusResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"?\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"j\n" +
 	"\vAuthRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"o\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12)\n" +
+	"\x10invitation_token\x18\x03 \x01(\tR\x0finvitationToken\":\n" +
+	"\x17CreateInvitationRequest\x12\x1f\n" +
+	"\vttl_seconds\x18\x01 \x01(\x03R\n" +
+	"ttlSeconds\"I\n" +
+	"\x12InvitationResponse\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\x03R\texpiresAt\"o\n" +
 	"\fAuthResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x14\n" +
@@ -2873,65 +2985,67 @@ func file_proto_api_proto_rawDescGZIP() []byte {
 	return file_proto_api_proto_rawDescData
 }
 
-var file_proto_api_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_proto_api_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_proto_api_proto_goTypes = []any{
 	(*ErrorResponse)(nil),              // 0: sofascore.ErrorResponse
 	(*StatusMessage)(nil),              // 1: sofascore.StatusMessage
 	(*StatusResponse)(nil),             // 2: sofascore.StatusResponse
 	(*AuthRequest)(nil),                // 3: sofascore.AuthRequest
-	(*AuthResponse)(nil),               // 4: sofascore.AuthResponse
-	(*User)(nil),                       // 5: sofascore.User
-	(*UserList)(nil),                   // 6: sofascore.UserList
-	(*UserWriteRequest)(nil),           // 7: sofascore.UserWriteRequest
-	(*Domain)(nil),                     // 8: sofascore.Domain
-	(*DomainList)(nil),                 // 9: sofascore.DomainList
-	(*DomainRequest)(nil),              // 10: sofascore.DomainRequest
-	(*DeviceRegisterRequest)(nil),      // 11: sofascore.DeviceRegisterRequest
-	(*Device)(nil),                     // 12: sofascore.Device
-	(*DeviceList)(nil),                 // 13: sofascore.DeviceList
-	(*DeviceUrl)(nil),                  // 14: sofascore.DeviceUrl
-	(*TournamentRequest)(nil),          // 15: sofascore.TournamentRequest
-	(*Tournament)(nil),                 // 16: sofascore.Tournament
-	(*TournamentList)(nil),             // 17: sofascore.TournamentList
-	(*AssignTournamentRequest)(nil),    // 18: sofascore.AssignTournamentRequest
-	(*SetTournamentIdsRequest)(nil),    // 19: sofascore.SetTournamentIdsRequest
-	(*DeviceTournament)(nil),           // 20: sofascore.DeviceTournament
-	(*DeviceTournamentList)(nil),       // 21: sofascore.DeviceTournamentList
-	(*GlobalTournamentConfig)(nil),     // 22: sofascore.GlobalTournamentConfig
-	(*GlobalTournamentConfigList)(nil), // 23: sofascore.GlobalTournamentConfigList
-	(*Team)(nil),                       // 24: sofascore.Team
-	(*SofaScoreEvent)(nil),             // 25: sofascore.SofaScoreEvent
-	(*EventsList)(nil),                 // 26: sofascore.EventsList
-	(*LogPlaybackRequest)(nil),         // 27: sofascore.LogPlaybackRequest
-	(*UpdatePlaybackRequest)(nil),      // 28: sofascore.UpdatePlaybackRequest
-	(*PlaybackLog)(nil),                // 29: sofascore.PlaybackLog
-	(*PlaybackLogList)(nil),            // 30: sofascore.PlaybackLogList
-	(*EventStats)(nil),                 // 31: sofascore.EventStats
-	(*TopEventsResponse)(nil),          // 32: sofascore.TopEventsResponse
-	(*ApkInfo)(nil),                    // 33: sofascore.ApkInfo
-	(*ApkList)(nil),                    // 34: sofascore.ApkList
-	(*ApkUploadResponse)(nil),          // 35: sofascore.ApkUploadResponse
-	(*ApkUpdateCheckResponse)(nil),     // 36: sofascore.ApkUpdateCheckResponse
-	(*ApkVersion)(nil),                 // 37: sofascore.ApkVersion
+	(*CreateInvitationRequest)(nil),    // 4: sofascore.CreateInvitationRequest
+	(*InvitationResponse)(nil),         // 5: sofascore.InvitationResponse
+	(*AuthResponse)(nil),               // 6: sofascore.AuthResponse
+	(*User)(nil),                       // 7: sofascore.User
+	(*UserList)(nil),                   // 8: sofascore.UserList
+	(*UserWriteRequest)(nil),           // 9: sofascore.UserWriteRequest
+	(*Domain)(nil),                     // 10: sofascore.Domain
+	(*DomainList)(nil),                 // 11: sofascore.DomainList
+	(*DomainRequest)(nil),              // 12: sofascore.DomainRequest
+	(*DeviceRegisterRequest)(nil),      // 13: sofascore.DeviceRegisterRequest
+	(*Device)(nil),                     // 14: sofascore.Device
+	(*DeviceList)(nil),                 // 15: sofascore.DeviceList
+	(*DeviceUrl)(nil),                  // 16: sofascore.DeviceUrl
+	(*TournamentRequest)(nil),          // 17: sofascore.TournamentRequest
+	(*Tournament)(nil),                 // 18: sofascore.Tournament
+	(*TournamentList)(nil),             // 19: sofascore.TournamentList
+	(*AssignTournamentRequest)(nil),    // 20: sofascore.AssignTournamentRequest
+	(*SetTournamentIdsRequest)(nil),    // 21: sofascore.SetTournamentIdsRequest
+	(*DeviceTournament)(nil),           // 22: sofascore.DeviceTournament
+	(*DeviceTournamentList)(nil),       // 23: sofascore.DeviceTournamentList
+	(*GlobalTournamentConfig)(nil),     // 24: sofascore.GlobalTournamentConfig
+	(*GlobalTournamentConfigList)(nil), // 25: sofascore.GlobalTournamentConfigList
+	(*Team)(nil),                       // 26: sofascore.Team
+	(*SofaScoreEvent)(nil),             // 27: sofascore.SofaScoreEvent
+	(*EventsList)(nil),                 // 28: sofascore.EventsList
+	(*LogPlaybackRequest)(nil),         // 29: sofascore.LogPlaybackRequest
+	(*UpdatePlaybackRequest)(nil),      // 30: sofascore.UpdatePlaybackRequest
+	(*PlaybackLog)(nil),                // 31: sofascore.PlaybackLog
+	(*PlaybackLogList)(nil),            // 32: sofascore.PlaybackLogList
+	(*EventStats)(nil),                 // 33: sofascore.EventStats
+	(*TopEventsResponse)(nil),          // 34: sofascore.TopEventsResponse
+	(*ApkInfo)(nil),                    // 35: sofascore.ApkInfo
+	(*ApkList)(nil),                    // 36: sofascore.ApkList
+	(*ApkUploadResponse)(nil),          // 37: sofascore.ApkUploadResponse
+	(*ApkUpdateCheckResponse)(nil),     // 38: sofascore.ApkUpdateCheckResponse
+	(*ApkVersion)(nil),                 // 39: sofascore.ApkVersion
 }
 var file_proto_api_proto_depIdxs = []int32{
-	5,  // 0: sofascore.UserList.users:type_name -> sofascore.User
-	5,  // 1: sofascore.Domain.user:type_name -> sofascore.User
-	8,  // 2: sofascore.DomainList.domains:type_name -> sofascore.Domain
-	12, // 3: sofascore.DeviceList.data:type_name -> sofascore.Device
-	16, // 4: sofascore.TournamentList.tournaments:type_name -> sofascore.Tournament
-	12, // 5: sofascore.DeviceTournament.device:type_name -> sofascore.Device
-	16, // 6: sofascore.DeviceTournament.tournament:type_name -> sofascore.Tournament
-	20, // 7: sofascore.DeviceTournamentList.device_tournaments:type_name -> sofascore.DeviceTournament
-	16, // 8: sofascore.GlobalTournamentConfig.tournament:type_name -> sofascore.Tournament
-	22, // 9: sofascore.GlobalTournamentConfigList.configs:type_name -> sofascore.GlobalTournamentConfig
-	24, // 10: sofascore.SofaScoreEvent.team_home:type_name -> sofascore.Team
-	24, // 11: sofascore.SofaScoreEvent.team_away:type_name -> sofascore.Team
-	16, // 12: sofascore.SofaScoreEvent.league:type_name -> sofascore.Tournament
-	25, // 13: sofascore.EventsList.data:type_name -> sofascore.SofaScoreEvent
-	29, // 14: sofascore.PlaybackLogList.list:type_name -> sofascore.PlaybackLog
-	31, // 15: sofascore.TopEventsResponse.stats:type_name -> sofascore.EventStats
-	33, // 16: sofascore.ApkList.versions:type_name -> sofascore.ApkInfo
+	7,  // 0: sofascore.UserList.users:type_name -> sofascore.User
+	7,  // 1: sofascore.Domain.user:type_name -> sofascore.User
+	10, // 2: sofascore.DomainList.domains:type_name -> sofascore.Domain
+	14, // 3: sofascore.DeviceList.data:type_name -> sofascore.Device
+	18, // 4: sofascore.TournamentList.tournaments:type_name -> sofascore.Tournament
+	14, // 5: sofascore.DeviceTournament.device:type_name -> sofascore.Device
+	18, // 6: sofascore.DeviceTournament.tournament:type_name -> sofascore.Tournament
+	22, // 7: sofascore.DeviceTournamentList.device_tournaments:type_name -> sofascore.DeviceTournament
+	18, // 8: sofascore.GlobalTournamentConfig.tournament:type_name -> sofascore.Tournament
+	24, // 9: sofascore.GlobalTournamentConfigList.configs:type_name -> sofascore.GlobalTournamentConfig
+	26, // 10: sofascore.SofaScoreEvent.team_home:type_name -> sofascore.Team
+	26, // 11: sofascore.SofaScoreEvent.team_away:type_name -> sofascore.Team
+	18, // 12: sofascore.SofaScoreEvent.league:type_name -> sofascore.Tournament
+	27, // 13: sofascore.EventsList.data:type_name -> sofascore.SofaScoreEvent
+	31, // 14: sofascore.PlaybackLogList.list:type_name -> sofascore.PlaybackLog
+	33, // 15: sofascore.TopEventsResponse.stats:type_name -> sofascore.EventStats
+	35, // 16: sofascore.ApkList.versions:type_name -> sofascore.ApkInfo
 	17, // [17:17] is the sub-list for method output_type
 	17, // [17:17] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
@@ -2950,7 +3064,7 @@ func file_proto_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_api_proto_rawDesc), len(file_proto_api_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   38,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

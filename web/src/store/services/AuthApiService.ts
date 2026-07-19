@@ -17,10 +17,10 @@ export class AuthApiService extends BaseApiService {
     return data;
   }
 
-  async register(email: string, password: string): Promise<UserAuthModel> {
+  async register(email: string, password: string, invitationToken: string): Promise<UserAuthModel> {
     const data = await this.post<UserAuthModel, UserAuthPayload>(
       "/register",
-      { email, password },
+      { email, password, invitationToken },
       AuthRequest,
       AuthResponse,
     );

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
@@ -10,13 +11,14 @@ import (
 )
 
 type AuthHandler struct {
-	authRepo *AuthRepository
-	userRepo *users.Repository
-	tokens   *TokenService
+	authRepo   *AuthRepository
+	userRepo   *users.Repository
+	tokens     *TokenService
+	invitation *InvitationStore
 }
 
-func NewAuthHandler(authRepo *AuthRepository, userRepo *users.Repository, tokens *TokenService) *AuthHandler {
-	return &AuthHandler{authRepo: authRepo, userRepo: userRepo, tokens: tokens}
+func NewAuthHandler(authRepo *AuthRepository, userRepo *users.Repository, tokens *TokenService, invitation *InvitationStore) *AuthHandler {
+	return &AuthHandler{authRepo: authRepo, userRepo: userRepo, tokens: tokens, invitation: invitation}
 }
 
 func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup) {
@@ -24,12 +26,25 @@ func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup) {
 	group.POST("/users/login", h.handleLogin)
 	group.POST("/users/refresh", h.handleRefresh)
 	group.POST("/users/logout", AuthMiddleware(h.tokens), h.handleLogout)
+	group.POST("/users/invitations", AuthMiddleware(h.tokens), h.handleCreateInvitation)
 }
 
 func (h *AuthHandler) handleRegister(c *gin.Context) {
 	var req pb.AuthRequest
 	if err := server.ParseProtoBody(c, &req); err != nil || req.Email == "" || req.Password == "" {
 		server.RespondError(c, http.StatusBadRequest, "email and password are required")
+		return
+	}
+	if req.InvitationToken == "" {
+		server.RespondError(c, http.StatusBadRequest, "invitation token is required")
+		return
+	}
+	if err := h.invitation.Consume(c.Request.Context(), req.InvitationToken); err != nil {
+		if err == ErrInvalidInvitation || err == ErrInvitationExpired {
+			server.RespondError(c, http.StatusBadRequest, "invalid invitation token")
+			return
+		}
+		server.RespondError(c, http.StatusServiceUnavailable, "invitation service unavailable")
 		return
 	}
 	user, err := h.userRepo.Create(req.Email, req.Password)
@@ -43,6 +58,34 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 		return
 	}
 	server.RespondProto(c, http.StatusCreated, response)
+}
+
+func (h *AuthHandler) handleCreateInvitation(c *gin.Context) {
+	var req pb.CreateInvitationRequest
+	if err := server.ParseProtoBody(c, &req); err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	ttl := DefaultInvitationTTL
+	if req.TtlSeconds != 0 {
+		if req.TtlSeconds < int64(MinInvitationTTL.Seconds()) || req.TtlSeconds > int64(MaxInvitationTTL.Seconds()) {
+			server.RespondError(c, http.StatusBadRequest, "ttl_seconds must be between 300 and 604800")
+			return
+		}
+		ttl = time.Duration(req.TtlSeconds) * time.Second
+	}
+
+	token, expiresAt, err := h.invitation.Create(c.Request.Context(), ttl)
+	if err != nil {
+		server.RespondError(c, http.StatusServiceUnavailable, "invitation creation failed")
+		return
+	}
+
+	server.RespondProto(c, http.StatusCreated, &pb.InvitationResponse{
+		Token:     token,
+		ExpiresAt: expiresAt.Unix(),
+	})
 }
 
 func (h *AuthHandler) handleLogin(c *gin.Context) {

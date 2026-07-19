@@ -24,6 +24,16 @@ export interface StatusResponse {
 export interface AuthRequest {
   email: string;
   password: string;
+  invitationToken: string;
+}
+
+export interface CreateInvitationRequest {
+  ttlSeconds: number;
+}
+
+export interface InvitationResponse {
+  token: string;
+  expiresAt: number;
 }
 
 export interface AuthResponse {
@@ -452,7 +462,7 @@ export const StatusResponse: MessageFns<StatusResponse> = {
 };
 
 function createBaseAuthRequest(): AuthRequest {
-  return { email: "", password: "" };
+  return { email: "", password: "", invitationToken: "" };
 }
 
 export const AuthRequest: MessageFns<AuthRequest> = {
@@ -462,6 +472,9 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     }
     if (message.password !== "") {
       writer.uint32(18).string(message.password);
+    }
+    if (message.invitationToken !== "") {
+      writer.uint32(26).string(message.invitationToken);
     }
     return writer;
   },
@@ -489,6 +502,14 @@ export const AuthRequest: MessageFns<AuthRequest> = {
           message.password = reader.string();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.invitationToken = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -502,6 +523,11 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     return {
       email: isSet(object.email) ? globalThis.String(object.email) : "",
       password: isSet(object.password) ? globalThis.String(object.password) : "",
+      invitationToken: isSet(object.invitationToken)
+        ? globalThis.String(object.invitationToken)
+        : isSet(object.invitation_token)
+        ? globalThis.String(object.invitation_token)
+        : "",
     };
   },
 
@@ -513,6 +539,9 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     if (message.password !== "") {
       obj.password = message.password;
     }
+    if (message.invitationToken !== "") {
+      obj.invitationToken = message.invitationToken;
+    }
     return obj;
   },
 
@@ -523,6 +552,151 @@ export const AuthRequest: MessageFns<AuthRequest> = {
     const message = createBaseAuthRequest();
     message.email = object.email ?? "";
     message.password = object.password ?? "";
+    message.invitationToken = object.invitationToken ?? "";
+    return message;
+  },
+};
+
+function createBaseCreateInvitationRequest(): CreateInvitationRequest {
+  return { ttlSeconds: 0 };
+}
+
+export const CreateInvitationRequest: MessageFns<CreateInvitationRequest> = {
+  encode(message: CreateInvitationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.ttlSeconds !== 0) {
+      writer.uint32(8).int64(message.ttlSeconds);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateInvitationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCreateInvitationRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.ttlSeconds = longToNumber(reader.int64());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CreateInvitationRequest {
+    return {
+      ttlSeconds: isSet(object.ttlSeconds)
+        ? globalThis.Number(object.ttlSeconds)
+        : isSet(object.ttl_seconds)
+        ? globalThis.Number(object.ttl_seconds)
+        : 0,
+    };
+  },
+
+  toJSON(message: CreateInvitationRequest): unknown {
+    const obj: any = {};
+    if (message.ttlSeconds !== 0) {
+      obj.ttlSeconds = Math.round(message.ttlSeconds);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CreateInvitationRequest>, I>>(base?: I): CreateInvitationRequest {
+    return CreateInvitationRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateInvitationRequest>, I>>(object: I): CreateInvitationRequest {
+    const message = createBaseCreateInvitationRequest();
+    message.ttlSeconds = object.ttlSeconds ?? 0;
+    return message;
+  },
+};
+
+function createBaseInvitationResponse(): InvitationResponse {
+  return { token: "", expiresAt: 0 };
+}
+
+export const InvitationResponse: MessageFns<InvitationResponse> = {
+  encode(message: InvitationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.token !== "") {
+      writer.uint32(10).string(message.token);
+    }
+    if (message.expiresAt !== 0) {
+      writer.uint32(16).int64(message.expiresAt);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InvitationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInvitationResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.token = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.expiresAt = longToNumber(reader.int64());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InvitationResponse {
+    return {
+      token: isSet(object.token) ? globalThis.String(object.token) : "",
+      expiresAt: isSet(object.expiresAt)
+        ? globalThis.Number(object.expiresAt)
+        : isSet(object.expires_at)
+        ? globalThis.Number(object.expires_at)
+        : 0,
+    };
+  },
+
+  toJSON(message: InvitationResponse): unknown {
+    const obj: any = {};
+    if (message.token !== "") {
+      obj.token = message.token;
+    }
+    if (message.expiresAt !== 0) {
+      obj.expiresAt = Math.round(message.expiresAt);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InvitationResponse>, I>>(base?: I): InvitationResponse {
+    return InvitationResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InvitationResponse>, I>>(object: I): InvitationResponse {
+    const message = createBaseInvitationResponse();
+    message.token = object.token ?? "";
+    message.expiresAt = object.expiresAt ?? 0;
     return message;
   },
 };
