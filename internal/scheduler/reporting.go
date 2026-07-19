@@ -25,7 +25,7 @@ const (
 	ttlApkDownloadsFlush = 10 * time.Minute
 )
 
-func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner *Runner, cleanupJob *apk.CleanupJob, redisClient *redis.Client, wg *sync.WaitGroup) {
+func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner *Runner, cleanupJob *apk.CleanupJob, redisClient *redis.Client, counter apk.DownloadCounter, wg *sync.WaitGroup) {
 	gormDB, ok := db.(*gorm.DB)
 	if !ok || gormDB == nil {
 		log.Printf("scheduler: no DB available for stats")
@@ -81,13 +81,23 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 		}
 	}
 
-	_, err := c.AddFunc("*/15 * * * *", func() {
-		_ = runner.RunLocked(context.Background(), lockApkDownloadsFlush, ttlApkDownloadsFlush, func(jobCtx context.Context) error {
-			return nil
+	if counter != nil {
+		_, err := c.AddFunc("*/15 * * * *", func() {
+			_ = runner.RunLocked(context.Background(), lockApkDownloadsFlush, ttlApkDownloadsFlush, func(jobCtx context.Context) error {
+				if err := counter.Flush(jobCtx); err != nil {
+					log.Printf("failed to flush apk download counters: %v", err)
+					return err
+				}
+				if err := counter.ReprocessOrphans(jobCtx); err != nil {
+					log.Printf("failed to reprocess orphan apk download batches: %v", err)
+					return err
+				}
+				return nil
+			})
 		})
-	})
-	if err != nil {
-		log.Printf("failed to schedule apk downloads flush cron job: %v", err)
+		if err != nil {
+			log.Printf("failed to schedule apk downloads flush cron job: %v", err)
+		}
 	}
 
 	c.Start()
