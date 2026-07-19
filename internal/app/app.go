@@ -13,6 +13,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
+	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
 	"gorm.io/gorm"
 )
@@ -44,7 +45,12 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	router := NewRouter(db, cfg, tokens)
+	redisClient, err := redisplatform.New(context.Background(), cfg.Redis)
+	if err != nil {
+		return nil, err
+	}
+
+	router := NewRouter(db, redisClient, cfg, tokens)
 	httpServer := &http.Server{
 		Addr:    cfg.APIAddr,
 		Handler: router,

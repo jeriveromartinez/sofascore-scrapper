@@ -18,6 +18,7 @@ const authStore = useAuthStore();
 const states = reactive({
   email: "",
   password: "",
+  invitationToken: "",
   agree: false,
   revealPassword: false,
 });
@@ -26,7 +27,7 @@ const goToLogin = () => router.resolve({ name: "Login" }).href;
 
 const doRegister = async () => {
   try {
-    const user = await authApiService.register(states.email, states.password);
+    const user = await authApiService.register(states.email, states.password, states.invitationToken);
     if (!user.token) throw new Error("Invalid credentials");
 
     authStore.setUser(user, false);
@@ -192,6 +193,17 @@ onMounted(() => checkAuth());
                     ></i>
                   </span>
                 </div>
+              </div>
+              <div class="mb-6">
+                <label for="invitationToken" class="form-label">Invitation Token</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="invitationToken"
+                  name="invitationToken"
+                  placeholder="Enter your invitation token"
+                  v-model="states.invitationToken"
+                />
               </div>
               <div class="my-7">
                 <div class="form-check mb-0">

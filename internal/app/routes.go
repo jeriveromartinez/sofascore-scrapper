@@ -14,10 +14,11 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB, cfg config.Config, tokens *auth.TokenService) *gin.Engine {
+func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService) *gin.Engine {
 	router := gin.New()
 	router.Use(server.CORS(), gin.Logger(), gin.Recovery())
 
@@ -71,7 +72,8 @@ func NewRouter(db *gorm.DB, cfg config.Config, tokens *auth.TokenService) *gin.E
 	userHandler.RegisterUserRoutes(webV1, users.HandlerDeps{AuthMiddleware: authMw})
 
 	authRepo := auth.NewAuthRepository(db)
-	authHandler := auth.NewAuthHandler(authRepo, userRepo, tokens)
+	invitationStore := auth.NewInvitationStore(redisClient)
+	authHandler := auth.NewAuthHandler(authRepo, userRepo, tokens, invitationStore)
 	authHandler.RegisterAuthRoutes(webV1)
 
 	tournamentRepo := tournaments.NewRepository(db)

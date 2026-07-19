@@ -13,7 +13,7 @@ func TestRouteCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := config.Config{JWTSecret: "test-secret"}
-	router := NewRouter(nil, cfg, tokens)
+	router := NewRouter(nil, nil, cfg, tokens)
 	got := make(map[string]bool)
 	for _, route := range router.Routes() {
 		got[route.Method+" "+route.Path] = true
@@ -31,6 +31,7 @@ func TestRouteCompatibility(t *testing.T) {
 		"POST /api/web/v1/users/login",
 		"POST /api/web/v1/users/refresh",
 		"POST /api/web/v1/users/logout",
+		"POST /api/web/v1/users/invitations",
 		"GET /api/web/v1/users",
 		"GET /api/web/v1/users/:id",
 		"POST /api/web/v1/users",
@@ -70,7 +71,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 46 {
-		t.Fatalf("got %d routes, want 46", len(got))
+	if len(got) != 47 {
+		t.Fatalf("got %d routes, want 47", len(got))
 	}
 }
