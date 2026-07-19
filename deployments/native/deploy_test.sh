@@ -4,6 +4,8 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 deploy_script="$script_dir/deploy.sh"
 atomic_exchange="$script_dir/atomic_exchange.py"
+expected_sha=1111111111111111111111111111111111111111
+advanced_sha=2222222222222222222222222222222222222222
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -37,15 +39,193 @@ make_fixture() {
   cat > "$bin/systemctl" <<'SYSTEMCTL'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$SYSTEMCTL_LOG"
+if [[ "$*" == "--user restart iptv.service" && -n "${SERVICE_STATE_LOG:-}" ]]; then
+  printf '%s|%s\n' \
+    "$(<"$DEPLOY_ROOT/iptv")" \
+    "$(<"$DEPLOY_ROOT/web/dist/index.html")" >> "$SERVICE_STATE_LOG"
+fi
 if [[ "$*" == "--user restart iptv.service" && -n "${DASHBOARD_STATE_LOG:-}" ]]; then
   [[ -f "$DEPLOY_ROOT/web/dist/index.html" && -f "$DEPLOY_ROOT/web/.dist.new/index.html" ]] || exit 1
   printf '%s|%s\n' \
     "$(<"$DEPLOY_ROOT/web/dist/index.html")" \
     "$(<"$DEPLOY_ROOT/web/.dist.new/index.html")" >> "$DASHBOARD_STATE_LOG"
 fi
+if [[ "${INTERRUPT_PHASE:-}" == after-dashboard-exchange \
+  && "$*" == "--user restart iptv.service" \
+  && ! -e "$SIGNAL_SENT_FILE" ]]; then
+  touch "$SIGNAL_SENT_FILE"
+  kill -s "$INTERRUPT_SIGNAL" "$PPID"
+  if [[ "$INTERRUPT_SIGNAL" == INT ]]; then
+    trap - INT
+    kill -INT "$$"
+  fi
+fi
+if [[ "${INTERRUPT_PHASE:-}" == after-restart \
+  && "$*" == "--user is-active --quiet iptv.service" \
+  && ! -e "$SIGNAL_SENT_FILE" ]]; then
+  touch "$SIGNAL_SENT_FILE"
+  kill -s "$INTERRUPT_SIGNAL" "$PPID"
+  if [[ "$INTERRUPT_SIGNAL" == INT ]]; then
+    trap - INT
+    kill -INT "$$"
+  fi
+fi
 exit 0
 SYSTEMCTL
   chmod +x "$bin/systemctl"
+
+  cat > "$bin/git" <<'GIT'
+#!/usr/bin/env bash
+[[ "$*" == "ls-remote --exit-code origin refs/heads/main" ]] || exit 2
+count=0
+[[ -f "$GIT_COUNT_FILE" ]] && count=$(<"$GIT_COUNT_FILE")
+count=$((count + 1))
+printf '%s' "$count" > "$GIT_COUNT_FILE"
+sha=$REMOTE_MAIN_SHA
+if [[ "$count" -gt 1 && -n "${REMOTE_MAIN_SHA_AFTER_FIRST:-}" ]]; then
+  sha=$REMOTE_MAIN_SHA_AFTER_FIRST
+fi
+printf '%s\trefs/heads/main\n' "$sha"
+GIT
+  chmod +x "$bin/git"
+}
+
+run_interrupted_deployment() {
+  local phase=$1
+  local signal=$2
+  local expected_status=$3
+  local name="interrupt-${phase}-${signal}"
+  local case_dir="$tmp/$name"
+  local output
+  local output_file="$case_dir/output.log"
+  local status
+
+  make_fixture "$name"
+  cat > "$case_dir/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+printf '200'
+CURL
+  chmod +x "$case_dir/bin/curl"
+
+  cat > "$case_dir/bin/mv" <<'MV'
+#!/usr/bin/env bash
+/usr/bin/mv "$@"
+if [[ "${INTERRUPT_PHASE:-}" == after-binary \
+  && "$*" == *"/.iptv.new "* \
+  && ! -e "$SIGNAL_SENT_FILE" ]]; then
+  touch "$SIGNAL_SENT_FILE"
+  kill -s "$INTERRUPT_SIGNAL" "$PPID"
+  if [[ "$INTERRUPT_SIGNAL" == INT ]]; then
+    trap - INT
+    kill -INT "$$"
+  fi
+fi
+MV
+  chmod +x "$case_dir/bin/mv"
+
+  set +e
+  PATH="$case_dir/bin:$PATH" \
+    DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    SERVICE_STATE_LOG="$case_dir/service-state.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
+    INTERRUPT_PHASE="$phase" \
+    INTERRUPT_SIGNAL="$signal" \
+    SIGNAL_SENT_FILE="$case_dir/signal.sent" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha" >"$output_file" 2>&1
+  status=$?
+  set -e
+  output=$(<"$output_file")
+
+  [[ "$status" -eq "$expected_status" ]] || fail "$signal after $phase exited $status instead of $expected_status: $output"
+  grep -Fq "deployment interrupted by $signal; restoring previous release" <<<"$output" || fail "$signal after $phase did not report rollback"
+  assert_content old-binary "$case_dir/root/iptv"
+  assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ $(tail -n 1 "$case_dir/service-state.log") == 'old-binary|old-dashboard' ]] || fail "$signal after $phase did not restore service state"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "$signal after $phase left exchanged state after rollback"
+}
+
+test_interruptions_restore_previous_release() {
+  local phase
+  local signal
+  local status
+  for phase in after-binary after-dashboard-exchange after-restart; do
+    for signal in INT TERM; do
+      status=130
+      [[ "$signal" == TERM ]] && status=143
+      run_interrupted_deployment "$phase" "$signal" "$status"
+    done
+  done
+}
+
+test_stale_before_mutation_does_not_change_production() {
+  make_fixture stale-before
+  local case_dir="$tmp/stale-before"
+  local output
+
+  cat > "$case_dir/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+printf '200'
+CURL
+  chmod +x "$case_dir/bin/curl"
+
+  if output=$(DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$advanced_sha" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha" 2>&1); then
+    fail "stale deployment unexpectedly succeeded"
+  fi
+
+  grep -Fq "selected SHA $expected_sha is not current main $advanced_sha" <<<"$output" || fail "stale deployment was not rejected inside publisher"
+  assert_content old-binary "$case_dir/root/iptv"
+  assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ ! -e "$case_dir/systemctl.log" ]] || fail "stale deployment restarted the service"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "stale deployment left staged dashboard state"
+}
+
+test_main_advance_during_publication_restores_previous_release() {
+  make_fixture main-advance
+  local case_dir="$tmp/main-advance"
+  local output
+
+  cat > "$case_dir/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+printf '200'
+CURL
+  chmod +x "$case_dir/bin/curl"
+
+  if output=$(DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
+    REMOTE_MAIN_SHA_AFTER_FIRST="$advanced_sha" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha" 2>&1); then
+    fail "deployment whose main advanced unexpectedly succeeded"
+  fi
+
+  grep -Fq "selected SHA $expected_sha is not current main $advanced_sha" <<<"$output" || fail "main advance was not detected inside publisher"
+  grep -Fq 'previous release restored' <<<"$output" || fail "main advance did not report successful rollback"
+  assert_content old-binary "$case_dir/root/iptv"
+  assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 2 ]] || fail "main advance did not restore service state"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "main advance left exchanged state after rollback"
 }
 
 test_successful_publication() {
@@ -63,9 +243,12 @@ CURL
   SYSTEMCTL_LOG="$case_dir/systemctl.log" \
   DASHBOARD_STATE_LOG="$case_dir/dashboard-state.log" \
   CURL_BIN="$case_dir/bin/curl" \
+  GIT_BIN="$case_dir/bin/git" \
+  GIT_COUNT_FILE="$case_dir/git.count" \
+  REMOTE_MAIN_SHA="$expected_sha" \
   HEALTH_ATTEMPTS=1 \
   HEALTH_DELAY_SECONDS=0 \
-    "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist"
+    "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha"
 
   assert_content new-binary "$case_dir/root/iptv"
   assert_content new-dashboard "$case_dir/root/web/dist/index.html"
@@ -122,9 +305,12 @@ CURL
     SYSTEMCTL_LOG="$case_dir/systemctl.log" \
     CURL_BIN="$case_dir/bin/curl" \
     CURL_COUNT_FILE="$case_dir/curl.count" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
     HEALTH_ATTEMPTS=1 \
     HEALTH_DELAY_SECONDS=0 \
-      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist"; then
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha"; then
     fail "deployment with non-200 health unexpectedly succeeded"
   fi
 
@@ -157,9 +343,12 @@ CURL
     SYSTEMCTL_LOG="$case_dir/systemctl.log" \
     CURL_BIN="$case_dir/bin/curl" \
     CURL_COUNT_FILE="$case_dir/curl.count" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
     HEALTH_ATTEMPTS=1 \
     HEALTH_DELAY_SECONDS=0 \
-      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist"; then
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha"; then
     fail "deployment unexpectedly succeeded"
   fi
 
@@ -208,9 +397,12 @@ INSTALL
     CURL_BIN="$case_dir/bin/curl" \
     CURL_COUNT_FILE="$case_dir/curl.count" \
     INSTALL_COUNT_FILE="$case_dir/install.count" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
     HEALTH_ATTEMPTS=1 \
     HEALTH_DELAY_SECONDS=0 \
-      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" 2>&1); then
+      "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha" 2>&1); then
     fail "deployment with failed rollback operation unexpectedly succeeded"
   fi
 
@@ -224,9 +416,20 @@ INSTALL
   [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 1 ]] || fail "rollback continued to service restart after operation failure"
 }
 
-test_successful_publication
-test_dashboard_publication_uses_atomic_exchange
-test_non_200_health_restores_previous_release
-test_failed_health_restores_previous_release
-test_rollback_operation_failure_is_reported
+tests=(
+  test_successful_publication
+  test_dashboard_publication_uses_atomic_exchange
+  test_non_200_health_restores_previous_release
+  test_failed_health_restores_previous_release
+  test_rollback_operation_failure_is_reported
+  test_interruptions_restore_previous_release
+  test_stale_before_mutation_does_not_change_production
+  test_main_advance_during_publication_restores_previous_release
+)
+if (($#)); then
+  tests=("$@")
+fi
+for test_name in "${tests[@]}"; do
+  "$test_name"
+done
 printf 'native deploy tests passed\n'

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 workflow=.github/workflows/deploy.yml
+deploy_script=deployments/native/deploy.sh
 
 require() {
   grep -Fq "$1" "$workflow" || {
@@ -15,6 +16,13 @@ reject() {
     echo "forbidden deploy workflow content: $1" >&2
     exit 1
   fi
+}
+
+require_deploy() {
+  grep -Fq "$1" "$deploy_script" || {
+    echo "missing deploy script requirement: $1" >&2
+    exit 1
+  }
 }
 
 require_immutable_actions() {
@@ -67,7 +75,13 @@ require 'EXPECTED_SHA: ${{ needs.verify.outputs.sha }}'
 require '[[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]'
 require 'git ls-remote --exit-code origin refs/heads/main'
 require '[[ "$remote_main_sha" == "$EXPECTED_SHA" ]]'
-require 'deployments/native/deploy.sh build/iptv web/dist'
+require 'deployments/native/deploy.sh build/iptv web/dist "$EXPECTED_SHA"'
+require_deploy 'expected_sha=$3'
+require_deploy '"$git_bin" ls-remote --exit-code origin refs/heads/main'
+[[ $(grep -Ec '^require_current_main$' "$deploy_script") -eq 2 ]] || {
+  echo 'deploy script must guard immediately before mutation and after readiness' >&2
+  exit 1
+}
 require 'systemctl --user show iptv.service'
 require 'uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4'
 require 'uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5'

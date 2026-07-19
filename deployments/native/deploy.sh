@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 <executable> <web-dist>" >&2
+if [[ $# -ne 3 ]]; then
+  echo "usage: $0 <executable> <web-dist> <expected-sha>" >&2
   exit 2
 fi
 
 source_binary=$1
 source_dashboard=$2
+expected_sha=$3
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 deploy_root=${DEPLOY_ROOT:-/opt/iptv}
 service_name=${SERVICE_NAME:-iptv.service}
@@ -15,6 +16,7 @@ health_url=${HEALTH_URL:-http://127.0.0.1:8080/health/ready}
 systemctl_bin=${SYSTEMCTL_BIN:-systemctl}
 curl_bin=${CURL_BIN:-curl}
 python_bin=${PYTHON_BIN:-python3}
+git_bin=${GIT_BIN:-git}
 health_attempts=${HEALTH_ATTEMPTS:-30}
 health_delay=${HEALTH_DELAY_SECONDS:-2}
 
@@ -53,6 +55,17 @@ wait_for_health() {
   return 1
 }
 
+require_current_main() {
+  local remote_main
+  local remote_main_sha
+  remote_main=$("$git_bin" ls-remote --exit-code origin refs/heads/main)
+  remote_main_sha=${remote_main%%[[:space:]]*}
+  [[ "$remote_main_sha" == "$expected_sha" ]] || {
+    echo "Refusing stale deployment: selected SHA $expected_sha is not current main $remote_main_sha" >&2
+    return 1
+  }
+}
+
 restore_previous() {
   [[ -f "$previous_dir/iptv" ]] || return 1
   [[ -d "$previous_dir/web-dist" ]] || return 1
@@ -67,30 +80,49 @@ restore_previous() {
   wait_for_health || return
 }
 
-handle_error() {
-  local status=$?
+finish_failure() {
+  local status=$1
+  local reason=$2
   trap - ERR
+  trap '' INT TERM
 
   if [[ "$rollback_required" == true ]]; then
-    echo "deployment failed; restoring previous release" >&2
+    echo "$reason; restoring previous release" >&2
     if restore_previous; then
       echo "previous release restored" >&2
     else
       echo "rollback failed; inspect $service_name immediately" >&2
     fi
+  else
+    echo "$reason" >&2
   fi
 
   exit "$status"
 }
 
+handle_error() {
+  local status=$?
+  finish_failure "$status" "deployment failed"
+}
+
+handle_signal() {
+  local signal=$1
+  local status=$2
+  finish_failure "$status" "deployment interrupted by $signal"
+}
+
 trap cleanup EXIT
 trap handle_error ERR
+trap 'handle_signal INT 130' INT
+trap 'handle_signal TERM 143' TERM
 
 [[ -f "$source_binary" ]] || { echo "missing executable: $source_binary" >&2; exit 1; }
 [[ -d "$source_dashboard" ]] || { echo "missing dashboard: $source_dashboard" >&2; exit 1; }
 [[ -f "$source_dashboard/index.html" ]] || { echo "dashboard index is missing" >&2; exit 1; }
+[[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "invalid expected SHA: $expected_sha" >&2; exit 1; }
 [[ -f "$atomic_exchange" ]] || { echo "atomic exchange helper is missing: $atomic_exchange" >&2; exit 1; }
 command -v "$python_bin" >/dev/null || { echo "missing required command: $python_bin" >&2; exit 1; }
+command -v "$git_bin" >/dev/null || { echo "missing required command: $git_bin" >&2; exit 1; }
 [[ -d "$deploy_root" && -w "$deploy_root" ]] || { echo "$deploy_root is not writable" >&2; exit 1; }
 [[ -d "$deploy_root/apk_storage" && -w "$deploy_root/apk_storage" ]] || { echo "apk storage is not writable" >&2; exit 1; }
 [[ -d "$deploy_root/image_storage" && -w "$deploy_root/image_storage" ]] || { echo "image storage is not writable" >&2; exit 1; }
@@ -107,15 +139,17 @@ cp -a "$current_dashboard" "$state_dir/previous.new/web-dist"
 rm -rf "$previous_dir"
 mv "$state_dir/previous.new" "$previous_dir"
 
-rollback_required=true
 install -m 0755 "$stage_dir/iptv" "$deploy_root/.iptv.new"
 rm -rf "$deploy_root/web/.dist.new"
 cp -a "$stage_dir/web-dist" "$deploy_root/web/.dist.new"
+require_current_main
+rollback_required=true
 mv -f "$deploy_root/.iptv.new" "$current_binary"
 "$python_bin" "$atomic_exchange" "$current_dashboard" "$deploy_root/web/.dist.new"
 dashboard_exchanged=true
 "$systemctl_bin" --user restart "$service_name"
 wait_for_health
+require_current_main
 rollback_required=false
 dashboard_exchanged=false
 

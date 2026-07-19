@@ -179,7 +179,7 @@ jobs:
             echo "Refusing stale deployment: selected SHA $EXPECTED_SHA is not current main $remote_main_sha" >&2
             exit 1
           }
-          deployments/native/deploy.sh build/iptv web/dist
+          deployments/native/deploy.sh build/iptv web/dist "$EXPECTED_SHA"
 
       - name: Service diagnostics
         if: failure()
