@@ -1,14 +1,5 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 
-type Device struct {
-	gorm.Model
-	UserID   *uint
-	Token    string `gorm:"uniqueIndex;not null"`
-	Platform string
-	Name     string
-	LastSeen int64
-	Version  string
-	Manager  *User `gorm:"foreignKey:UserID"`
-}
+type Device = devices.Device
