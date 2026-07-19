@@ -1,71 +1,70 @@
 package scheduler
 
 import (
-	"encoding/json"
 	"log"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/libs/httpcli"
-	"github.com/jeriveromartinez/sofascore-scrapper/models"
-	"github.com/jeriveromartinez/sofascore-scrapper/repository"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 )
 
+func newScraperService() *scraper.Service {
+	db, err := database.GetDB()
+	if err != nil {
+		log.Printf("scheduler: failed to get DB for scraper: %v", err)
+		return nil
+	}
+	return scraper.NewService(events.NewRepository(db))
+}
+
 func scrape(sport string, date time.Time) {
-	body := httpcli.LoadDataBySport(sport, date)
-	var list models.EventsListResponse
-	if err := json.Unmarshal(body, &list); err != nil {
-		log.Printf("scheduler: error parsing JSON for %s on %s: %v", sport, date.Format("2006-01-02"), err)
+	svc := newScraperService()
+	if svc == nil {
 		return
 	}
-	repository.SaveSofaScoreEvent(list.Events, sport)
-	log.Printf("scheduler: scraped %d events for %s on %s", len(list.Events), sport, date.Format("2006-01-02"))
+	svc.Scrape(sport, date)
 }
 
 func scrapeCountry(countryCode string) {
-	body := httpcli.LoadDataByTrendingCountry(countryCode)
-	var list models.EventsListResponse
-	if err := json.Unmarshal(body, &list); err != nil {
-		log.Printf("scheduler: error parsing JSON for country %s: %v", countryCode, err)
+	svc := newScraperService()
+	if svc == nil {
 		return
 	}
-	repository.SaveSofaScoreEvent(list.Events, countryCode)
-	log.Printf("scheduler: scraped %d events for country %s", len(list.Events), countryCode)
+	svc.ScrapeCountry(countryCode)
 }
 
 func scrapeToday(date time.Time) {
-	for _, sport := range httpcli.GET_SPORTS() {
+	for _, sport := range scraper.GET_SPORTS() {
 		scrape(sport, date)
 	}
-	for _, country := range httpcli.GET_COUNTRIES() {
+	for _, country := range scraper.GET_COUNTRIES() {
 		scrapeCountry(country)
 	}
 }
 
 func scrapeNext7Days() {
 	now := time.Now()
-	for _, sport := range httpcli.GET_SPORTS() {
+	for _, sport := range scraper.GET_SPORTS() {
 		for i := 1; i <= 7; i++ {
 			scrape(sport, now.Add(time.Duration(i)*24*time.Hour))
 		}
 	}
-
 }
 
 func startScrape() {
 	go scrapeToday(time.Now())
 	go scrapeNext7Days()
 
-	// Every minute: scrape today
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
 			<-ticker.C
-			scrape(httpcli.FOOTBALL, time.Now())
+			scrape(scraper.FOOTBALL, time.Now())
 		}
 	}()
 
-	// Twice daily at 06:00 and 18:00 UTC: scrape next 7 days
 	go func() {
 		for {
 			now := time.Now().UTC()
@@ -78,7 +77,6 @@ func startScrape() {
 			} else {
 				next = time.Date(now.Year(), now.Month(), now.Day()+1, 6, 0, 0, 0, time.UTC)
 			}
-			// Ensure next is always in the future to avoid tight loops
 			if !next.After(now) {
 				next = next.Add(time.Second)
 			}
