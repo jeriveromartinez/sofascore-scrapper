@@ -23,6 +23,11 @@ func TestEventToProtoNormalizesLogoURLsWithoutMutatingModels(t *testing.T) {
 			url:  "/api/app/v1/teams/logo/123",
 			want: "/api/app/v1/teams/logo/123",
 		},
+		{
+			name: "already prefixed root URL",
+			url:  "/api/app/v1",
+			want: "/api/app/v1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -43,5 +48,16 @@ func TestEventToProtoNormalizesLogoURLsWithoutMutatingModels(t *testing.T) {
 				t.Fatalf("EventToProto mutated model URL from %q to %q", tt.url, team.LogoUrl)
 			}
 		})
+	}
+}
+
+func TestEventToProtoHandlesMissingTeams(t *testing.T) {
+	event := EventToProto(Event{})
+
+	if event.TeamHome != nil {
+		t.Fatalf("TeamHome = %#v, want nil", event.TeamHome)
+	}
+	if event.TeamAway != nil {
+		t.Fatalf("TeamAway = %#v, want nil", event.TeamAway)
 	}
 }

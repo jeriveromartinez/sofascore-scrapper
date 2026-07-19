@@ -55,8 +55,9 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 }
 
 func logoURLForAPI(rawURL string) string {
-	if strings.HasPrefix(rawURL, "/") && !strings.HasPrefix(rawURL, "/api/app/v1/") {
-		return "/api/app/v1" + rawURL
+	const apiPrefix = "/api/app/v1"
+	if strings.HasPrefix(rawURL, "/") && rawURL != apiPrefix && !strings.HasPrefix(rawURL, apiPrefix+"/") {
+		return apiPrefix + rawURL
 	}
 	return rawURL
 }
