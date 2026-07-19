@@ -1,7 +1,11 @@
 package playback
 
 import (
+	"context"
+
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Repository struct {
@@ -10,6 +14,25 @@ type Repository struct {
 
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) Start(ctx context.Context, deviceID uint, content string, startedAt int64) (*PlaybackLog, error) {
+	var created PlaybackLog
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var device devices.Device
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&device, deviceID).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&PlaybackLog{}).Where("device_id = ? AND ended_at = 0", deviceID).Update("ended_at", startedAt).Error; err != nil {
+			return err
+		}
+		created = PlaybackLog{DeviceID: deviceID, Content: content, StartedAt: startedAt}
+		if err := tx.Create(&created).Error; err != nil {
+			return err
+		}
+		return tx.Model(&devices.Device{}).Where("id = ?", deviceID).Update("last_seen", startedAt).Error
+	})
+	return &created, err
 }
 
 func (r *Repository) Log(deviceID uint, content string, startedAt int64) (*PlaybackLog, error) {

@@ -66,7 +66,8 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	devicesAppHandler := devices.NewAppHandler(devRepo)
 	devicesAppHandler.RegisterRoutes(appV1)
 
-	playbackAppHandler := playback.NewAppHandler(playbackRepo, devRepo)
+	playbackService := playback.NewService(playbackRepo)
+	playbackAppHandler := playback.NewAppHandler(playbackService)
 	playbackAppHandler.RegisterRoutes(appV1, playback.PlaybackAppHandlerDeps{AppMiddleware: appMw})
 
 	devicesAdminHandler := devices.NewAdminHandler(devRepo)

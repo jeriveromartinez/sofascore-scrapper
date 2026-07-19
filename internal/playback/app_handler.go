@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -15,12 +16,11 @@ type PlaybackAppHandlerDeps struct {
 }
 
 type AppHandler struct {
-	repo    *Repository
-	devRepo *devices.Repository
+	service *Service
 }
 
-func NewAppHandler(repo *Repository, devRepo *devices.Repository) *AppHandler {
-	return &AppHandler{repo: repo, devRepo: devRepo}
+func NewAppHandler(service *Service) *AppHandler {
+	return &AppHandler{service: service}
 }
 
 func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup, deps PlaybackAppHandlerDeps) {
@@ -29,29 +29,31 @@ func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup, deps PlaybackAppHand
 
 func (h *AppHandler) handleReportViewing(c *gin.Context) {
 	var req pb.LogPlaybackRequest
-	if err := server.ParseProtoBody(c, &req); err != nil || req.DeviceToken == "" || req.Content == "" {
-		server.RespondError(c, http.StatusBadRequest, "device_token and content are required")
+	if err := server.ParseProtoBody(c, &req); err != nil || req.Content == "" {
+		server.RespondError(c, http.StatusBadRequest, "content is required")
 		return
 	}
 
-	device, err := h.devRepo.FindByToken(req.DeviceToken)
+	dev, ok := c.Get("device")
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "device not authenticated")
+		return
+	}
+	device := dev.(devices.Device)
+
+	if req.DeviceToken != "" && req.DeviceToken != device.Token {
+		server.RespondError(c, http.StatusForbidden, "device token mismatch")
+		return
+	}
+
+	startedAt, err := NormalizeUnixMillis(req.StartedAt, time.Now)
 	if err != nil {
-		server.RespondError(c, http.StatusBadRequest, "device not found")
+		server.RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	startedAt := req.StartedAt
-	if startedAt == 0 {
-		startedAt = time.Now().Unix()
-	}
-
-	playbackLog, err := h.repo.Log(device.ID, req.Content, startedAt)
+	playbackLog, err := h.service.Start(context.Background(), device, req.Content, startedAt)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if err := h.devRepo.UpdateLastSeen(req.DeviceToken); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

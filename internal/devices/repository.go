@@ -31,6 +31,10 @@ func (r *Repository) UpdateLastSeen(token string) error {
 	return r.db.Model(&Device{}).Where("token = ?", token).Update("last_seen", time.Now().Unix()).Error
 }
 
+func (r *Repository) UpdateLastSeenByID(deviceID uint, ts int64) error {
+	return r.db.Model(&Device{}).Where("id = ?", deviceID).Update("last_seen", ts).Error
+}
+
 func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
 	var devices []Device
 	var total int64
