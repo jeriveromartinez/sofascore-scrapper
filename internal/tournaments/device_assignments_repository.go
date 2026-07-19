@@ -1,6 +1,10 @@
 package tournaments
 
-import "gorm.io/gorm"
+import (
+	"context"
+
+	"gorm.io/gorm"
+)
 
 type DeviceAssignmentsRepository struct {
 	db *gorm.DB
@@ -20,6 +24,29 @@ func (r *DeviceAssignmentsRepository) GetAll() ([]DeviceTournament, error) {
 	var deviceTournaments []DeviceTournament
 	result := r.db.Preload("Device").Preload("Tournament").Find(&deviceTournaments)
 	return deviceTournaments, result.Error
+}
+
+func (r *DeviceAssignmentsRepository) ListPage(ctx context.Context, deviceID, tournamentID, id uint, limit int) ([]DeviceTournament, bool, error) {
+	query := r.db.WithContext(ctx).Preload("Device").Preload("Tournament").
+		Order("device_id ASC, tournament_id ASC, id ASC")
+
+	if deviceID > 0 || tournamentID > 0 || id > 0 {
+		query = query.Where(
+			"device_id > ? OR (device_id = ? AND tournament_id > ?) OR (device_id = ? AND tournament_id = ? AND id > ?)",
+			deviceID, deviceID, tournamentID, deviceID, tournamentID, id,
+		)
+	}
+
+	var rows []DeviceTournament
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
 }
 
 func (r *DeviceAssignmentsRepository) Assign(deviceID, tournamentID uint) (*DeviceTournament, error) {
