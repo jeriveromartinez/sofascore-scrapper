@@ -1,19 +1,14 @@
 package repository
 
 import (
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
 
-func SaveCrashReport(report models.CrashReport) error {
+func SaveCrashReport(report reporting.CrashReport) error {
 	db, err := database.GetDB()
 	if err != nil {
 		return err
 	}
-
-	if err := db.Create(&report).Error; err != nil {
-		return err
-	}
-
-	return nil
+	return reporting.NewRepository(db).SaveCrash(report)
 }

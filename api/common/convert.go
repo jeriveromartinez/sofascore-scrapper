@@ -7,11 +7,11 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/repository"
 )
 
 func FormatTime(t time.Time) string {
@@ -135,15 +135,8 @@ func DeviceTournamentsToProto(dts []models.DeviceTournament) []*pb.DeviceTournam
 	return tournaments.DeviceTournamentsToProto(dts)
 }
 
-func EventStatsToProto(stats []repository.EventStats) []*pb.EventStats {
-	result := make([]*pb.EventStats, 0, len(stats))
-	for _, s := range stats {
-		result = append(result, &pb.EventStats{
-			SofaScoreEventId: s.SofaScoreEventId,
-			ViewCount:        s.ViewCount,
-		})
-	}
-	return result
+func EventStatsToProto(stats []reporting.EventStats) []*pb.EventStats {
+	return reporting.EventStatsToProto(stats)
 }
 
 func ApkToProto(v models.ApkVersion, downloadURL string) *pb.ApkInfo {
