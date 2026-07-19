@@ -41,7 +41,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	if err := Migrate(db); err != nil {
+	if err := database.Migrate(context.Background(), sqlDB); err != nil {
 		return nil, err
 	}
 
