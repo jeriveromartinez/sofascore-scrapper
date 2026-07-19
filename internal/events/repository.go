@@ -172,6 +172,31 @@ func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {
 	}
 }
 
+func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]uint, error) {
+	var deviceTournaments []tournaments.DeviceTournament
+	if err := r.db.WithContext(ctx).Find(&deviceTournaments, "device_id = ?", devID).Error; err != nil {
+		return nil, err
+	}
+
+	if len(deviceTournaments) > 0 {
+		ids := make([]uint, len(deviceTournaments))
+		for i, dt := range deviceTournaments {
+			ids[i] = dt.TournamentID
+		}
+		return ids, nil
+	}
+
+	var globalConfig []tournaments.GlobalTournamentConfig
+	if err := r.db.WithContext(ctx).Find(&globalConfig).Error; err != nil {
+		return nil, err
+	}
+	ids := make([]uint, len(globalConfig))
+	for i, gc := range globalConfig {
+		ids[i] = gc.TournamentID
+	}
+	return ids, nil
+}
+
 func (r *Repository) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit int) ([]Event, error) {
 	if limit <= 0 || limit > 6 {
 		limit = 6

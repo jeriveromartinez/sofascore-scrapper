@@ -1,6 +1,7 @@
 package tournaments
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -15,11 +16,16 @@ type DeviceAssignmentsHandlerDeps struct {
 }
 
 type DeviceAssignmentsHandler struct {
-	repo *DeviceAssignmentsRepository
+	repo     *DeviceAssignmentsRepository
+	onChange func(context.Context) error
 }
 
 func NewDeviceAssignmentsHandler(repo *DeviceAssignmentsRepository) *DeviceAssignmentsHandler {
 	return &DeviceAssignmentsHandler{repo: repo}
+}
+
+func (h *DeviceAssignmentsHandler) SetOnChange(fn func(context.Context) error) {
+	h.onChange = fn
 }
 
 func (h *DeviceAssignmentsHandler) RegisterRoutes(group *gin.RouterGroup, deps DeviceAssignmentsHandlerDeps) {
@@ -135,6 +141,9 @@ func (h *DeviceAssignmentsHandler) handleAssign(c *gin.Context) {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if h.onChange != nil {
+		_ = h.onChange(c.Request.Context())
+	}
 	server.RespondProto(c, http.StatusCreated, DeviceTournamentToProto(*deviceTournament))
 }
 
@@ -148,6 +157,9 @@ func (h *DeviceAssignmentsHandler) handleRemove(c *gin.Context) {
 	if err := h.repo.Remove(uint(req.DeviceId), uint(req.TournamentId)); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if h.onChange != nil {
+		_ = h.onChange(c.Request.Context())
 	}
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament removed from device"})
 }
@@ -173,6 +185,9 @@ func (h *DeviceAssignmentsHandler) handleSet(c *gin.Context) {
 	if err := h.repo.Set(deviceID, ids); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if h.onChange != nil {
+		_ = h.onChange(c.Request.Context())
 	}
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "device tournaments updated"})
 }

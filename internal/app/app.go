@@ -11,6 +11,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
@@ -86,7 +87,7 @@ func New(cfg config.Config) (*App, error) {
 }
 
 func (a *App) Run(ctx context.Context) error {
-	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur)
+	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis))
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))
