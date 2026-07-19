@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
 
@@ -121,13 +121,15 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 	query := h.db.WithContext(c.Request.Context()).Model(&Event{})
 	if date != "" {
 		t, err := time.Parse("2006-01-02", date)
-		if err == nil {
-			start := t.Unix()
-			end := t.Add(24 * time.Hour).Unix()
-			query = query.Where("start_timestamp >= ? AND start_timestamp < ?", start, end)
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "date must use YYYY-MM-DD format")
+			return
 		}
+		start := t.UnixMilli()
+		end := t.Add(24 * time.Hour).UnixMilli()
+		query = query.Where("start_timestamp >= ? AND start_timestamp < ?", start, end)
 	} else {
-		start := time.Now().Unix()
+		start := time.Now().UnixMilli()
 		query = query.Where("start_timestamp >= ?", start)
 	}
 

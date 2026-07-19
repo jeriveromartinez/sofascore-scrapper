@@ -1,26 +1,13 @@
 import { test, expect } from "@playwright/test";
-import { api, AuthRequest, AuthResponse, TournamentRequest, Tournament, TournamentList, StatusMessage } from "./helpers";
+import { api, getE2EAdminToken, TournamentRequest, Tournament, TournamentList, StatusMessage } from "./helpers";
 
-const AUTH_PATH = "/api/web/v1/users";
 const TOURNAMENTS_PATH = "/api/web/v1/tournaments";
-
-const TEST_EMAIL = `e2e-tourn-${Date.now()}@test.local`;
-const TEST_PASSWORD = "Password1!";
 
 let accessToken: string;
 
 test.describe("Tournament CRUD", () => {
-  test.beforeAll(async ({ request }) => {
-    const bootstrapToken = await getBootstrapInvitationToken();
-    const registerResp = await api.post<AuthResponse, AuthRequest>(
-      request,
-      `${AUTH_PATH}/register`,
-      { email: TEST_EMAIL, password: TEST_PASSWORD, invitationToken: bootstrapToken },
-      AuthRequest,
-      AuthResponse,
-    );
-    expect(registerResp.status).toBe(201);
-    accessToken = registerResp.data!.token;
+  test.beforeAll(() => {
+    accessToken = getE2EAdminToken();
   });
 
   test("list tournaments (empty initially)", async ({ request }) => {
@@ -169,16 +156,3 @@ test.describe("Tournament CRUD", () => {
     expect(resp.status).toBe(401);
   });
 });
-
-async function getBootstrapInvitationToken(): Promise<string> {
-  const { execSync } = await import("child_process");
-  const composeFile = "deployments/docker/compose.test.yml";
-  try {
-    return execSync(
-      `docker compose -f ${composeFile} exec -T backend cat /shared/invite.txt`,
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-    ).toString().trim();
-  } catch {
-    throw new Error("Could not read bootstrap invitation token.");
-  }
-}

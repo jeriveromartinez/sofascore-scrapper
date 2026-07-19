@@ -1,46 +1,19 @@
 name: Deploy
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-      - Integration
-      - E2E
-      - "Load Tests"
-    branches:
-      - main
-    types:
-      - completed
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify preconditions
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    outputs:
-      sha: ${{ steps.ref.outputs.sha }}
-    steps:
-      - id: ref
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Audit precondition
-        run: |
-          echo "Deploy authorized for ref: ${{ steps.ref.outputs.sha }}"
-          echo "Trigger: ${{ github.event_name }}"
-
   deploy:
     name: Deploy to production
-    needs: verify
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -49,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.verify.outputs.sha }}
+          ref: ${{ github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -67,12 +40,12 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.CONTAINER_REGISTRY }}/${{ secrets.IMAGE_NAME }}:${{ needs.verify.outputs.sha }}
+            ${{ secrets.CONTAINER_REGISTRY }}/${{ secrets.IMAGE_NAME }}:${{ github.sha }}
             ${{ secrets.CONTAINER_REGISTRY }}/${{ secrets.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Deploy notification
         run: |
-          echo "Deployed ${{ secrets.IMAGE_NAME }}:${{ needs.verify.outputs.sha }}"
+          echo "Deployed ${{ secrets.IMAGE_NAME }}:${{ github.sha }}"
           echo "Registry: ${{ secrets.CONTAINER_REGISTRY }}"

@@ -37,7 +37,7 @@ func (cs *ChunkStore) WriteChunk(uploadID string, index int, reader io.Reader) (
 	}
 
 	hash := sha256.New()
-	tee := io.TeeReader(reader, hash)
+	tee := io.TeeReader(io.LimitReader(reader, MaxChunkSize+1), hash)
 
 	tmpPath := filepath.Join(dir, fmt.Sprintf(".chunk-%d-tmp", index))
 	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
@@ -46,20 +46,25 @@ func (cs *ChunkStore) WriteChunk(uploadID string, index int, reader io.Reader) (
 	}
 
 	written, copyErr := io.Copy(f, tee)
-	closeErr := f.Close()
-
 	if copyErr != nil {
+		f.Close()
 		os.Remove(tmpPath)
 		return nil, fmt.Errorf("write chunk: %w", copyErr)
 	}
+	if written > MaxChunkSize {
+		f.Close()
+		os.Remove(tmpPath)
+		return nil, fmt.Errorf("chunk size exceeds limit of %d bytes", MaxChunkSize)
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return nil, fmt.Errorf("fsync chunk: %w", err)
+	}
+	closeErr := f.Close()
 	if closeErr != nil {
 		os.Remove(tmpPath)
 		return nil, fmt.Errorf("close chunk: %w", closeErr)
-	}
-
-	if err := f.Sync(); err != nil {
-		os.Remove(tmpPath)
-		return nil, fmt.Errorf("fsync chunk: %w", err)
 	}
 
 	destPath := cs.ChunkPath(uploadID, index)

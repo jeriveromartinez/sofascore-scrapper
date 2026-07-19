@@ -29,8 +29,8 @@ type Event struct {
 	Slug                        string
 	LeagueId                    uint
 	StatusType                  string
-	HomeTeamModel               *Team                    `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
-	AwayTeamModel               *Team                    `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
+	HomeTeamModel               *Team                   `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
+	AwayTeamModel               *Team                   `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
 	League                      *tournaments.Tournament `gorm:"foreignKey:LeagueId" json:"league,omitempty"`
 }
 
@@ -39,7 +39,7 @@ func (Event) TableName() string {
 }
 
 type ScrapeBatch struct {
-	Teams       []Team                     `json:"teams"`
-	Tournaments []tournaments.Tournament   `json:"tournaments"`
-	Events      []Event                    `json:"events"`
+	Teams       []Team                   `json:"teams"`
+	Tournaments []tournaments.Tournament `json:"tournaments"`
+	Events      []Event                  `json:"events"`
 }

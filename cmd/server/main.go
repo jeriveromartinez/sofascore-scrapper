@@ -48,9 +48,15 @@ func main() {
 }
 
 func runBootstrapInvitation(cfg config.Config) {
-	db, _, err := database.Open(cfg.Database)
+	db, sqlDB, err := database.Open(cfg.Database)
 	if err != nil {
 		slog.Error("failed to open database", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer sqlDB.Close()
+
+	if err := database.Migrate(context.Background(), sqlDB); err != nil {
+		slog.Error("failed to migrate database", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 

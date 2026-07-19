@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/glebarez/sqlite"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"gorm.io/gorm"
 )
 

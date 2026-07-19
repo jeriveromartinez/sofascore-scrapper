@@ -33,8 +33,8 @@ var consumeLua = goredis.NewScript(`
 `)
 
 type InvitationStore struct {
-	redis  *goredis.Client
-	now    func() time.Time
+	redis *goredis.Client
+	now   func() time.Time
 }
 
 func NewInvitationStore(client *goredis.Client) *InvitationStore {

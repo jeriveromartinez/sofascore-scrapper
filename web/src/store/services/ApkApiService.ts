@@ -69,9 +69,9 @@ export class ApkApiService extends BaseApiService {
     return this.post<UploadBeginResponse, UploadBeginRequest>(
       "/uploads",
       {
-        file_name: fileName,
-        file_size: fileSize,
-        total_chunks: totalChunks,
+        fileName,
+        fileSize,
+        totalChunks,
         version: version ?? "",
         description: description ?? "",
       },
@@ -192,7 +192,7 @@ export class ApkApiService extends BaseApiService {
 
     try {
       this.saveSession({
-        uploadId: beginResp.upload_id,
+        uploadId: beginResp.uploadId,
         file: { name: file.name, size: file.size, type: file.type },
         totalChunks,
         version,
@@ -203,31 +203,31 @@ export class ApkApiService extends BaseApiService {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
-        await this.putChunk(beginResp.upload_id, i, chunk);
+        await this.putChunk(beginResp.uploadId, i, chunk);
         onProgress?.(Math.round(((i + 1) / totalChunks) * 90));
       }
 
-      const completeResp = await this.completeUpload(beginResp.upload_id);
+      const completeResp = await this.completeUpload(beginResp.uploadId);
       this.clearSession();
       onProgress?.(100);
 
       return {
         id: completeResp.id,
         version: completeResp.version,
-        fileName: completeResp.file_name,
-        fileSize: completeResp.file_size,
+        fileName: completeResp.fileName,
+        fileSize: completeResp.fileSize,
         description: completeResp.description,
-        packageName: completeResp.package_name,
-        versionCode: completeResp.version_code,
-        minSdkVersion: completeResp.min_sdk_version,
-        targetSdkVersion: completeResp.target_sdk_version,
-        downloadToken: completeResp.download_token,
-        downloadUrl: completeResp.download_url,
-        createdAt: completeResp.created_at,
+        packageName: completeResp.packageName,
+        versionCode: completeResp.versionCode,
+        minSdkVersion: completeResp.minSdkVersion,
+        targetSdkVersion: completeResp.targetSdkVersion,
+        downloadToken: completeResp.downloadToken,
+        downloadUrl: completeResp.downloadUrl,
+        createdAt: completeResp.createdAt,
       };
     } catch (error) {
       try {
-        await this.abortUpload(beginResp.upload_id);
+        await this.abortUpload(beginResp.uploadId);
       } catch {
         // best effort abort
       }

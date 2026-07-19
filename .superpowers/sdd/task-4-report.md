@@ -1,62 +1,51 @@
-# Task 4 Report: Corregir ranking y agregaciones
+# Task 4 Report: Reduce Authentication CSS Payload
 
 ## Summary
 
-Fixed 3 bugs in the reporting package: ranking query, daily aggregation SQL compatibility, and monthly aggregation period selection.
+Reduced initial CSS payload for login/register pages from ~2 MB (405.5 kB gzip) to ~11 kB (2.15 kB gzip) by extracting a minimal `auth-critical.css` and removing the heavy `core.css` and `iconify-icons.css` imports.
 
-## Changes
+## Changes Made
 
-### `repository.go` — GetTopEvents
+### Created: `web/src/assets/css/auth-critical.css`
+- CSS custom properties (both light and dark themes)
+- Base reset, typography, body styles
+- Container, card, form (controls, checks, input groups), button styles
+- Utility classes needed by auth templates
+- Auth layout (authentication-wrapper decorative elements)
+- App brand / demo styles
+- Password visibility inline SVG styling class
 
-| Before | After |
-|--------|-------|
-| `SELECT content, count(*)` — column not mapped to `SofaScoreEventId` | `SELECT CAST(content AS UNSIGNED) AS sofa_score_event_id` |
-| No numeric filter — non-numeric content included | `WHERE content REGEXP '^[0-9]+$'` |
-| `ORDER BY view_count DESC` — ties undeterministic | `ORDER BY view_count DESC, sofa_score_event_id ASC` |
-| No limit cap | Capped at 100 (0 or negative defaults to 100) |
-| No DB error propagation | Propagates `result.Error` |
+### Modified: `web/src/pages/login.vue`
+- Removed `core.css`, `iconify-icons.css`, `perfect-scrollbar.css` imports
+- Added `auth-critical.css` import
+- Replaced `<i class="icon-base bx">` password toggle with inline SVG (v-if/v-else)
 
-SQLite compatibility: uses `CAST(content AS INTEGER)` + `content NOT GLOB '*[^0-9]*'` fallback for tests.
+### Modified: `web/src/pages/register.vue`
+- Same changes as login.vue
 
-### `aggregation_repository.go` — GenerateDaily
+### Created: `web/scripts/check-bundle-budget.mjs`
+- Parses `dist/index.html` to find entry CSS files
+- Gzips combined CSS and validates < 50 KiB budget
+- Exits non-zero on budget violation
 
-| Before | After |
-|--------|-------|
-| `CAST(ended_at AS SIGNED)` not supported in SQLite | Removed unnecessary casts |
-| `DIV 1000` MySQL-only | `/ 1000` (compatible with both MySQL and SQLite) |
+### Modified: `web/package.json`
+- Added `"bundle-budget": "node scripts/check-bundle-budget.mjs"` script
 
-### `aggregation_repository.go` — GenerateMonthly
+## Build Results
 
-| Before | After |
-|--------|-------|
-| `WHERE created_at >= ? AND created_at <= ?` | `WHERE period_start >= ? AND period_start < ?` (half-open range) |
-| `end := begin.AddDate(0,1,0).Add(-time.Second)` | `end := begin.AddDate(0,1,0)` (clean half-open) |
-| `ctx.Save(&monthStats)` — creates duplicates | `ctx.Clauses(clause.OnConflict{...}).Create(...)` — upsert on `(content_hash, period_type, period_start)` |
-| Not idempotent | Deletes old monthly rows before insert |
-| Daily delete uses `created_at` | Daily delete uses `period_start >= ? AND period_start < ?` |
+```
+entry CSS files: /assets/index-rzNTtEL3.css
+auth CSS raw:    11.17 KiB
+auth CSS gzip:   2.15 KiB
+budget:          50.00 KiB
+Budget check passed!
+```
 
-## Tests (13 total, all passing)
-
-`repository_integration_test.go`:
-- `TestGetTopEvents_NumericContentOnly` — non-numeric content excluded
-- `TestGetTopEvents_DeterministicOrdering` — ORDER BY view_count DESC, sofa_score_event_id ASC
-- `TestGetTopEvents_CapAt100` — limit > 100 capped
-- `TestGetTopEvents_ZeroLimitDefaultsTo100` — limit=0 defaults to 100
-- `TestGetTopEvents_ReturnsDBError` — propagates errors
-
-`aggregation_integration_test.go`:
-- `TestGenerateDaily_CreatesContentStats` — daily aggregation creates ContentStat rows
-- `TestGenerateDaily_DeletesProcessedLogs` — processed logs deleted
-- `TestGenerateDaily_MillisecondDuration` — ms to seconds conversion correct
-- `TestGenerateMonthly_UsesPeriodStart` — correct period_start filtering
-- `TestGenerateMonthly_HalfOpenRange` — `>= begin AND < end`
-- `TestGenerateMonthly_Idempotent` — re-runnable without side effects
-- `TestGenerateMonthly_DeletesDailyRows` — daily rows cleaned up
-- `TestGenerateMonthly_EmptyPeriodDoesNotFail` — empty input doesn't error
+- Layout CSS (core.css + iconify-icons.css) remains at 1,999.59 kB (405.52 kB gzip) but is code-split — only loaded for authenticated pages via `layout.vue`
+- `npm run bundle-budget` passes
 
 ## Verification
 
-```
-$ go test -tags=integration ./internal/reporting/... -count=1
-ok  github.com/jeriveromartinez/sofascore-scrapper/internal/reporting  0.776s
-```
+- `npx vite build` — succeeds
+- `node scripts/check-bundle-budget.mjs` — passes (2.15 KiB < 50 KiB)
+- Remaining CSS imports per auth page: `auth-critical.css`, `demo.css`, `page-auth.css`, `inputs.css`

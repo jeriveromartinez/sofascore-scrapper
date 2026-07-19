@@ -2,6 +2,7 @@ package apk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -21,7 +23,8 @@ const (
 
 var flushRenameScript = goredis.NewScript(`
 	if redis.call("EXISTS", KEYS[1]) == 1 then
-		return redis.call("RENAME", KEYS[1], ARGV[1])
+		redis.call("RENAME", KEYS[1], ARGV[1])
+		return 1
 	end
 	return 0
 `)
@@ -36,6 +39,14 @@ type downloadCounter struct {
 	client *goredis.Client
 	db     *gorm.DB
 	locker redisplatform.Locker
+}
+
+type downloadCounterFlush struct {
+	BatchID string `gorm:"column:batch_id;primaryKey"`
+}
+
+func (downloadCounterFlush) TableName() string {
+	return "download_counter_flushes"
 }
 
 func NewDownloadCounter(client *goredis.Client, db *gorm.DB) DownloadCounter {
@@ -67,8 +78,8 @@ func (c *downloadCounter) flushWithProbe(ctx context.Context, afterRename func()
 		return nil
 	}
 
-	if err := c.flushUnderLease(ctx, afterRename); err != nil {
-		err = fmt.Errorf("flush failed: %w", err)
+	if flushErr := c.flushUnderLease(ctx, afterRename); flushErr != nil {
+		err = fmt.Errorf("flush failed: %w", flushErr)
 	}
 
 	releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -103,14 +114,12 @@ func (c *downloadCounter) processPending(ctx context.Context, batchID, pendingKe
 	}
 
 	err = c.db.Transaction(func(tx *gorm.DB) error {
-		result := tx.Table("download_counter_flushes").Create(map[string]string{
-			"batch_id": batchID,
-		})
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&downloadCounterFlush{BatchID: batchID})
 		if result.Error != nil {
 			return fmt.Errorf("insert batch %s: %w", batchID, result.Error)
 		}
 		if result.RowsAffected == 0 {
-			return fmt.Errorf("batch %s already processed", batchID)
+			return nil
 		}
 
 		for field, countStr := range deltas {
@@ -153,15 +162,16 @@ func (c *downloadCounter) ReprocessOrphans(ctx context.Context) error {
 	}
 
 	iter := c.client.Scan(ctx, 0, pendingPrefix+"*", 100).Iterator()
+	var batchErrors []error
 	for iter.Next(ctx) {
 		pendingKey := iter.Val()
 		batchID := pendingKey[len(pendingPrefix):]
 		if err := c.processPending(ctx, batchID, pendingKey); err != nil {
-			return fmt.Errorf("reprocess batch %s: %w", batchID, err)
+			batchErrors = append(batchErrors, fmt.Errorf("reprocess batch %s: %w", batchID, err))
 		}
 	}
 	if err := iter.Err(); err != nil {
-		return fmt.Errorf("scan pending keys: %w", err)
+		batchErrors = append(batchErrors, fmt.Errorf("scan pending keys: %w", err))
 	}
-	return nil
+	return errors.Join(batchErrors...)
 }

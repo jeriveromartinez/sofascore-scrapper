@@ -16,9 +16,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
 
@@ -205,6 +206,12 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 }
 
 func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
+	userID, ok := auth.GetUserID(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	uploadID := c.PostForm("upload_id")
 	if _, err := uuid.Parse(uploadID); err != nil {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
@@ -239,7 +246,7 @@ func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
 		return
 	}
 
-	chunkDir := filepath.Join(StoragePath(), "chunks", uploadID)
+	chunkDir := filepath.Join(StoragePath(), "legacy-chunks", strconv.FormatUint(uint64(userID), 10), uploadID)
 	absStoragePath, _ := filepath.Abs(StoragePath())
 	absChunkDir, err := filepath.Abs(chunkDir)
 	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
@@ -266,6 +273,12 @@ func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
 }
 
 func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
+	userID, ok := auth.GetUserID(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	uploadID := c.PostForm("upload_id")
 	if _, err := uuid.Parse(uploadID); err != nil {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
@@ -278,7 +291,7 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 		return
 	}
 
-	chunkDir := filepath.Join(StoragePath(), "chunks", uploadID)
+	chunkDir := filepath.Join(StoragePath(), "legacy-chunks", strconv.FormatUint(uint64(userID), 10), uploadID)
 	absStoragePath, _ := filepath.Abs(StoragePath())
 	absChunkDir, err := filepath.Abs(chunkDir)
 	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {

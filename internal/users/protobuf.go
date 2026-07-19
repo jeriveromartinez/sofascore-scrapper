@@ -12,6 +12,7 @@ func UserToProto(u User) *pb.User {
 		CreatedAt: formatDateTime(u.CreatedAt),
 		UpdatedAt: formatDateTime(u.UpdatedAt),
 		Email:     u.Email,
+		Role:      u.Role,
 	}
 }
 

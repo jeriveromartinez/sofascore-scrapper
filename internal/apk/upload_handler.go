@@ -1,15 +1,14 @@
 package apk
 
 import (
-	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 )
 
 type UploadHandler struct {
@@ -58,7 +57,13 @@ func (h *UploadHandler) handleStatus(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.Status(c.Request.Context(), id)
+	userID, ok := auth.GetUserID(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	resp, err := h.service.Status(c.Request.Context(), id, userID)
 	if err != nil {
 		server.RespondError(c, http.StatusNotFound, err.Error())
 		return
@@ -80,18 +85,13 @@ func (h *UploadHandler) handlePutChunk(c *gin.Context) {
 		return
 	}
 
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		server.RespondError(c, http.StatusBadRequest, "cannot read body")
+	userID, ok := auth.GetUserID(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	if len(body) > MaxChunkSize {
-		server.RespondError(c, http.StatusBadRequest, "chunk size exceeds limit")
-		return
-	}
-
-	resp, err := h.service.PutChunk(c.Request.Context(), id, index, &sliceReader{data: body})
+	resp, err := h.service.PutChunk(c.Request.Context(), id, index, userID, c.Request.Body)
 	if err != nil {
 		server.RespondError(c, http.StatusConflict, err.Error())
 		return
@@ -141,18 +141,4 @@ func (h *UploadHandler) handleAbort(c *gin.Context) {
 	}
 
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "aborted"})
-}
-
-type sliceReader struct {
-	data []byte
-	pos  int
-}
-
-func (r *sliceReader) Read(p []byte) (n int, err error) {
-	if r.pos >= len(r.data) {
-		return 0, io.EOF
-	}
-	n = copy(p, r.data[r.pos:])
-	r.pos += n
-	return n, nil
 }

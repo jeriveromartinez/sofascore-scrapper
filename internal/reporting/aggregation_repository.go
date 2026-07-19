@@ -61,7 +61,10 @@ func (r *AggregationRepository) GenerateDaily() error {
 		})
 	}
 
-	if err := ctx.Save(&dayStats).Error; err != nil {
+	if err := ctx.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "content_hash"}, {Name: "period_type"}, {Name: "period_start"}},
+		DoUpdates: clause.AssignmentColumns([]string{"seconds", "views"}),
+	}).Create(&dayStats).Error; err != nil {
 		ctx.Rollback()
 		return err
 	}

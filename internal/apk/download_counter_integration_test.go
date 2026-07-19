@@ -3,15 +3,23 @@
 package apk
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
@@ -62,6 +70,7 @@ func setupCounterTestClients(t *testing.T) (*gorm.DB, *goredis.Client) {
 	if err != nil {
 		t.Fatalf("gorm.Open: %v", err)
 	}
+	ensureIntegrationSchema(t, sqlDB, db)
 	if !db.Migrator().HasTable("download_counter_flushes") {
 		if err := db.Exec("CREATE TABLE IF NOT EXISTS download_counter_flushes (batch_id VARCHAR(64) NOT NULL PRIMARY KEY, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci").Error; err != nil {
 			t.Fatalf("create download_counter_flushes: %v", err)
@@ -118,32 +127,24 @@ func TestDownloadCounter_FlushPreservesActive(t *testing.T) {
 		t.Fatalf("Increment: %v", err)
 	}
 
-	var capturedIncrement int64
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		activeBefore, _ := redisClient.HLen(ctx, "apk:downloads:active").Result()
-		if activeBefore == 0 {
-			t.Error("active should have entries before concurrent increment")
-			return
-		}
-		atomic.AddInt64(&capturedIncrement, 1)
-	}()
+	activeBefore, err := redisClient.HLen(ctx, activeDownloadsKey).Result()
+	if err != nil {
+		t.Fatalf("read active counter: %v", err)
+	}
+	if activeBefore != 1 {
+		t.Fatalf("active entries before flush = %d, want 1", activeBefore)
+	}
 
 	if err := counter.Flush(ctx); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
 
-	wg.Wait()
-
-	exists, err := redisClient.Exists(ctx, "apk:downloads:pending:*").Result()
+	pendingKeys, err := redisClient.Keys(ctx, pendingPrefix+"*").Result()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if exists > 0 {
-		t.Fatal("pending key should be cleaned up after successful flush")
+	if len(pendingKeys) > 0 {
+		t.Fatalf("pending keys should be cleaned up after successful flush: %v", pendingKeys)
 	}
 
 	updatedApk, err := NewRepository(db).GetByID(apk.ID)
@@ -241,6 +242,51 @@ func TestDownloadCounter_ReprocessBatchIdempotent(t *testing.T) {
 	}
 }
 
+func TestDownloadCounter_ProcessedPendingIsDeletedWithoutReapplying(t *testing.T) {
+	db, redisClient := setupCounterTestClients(t)
+	counter := NewDownloadCounter(redisClient, db)
+	ctx := context.Background()
+
+	apk, err := NewRepository(db).Create("1.0.0", "processed.apk", "/tmp/processed.apk", "processed", "com.test.flush.processed", 100, 1, 21, 31)
+	if err != nil {
+		t.Fatalf("Create apk: %v", err)
+	}
+	t.Cleanup(func() { db.Unscoped().Delete(apk) })
+
+	batchID := uuid.New().String()
+	pendingKey := pendingPrefix + batchID
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM download_counter_flushes WHERE batch_id = ?", batchID)
+		redisClient.Del(ctx, pendingKey)
+	})
+
+	if err := db.Exec("INSERT INTO download_counter_flushes (batch_id) VALUES (?)", batchID).Error; err != nil {
+		t.Fatalf("record processed batch: %v", err)
+	}
+	if err := redisClient.HSet(ctx, pendingKey, fmt.Sprintf("%d", apk.ID), 7).Err(); err != nil {
+		t.Fatalf("create poison pending: %v", err)
+	}
+
+	if err := counter.(*downloadCounter).reprocessBatch(ctx, batchID, pendingKey); err != nil {
+		t.Fatalf("reprocess processed pending: %v", err)
+	}
+
+	updated, err := NewRepository(db).GetByID(apk.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if updated.TotalDownloads != 0 {
+		t.Fatalf("processed pending delta was reapplied: got %d", updated.TotalDownloads)
+	}
+	exists, err := redisClient.Exists(ctx, pendingKey).Result()
+	if err != nil {
+		t.Fatalf("check pending key: %v", err)
+	}
+	if exists != 0 {
+		t.Fatal("processed pending key was not deleted")
+	}
+}
+
 func TestDownloadCounter_ReprocessOrphans(t *testing.T) {
 	db, redisClient := setupCounterTestClients(t)
 	counter := NewDownloadCounter(redisClient, db)
@@ -296,6 +342,111 @@ func TestDownloadCounter_ReprocessOrphans(t *testing.T) {
 	}
 }
 
+func TestDownloadCounter_ReprocessOrphansContinuesAndJoinsErrors(t *testing.T) {
+	db, redisClient := setupCounterTestClients(t)
+	counter := NewDownloadCounter(redisClient, db)
+	ctx := context.Background()
+
+	apk, err := NewRepository(db).Create("1.0.0", "orphan-continue.apk", "/tmp/orphan-continue.apk", "orphan", "com.test.orphan.continue", 100, 1, 21, 31)
+	if err != nil {
+		t.Fatalf("Create apk: %v", err)
+	}
+	t.Cleanup(func() { db.Unscoped().Delete(apk) })
+
+	badBatchA := "bad-a-" + uuid.New().String()
+	badBatchB := "bad-b-" + uuid.New().String()
+	goodBatch := "good-" + uuid.New().String()
+	keys := []string{pendingPrefix + badBatchA, pendingPrefix + badBatchB, pendingPrefix + goodBatch}
+	t.Cleanup(func() {
+		redisClient.Del(ctx, keys...)
+		db.Exec("DELETE FROM download_counter_flushes WHERE batch_id IN ?", []string{badBatchA, badBatchB, goodBatch})
+	})
+
+	if err := redisClient.HSet(ctx, keys[0], "not-an-apk-id", 1).Err(); err != nil {
+		t.Fatalf("create first bad pending: %v", err)
+	}
+	if err := redisClient.HSet(ctx, keys[1], "also-not-an-apk-id", 1).Err(); err != nil {
+		t.Fatalf("create second bad pending: %v", err)
+	}
+	if err := redisClient.HSet(ctx, keys[2], fmt.Sprintf("%d", apk.ID), 3).Err(); err != nil {
+		t.Fatalf("create good pending: %v", err)
+	}
+
+	err = counter.ReprocessOrphans(ctx)
+	if err == nil {
+		t.Fatal("expected joined orphan errors")
+	}
+	if !strings.Contains(err.Error(), badBatchA) || !strings.Contains(err.Error(), badBatchB) {
+		t.Fatalf("expected both batch errors, got %v", err)
+	}
+
+	updated, getErr := NewRepository(db).GetByID(apk.ID)
+	if getErr != nil {
+		t.Fatalf("GetByID: %v", getErr)
+	}
+	if updated.TotalDownloads != 3 {
+		t.Fatalf("good orphan was not processed after failures: got %d", updated.TotalDownloads)
+	}
+}
+
+type failingDownloadCounter struct {
+	err error
+}
+
+func (c failingDownloadCounter) Increment(context.Context, uint) error { return c.err }
+func (failingDownloadCounter) Flush(context.Context) error             { return nil }
+func (failingDownloadCounter) ReprocessOrphans(context.Context) error  { return nil }
+
+func TestAppHandler_DownloadLogsIncrementFailureAndStillServesFile(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	storagePath := t.TempDir()
+	t.Setenv("APK_STORAGE_PATH", storagePath)
+	filePath := filepath.Join(storagePath, "download.apk")
+	if err := os.WriteFile(filePath, []byte("apk contents"), 0o600); err != nil {
+		t.Fatalf("write apk: %v", err)
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&ApkVersion{}); err != nil {
+		t.Fatalf("migrate apk: %v", err)
+	}
+	apk := &ApkVersion{
+		Version:       "1.0.0",
+		FileName:      "download.apk",
+		FilePath:      filePath,
+		IsActive:      true,
+		PackageName:   "com.test.download.logging",
+		DownloadToken: uuid.New().String(),
+	}
+	if err := db.Create(apk).Error; err != nil {
+		t.Fatalf("create apk: %v", err)
+	}
+
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	router := gin.New()
+	NewAppHandler(NewRepository(db), failingDownloadCounter{err: errors.New("redis unavailable")}).RegisterRoutes(router.Group(""))
+	request := httptest.NewRequest(http.MethodGet, "/apk/download/"+apk.DownloadToken, nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("download status: got %d, body %q", response.Code, response.Body.String())
+	}
+	if response.Body.String() != "apk contents" {
+		t.Fatalf("download body: got %q", response.Body.String())
+	}
+	if !strings.Contains(logs.String(), "failed to buffer apk download count") || !strings.Contains(logs.String(), "redis unavailable") {
+		t.Fatalf("increment failure was not logged: %q", logs.String())
+	}
+}
+
 func TestDownloadCounter_SQLFailurePreservesPending(t *testing.T) {
 	db, redisClient := setupCounterTestClients(t)
 	counter := NewDownloadCounter(redisClient, db)
@@ -319,19 +470,15 @@ func TestDownloadCounter_SQLFailurePreservesPending(t *testing.T) {
 		t.Fatalf("Rename: %v", err)
 	}
 
-	type failingDB struct{ *gorm.DB }
-	failDB := &failingDB{db}
+	const callbackName = "test:fail_download_counter_update"
+	if err := db.Callback().Update().Before("gorm:update").Register(callbackName, func(tx *gorm.DB) {
+		tx.AddError(errors.New("simulated SQL failure"))
+	}); err != nil {
+		t.Fatalf("register failing update callback: %v", err)
+	}
+	t.Cleanup(func() { db.Callback().Update().Remove(callbackName) })
 
-	err = db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Table("download_counter_flushes").Create(map[string]string{"batch_id": batchID}).Error; err != nil {
-			return fmt.Errorf("insert batch: %w", err)
-		}
-		if err := tx.Exec(fmt.Sprintf("UPDATE apk_versions SET total_downloads = total_downloads + %d WHERE id = %d", 5, apk.ID)).Error; err != nil {
-			return err
-		}
-		return fmt.Errorf("simulated commit failure")
-	})
-	_ = failDB
+	err = counter.(*downloadCounter).processPending(ctx, batchID, pendingKey)
 	if err == nil {
 		t.Fatal("expected simulated failure")
 	}
@@ -344,7 +491,14 @@ func TestDownloadCounter_SQLFailurePreservesPending(t *testing.T) {
 		t.Fatal("pending key should exist when SQL fails")
 	}
 
-	_ = db.Exec("DELETE FROM download_counter_flushes WHERE batch_id = ?", batchID).Error
+	var markerCount int64
+	if err := db.Model(&downloadCounterFlush{}).Where("batch_id = ?", batchID).Count(&markerCount).Error; err != nil {
+		t.Fatalf("count rolled-back batch marker: %v", err)
+	}
+	if markerCount != 0 {
+		t.Fatalf("batch marker count = %d, want 0 after rollback", markerCount)
+	}
+
 	_ = redisClient.Del(ctx, pendingKey)
 }
 
@@ -352,6 +506,10 @@ func TestDownloadCounter_FlushEmptyActiveNoop(t *testing.T) {
 	db, redisClient := setupCounterTestClients(t)
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
+	var countBefore int64
+	if err := db.Table("download_counter_flushes").Count(&countBefore).Error; err != nil {
+		t.Fatalf("count flush entries before empty flush: %v", err)
+	}
 
 	if err := counter.Flush(ctx); err != nil {
 		t.Fatalf("Flush on empty active: %v", err)
@@ -365,10 +523,12 @@ func TestDownloadCounter_FlushEmptyActiveNoop(t *testing.T) {
 		t.Fatalf("expected no pending keys after empty flush, got %v", keys)
 	}
 
-	var count int64
-	db.Table("download_counter_flushes").Count(&count)
-	if count > 0 {
-		t.Fatalf("expected no flush entries after empty flush, got %d", count)
+	var countAfter int64
+	if err := db.Table("download_counter_flushes").Count(&countAfter).Error; err != nil {
+		t.Fatalf("count flush entries after empty flush: %v", err)
+	}
+	if countAfter != countBefore {
+		t.Fatalf("empty flush changed flush entries from %d to %d", countBefore, countAfter)
 	}
 }
 
@@ -461,4 +621,3 @@ func TestDownloadCounter_Integration_EndToEnd(t *testing.T) {
 	}
 	t.Logf("flushed %d batches", batchCount)
 }
-

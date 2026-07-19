@@ -1,6 +1,7 @@
 package apk
 
 import (
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -8,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 )
 
 type AppHandler struct {
@@ -93,7 +94,12 @@ func (h *AppHandler) handleDownload(c *gin.Context) {
 		rc.SetWriteDeadline(time.Time{})
 	}
 
-	_ = h.counter.Increment(c.Request.Context(), apk.ID)
+	if err := h.counter.Increment(c.Request.Context(), apk.ID); err != nil {
+		slog.Default().Error("failed to buffer apk download count",
+			slog.Uint64("apk_id", uint64(apk.ID)),
+			slog.String("error", err.Error()),
+		)
+	}
 	c.FileAttachment(absPath, apk.FileName)
 }
 

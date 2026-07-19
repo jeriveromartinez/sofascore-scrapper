@@ -49,6 +49,7 @@ services:
       APK_STORAGE_PATH: /data/apk
       IMAGE_STORAGE_PATH: /data/image
       PPROF_ADDR: ""
+      TRUSTED_PROXIES: "172.30.0.10"
     volumes:
       - apk_data:/data/apk
       - image_data:/data/image
@@ -83,6 +84,7 @@ services:
       APK_STORAGE_PATH: /data/apk
       IMAGE_STORAGE_PATH: /data/image
       PPROF_ADDR: ""
+      TRUSTED_PROXIES: "172.30.0.10"
     volumes:
       - apk_data:/data/apk
       - image_data:/data/image
@@ -117,6 +119,7 @@ services:
       APK_STORAGE_PATH: /data/apk
       IMAGE_STORAGE_PATH: /data/image
       PPROF_ADDR: ""
+      TRUSTED_PROXIES: "172.30.0.10"
     volumes:
       - apk_data:/data/apk
       - image_data:/data/image
@@ -144,7 +147,8 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
-      - internal
+      internal:
+        ipv4_address: 172.30.0.10
 
   prometheus:
     image: prom/prometheus:v3.6.0
@@ -169,3 +173,6 @@ volumes:
 
 networks:
   internal:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

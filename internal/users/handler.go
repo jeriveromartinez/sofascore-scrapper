@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
 
@@ -32,6 +32,7 @@ func (h *Handler) RegisterUserRoutes(group *gin.RouterGroup, deps HandlerDeps) {
 	group.GET("/users/:id", deps.AuthMiddleware, h.handleGetUser)
 	group.POST("/users", deps.AuthMiddleware, h.handleCreate)
 	group.PUT("/users/:id", deps.AuthMiddleware, h.handleUpdate)
+	group.PUT("/users/:id/role", deps.AuthMiddleware, h.handleSetRole)
 	group.DELETE("/users/:id", deps.AuthMiddleware, h.handleDelete)
 }
 
@@ -148,6 +149,60 @@ func (h *Handler) handleUpdate(c *gin.Context) {
 			return
 		}
 		server.RespondError(c, http.StatusConflict, "could not update user")
+		return
+	}
+
+	server.RespondProto(c, http.StatusOK, UserToProto(*user))
+}
+
+func (h *Handler) handleSetRole(c *gin.Context) {
+	id, err := server.ParseID(c.Param("id"))
+	if err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	var req pb.SetUserRoleRequest
+	if err := server.ParseProtoBody(c, &req); err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	// Guard against demoting the last administrator, which would lock everyone
+	// out of the admin API.
+	if req.Role == RoleUser {
+		target, err := h.repo.GetByID(id)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				server.RespondError(c, http.StatusNotFound, "user not found")
+				return
+			}
+			server.RespondError(c, http.StatusInternalServerError, "could not load user")
+			return
+		}
+		if target.IsAdmin() {
+			admins, err := h.repo.CountAdmins()
+			if err != nil {
+				server.RespondError(c, http.StatusInternalServerError, "could not verify administrators")
+				return
+			}
+			if admins <= 1 {
+				server.RespondError(c, http.StatusConflict, "cannot demote the last administrator")
+				return
+			}
+		}
+	}
+
+	user, err := h.repo.SetRole(id, req.Role)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidRole):
+			server.RespondError(c, http.StatusBadRequest, "role must be 'user' or 'admin'")
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			server.RespondError(c, http.StatusNotFound, "user not found")
+		default:
+			server.RespondError(c, http.StatusInternalServerError, "could not update role")
+		}
 		return
 	}
 

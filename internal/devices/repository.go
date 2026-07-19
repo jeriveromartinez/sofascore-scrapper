@@ -11,6 +11,8 @@ type Repository struct {
 	db *gorm.DB
 }
 
+const maxAllDevices = 1000
+
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -49,7 +51,7 @@ func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
 
 func (r *Repository) GetAll() ([]Device, error) {
 	var devices []Device
-	result := r.db.Preload("Manager").Find(&devices)
+	result := r.db.Order("id DESC").Limit(maxAllDevices).Preload("Manager").Find(&devices)
 	return devices, result.Error
 }
 

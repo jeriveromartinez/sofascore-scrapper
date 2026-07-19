@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"errors"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -77,6 +78,34 @@ func (r *Repository) Update(id uint, email, password string) (*User, error) {
 
 	result := r.db.Save(&user)
 	return &user, result.Error
+}
+
+// ErrInvalidRole is returned when a role outside the known set is requested.
+var ErrInvalidRole = errors.New("invalid role")
+
+// CountAdmins returns how many users currently hold the admin role.
+func (r *Repository) CountAdmins() (int64, error) {
+	var count int64
+	err := r.db.Model(&User{}).Where("role = ?", RoleAdmin).Count(&count).Error
+	return count, err
+}
+
+// SetRole updates a single user's role. Only the known roles are accepted.
+func (r *Repository) SetRole(id uint, role string) (*User, error) {
+	if role != RoleUser && role != RoleAdmin {
+		return nil, ErrInvalidRole
+	}
+
+	var user User
+	if err := r.db.First(&user, id).Error; err != nil {
+		return nil, err
+	}
+
+	if err := r.db.Model(&user).Update("role", role).Error; err != nil {
+		return nil, err
+	}
+	user.Role = role
+	return &user, nil
 }
 
 func (r *Repository) Delete(id uint) error {

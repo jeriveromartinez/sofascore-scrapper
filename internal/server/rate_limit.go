@@ -123,34 +123,42 @@ func RateLimit(redisClient *goredis.Client) gin.HandlerFunc {
 
 func classifyRateLimit(c *gin.Context, path string, method string) (redisplatform.RateLimitPolicy, string, bool) {
 	if strings.HasPrefix(path, "/api/web/v1/apk/upload") {
-		return RateLimitAdmin, c.ClientIP(), true
+		return RateLimitAdmin, scopedRateLimitKey("admin-upload", c.ClientIP()), true
 	}
 
 	if strings.HasPrefix(path, "/api/web/v1/users/register") ||
 		strings.HasPrefix(path, "/api/web/v1/users/login") ||
 		strings.HasPrefix(path, "/api/web/v1/users/refresh") {
-		return RateLimitAuth, c.ClientIP(), true
+		return RateLimitAuth, scopedRateLimitKey("auth", c.ClientIP()), true
 	}
 
 	if strings.HasPrefix(path, "/api/web/v1/") {
-		return RateLimitAdmin, resolveUserOrIP(c), true
+		return RateLimitAdmin, scopedRateLimitKey("admin", resolveUserOrIP(c)), true
 	}
 
 	if strings.HasPrefix(path, "/api/app/v1/devices/viewing") && method == http.MethodPost {
 		deviceKey := resolveDeviceOrIP(c)
-		return RateLimitPlayback, deviceKey, false
+		return RateLimitPlayback, scopedRateLimitKey("playback", deviceKey), false
 	}
 
 	if strings.HasPrefix(path, "/api/app/v1/devices") && method == http.MethodPost {
-		return RateLimitDeviceReg, c.ClientIP(), true
+		return RateLimitDeviceReg, scopedRateLimitKey("device-reg", c.ClientIP()), true
+	}
+
+	if path == "/api/app/v1/crash-report" {
+		return RateLimitAppRead, scopedRateLimitKey("crash", c.ClientIP()), false
 	}
 
 	if strings.HasPrefix(path, "/api/app/v1/") {
 		deviceKey := resolveDeviceOrIP(c)
-		return RateLimitAppRead, deviceKey, false
+		return RateLimitAppRead, scopedRateLimitKey("app", deviceKey), false
 	}
 
-	return RateLimitAppRead, c.ClientIP(), false
+	return RateLimitAppRead, scopedRateLimitKey("default", c.ClientIP()), false
+}
+
+func scopedRateLimitKey(scope, identity string) string {
+	return scope + ":" + identity
 }
 
 func resolveUserOrIP(c *gin.Context) string {
@@ -166,5 +174,3 @@ func resolveDeviceOrIP(c *gin.Context) string {
 	}
 	return c.ClientIP()
 }
-
-

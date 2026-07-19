@@ -2,7 +2,7 @@
 // versions:
 //   protoc-gen-ts_proto  v2.11.5
 //   protoc               v4.24.3
-// source: api.proto
+// source: proto/api.proto
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
@@ -48,6 +48,7 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   email: string;
+  role: string;
 }
 
 export interface UserList {
@@ -57,6 +58,10 @@ export interface UserList {
 export interface UserWriteRequest {
   email: string;
   password: string;
+}
+
+export interface SetUserRoleRequest {
+  role: string;
 }
 
 export interface CursorPageInfo {
@@ -911,7 +916,7 @@ export const AuthResponse: MessageFns<AuthResponse> = {
 };
 
 function createBaseUser(): User {
-  return { id: 0, createdAt: "", updatedAt: "", email: "" };
+  return { id: 0, createdAt: "", updatedAt: "", email: "", role: "" };
 }
 
 export const User: MessageFns<User> = {
@@ -927,6 +932,9 @@ export const User: MessageFns<User> = {
     }
     if (message.email !== "") {
       writer.uint32(34).string(message.email);
+    }
+    if (message.role !== "") {
+      writer.uint32(42).string(message.role);
     }
     return writer;
   },
@@ -970,6 +978,14 @@ export const User: MessageFns<User> = {
           message.email = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.role = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -993,6 +1009,7 @@ export const User: MessageFns<User> = {
         ? globalThis.String(object.updated_at)
         : "",
       email: isSet(object.email) ? globalThis.String(object.email) : "",
+      role: isSet(object.role) ? globalThis.String(object.role) : "",
     };
   },
 
@@ -1010,6 +1027,9 @@ export const User: MessageFns<User> = {
     if (message.email !== "") {
       obj.email = message.email;
     }
+    if (message.role !== "") {
+      obj.role = message.role;
+    }
     return obj;
   },
 
@@ -1022,6 +1042,7 @@ export const User: MessageFns<User> = {
     message.createdAt = object.createdAt ?? "";
     message.updatedAt = object.updatedAt ?? "";
     message.email = object.email ?? "";
+    message.role = object.role ?? "";
     return message;
   },
 };
@@ -1156,6 +1177,64 @@ export const UserWriteRequest: MessageFns<UserWriteRequest> = {
     const message = createBaseUserWriteRequest();
     message.email = object.email ?? "";
     message.password = object.password ?? "";
+    return message;
+  },
+};
+
+function createBaseSetUserRoleRequest(): SetUserRoleRequest {
+  return { role: "" };
+}
+
+export const SetUserRoleRequest: MessageFns<SetUserRoleRequest> = {
+  encode(message: SetUserRoleRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.role !== "") {
+      writer.uint32(10).string(message.role);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetUserRoleRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetUserRoleRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.role = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetUserRoleRequest {
+    return { role: isSet(object.role) ? globalThis.String(object.role) : "" };
+  },
+
+  toJSON(message: SetUserRoleRequest): unknown {
+    const obj: any = {};
+    if (message.role !== "") {
+      obj.role = message.role;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetUserRoleRequest>, I>>(base?: I): SetUserRoleRequest {
+    return SetUserRoleRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetUserRoleRequest>, I>>(object: I): SetUserRoleRequest {
+    const message = createBaseSetUserRoleRequest();
+    message.role = object.role ?? "";
     return message;
   },
 };

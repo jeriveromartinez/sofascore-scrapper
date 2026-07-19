@@ -26,6 +26,9 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 		cfg.ScrapeBatchSize = 500
 	}
 	router := gin.New()
+	if err := router.SetTrustedProxies(cfg.HTTP.TrustedProxies); err != nil {
+		panic("app: invalid trusted proxies: " + err.Error())
+	}
 
 	router.Use(gin.Recovery())
 	router.Use(server.RequestID())
@@ -49,11 +52,20 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 
 	appMw := devices.AppMiddleware(db)
 	authMw := auth.AuthMiddleware(tokens)
-	authThenRl := func(c *gin.Context) {
+	userRepo := users.NewRepository(db)
+	adminMw := auth.RequireAdmin(userRepo)
+	// Order matters: authenticate, then rate-limit (fail-closed before any
+	// expensive work), then the admin check which hits the database.
+	adminThenRl := func(c *gin.Context) {
 		authMw(c)
-		if !c.IsAborted() {
-			rl(c)
+		if c.IsAborted() {
+			return
 		}
+		rl(c)
+		if c.IsAborted() {
+			return
+		}
+		adminMw(c)
 	}
 
 	apkRepo := apk.NewRepository(db)
@@ -62,13 +74,13 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	apkAppHandler.RegisterRoutes(appV1)
 
 	apkAdminHandler := apk.NewAdminHandler(apkRepo)
-	apkAdminHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: authThenRl})
+	apkAdminHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: adminThenRl})
 
 	apkUploadStateStore := apk.NewUploadStateStore(redisClient)
 	apkChunkStore := apk.NewChunkStore(cfg.APKStoragePath)
 	apkUploadService := apk.NewUploadService(apkUploadStateStore, apkChunkStore, apkRepo, db)
 	apkUploadHandler := apk.NewUploadHandler(apkUploadService, apkUploadStateStore)
-	apkUploadHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: authThenRl})
+	apkUploadHandler.RegisterRoutes(webV1, apk.AdminHandlerDeps{AuthMiddleware: adminThenRl})
 
 	devRepo := devices.NewRepository(db)
 	playbackRepo := playback.NewRepository(db)
@@ -81,17 +93,17 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	playbackAppHandler.RegisterRoutes(appV1, playback.PlaybackAppHandlerDeps{AppMiddleware: appMw})
 
 	devicesAdminHandler := devices.NewAdminHandler(devRepo)
-	devicesAdminHandler.RegisterRoutes(webV1, devices.AdminHandlerDeps{AuthMiddleware: authThenRl})
+	devicesAdminHandler.RegisterRoutes(webV1, devices.AdminHandlerDeps{AuthMiddleware: adminThenRl})
 
 	playbackAdminHandler := playback.NewAdminHandler(playbackRepo)
-	playbackAdminHandler.RegisterRoutes(webV1, playback.AdminHandlerDeps{AuthMiddleware: authThenRl})
+	playbackAdminHandler.RegisterRoutes(webV1, playback.AdminHandlerDeps{AuthMiddleware: adminThenRl})
 
 	reportingRepo := reporting.NewRepository(db)
 	crashHandler := reporting.NewCrashHandler(reportingRepo)
 	crashHandler.RegisterRoutes(appV1)
 
 	statsHandler := reporting.NewStatsHandler(reportingRepo)
-	statsHandler.RegisterRoutes(webV1, reporting.StatsHandlerDeps{AuthMiddleware: authThenRl})
+	statsHandler.RegisterRoutes(webV1, reporting.StatsHandlerDeps{AuthMiddleware: adminThenRl})
 
 	eventsRepo := events.NewRepository(db)
 	eventsCache := events.NewCurrentEventsCache(redisClient)
@@ -101,23 +113,22 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	eventsAppHandler.RegisterRoutes(appV1, events.AppHandlerDeps{AppMiddleware: appMw})
 
 	eventsAdminHandler := events.NewAdminHandler(db)
-	eventsAdminHandler.RegisterRoutes(webV1, events.AdminHandlerDeps{AuthMiddleware: authThenRl})
+	eventsAdminHandler.RegisterRoutes(webV1, events.AdminHandlerDeps{AuthMiddleware: adminThenRl})
 
 	logoHandler := events.NewLogoHandler()
 	logoHandler.RegisterRoutes(appV1)
 
-	userRepo := users.NewRepository(db)
 	userHandler := users.NewHandler(userRepo)
-	userHandler.RegisterUserRoutes(webV1, users.HandlerDeps{AuthMiddleware: authThenRl})
+	userHandler.RegisterUserRoutes(webV1, users.HandlerDeps{AuthMiddleware: adminThenRl})
 
 	authRepo := auth.NewAuthRepository(db)
 	invitationStore := auth.NewInvitationStore(redisClient)
 	authHandler := auth.NewAuthHandler(authRepo, userRepo, tokens, invitationStore)
-	authHandler.RegisterAuthRoutes(webV1, rl)
+	authHandler.RegisterAuthRoutes(webV1, rl, adminMw)
 
 	tournamentRepo := tournaments.NewRepository(db)
 	tournamentHandler := tournaments.NewHandler(tournamentRepo)
-	tournamentHandler.RegisterRoutes(webV1, tournaments.HandlerDeps{AuthMiddleware: authThenRl})
+	tournamentHandler.RegisterRoutes(webV1, tournaments.HandlerDeps{AuthMiddleware: adminThenRl})
 
 	deviceAssignmentsRepo := tournaments.NewDeviceAssignmentsRepository(db)
 	deviceAssignmentsHandler := tournaments.NewDeviceAssignmentsHandler(deviceAssignmentsRepo)
@@ -125,7 +136,7 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 		_, err := eventsEpoch.Increment(ctx)
 		return err
 	})
-	deviceAssignmentsHandler.RegisterRoutes(webV1, tournaments.DeviceAssignmentsHandlerDeps{AuthMiddleware: authThenRl})
+	deviceAssignmentsHandler.RegisterRoutes(webV1, tournaments.DeviceAssignmentsHandlerDeps{AuthMiddleware: adminThenRl})
 
 	globalConfigRepo := tournaments.NewGlobalConfigRepository(db)
 	globalConfigHandler := tournaments.NewGlobalConfigHandler(globalConfigRepo)
@@ -133,11 +144,11 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 		_, err := eventsEpoch.Increment(ctx)
 		return err
 	})
-	globalConfigHandler.RegisterRoutes(webV1, tournaments.GlobalConfigHandlerDeps{AuthMiddleware: authThenRl})
+	globalConfigHandler.RegisterRoutes(webV1, tournaments.GlobalConfigHandlerDeps{AuthMiddleware: adminThenRl})
 
 	domainRepo := domains.NewRepository(db)
 	domainHandler := domains.NewHandler(domainRepo)
-	domainHandler.RegisterRoutes(webV1, domains.HandlerDeps{AuthMiddleware: authThenRl})
+	domainHandler.RegisterRoutes(webV1, domains.HandlerDeps{AuthMiddleware: adminThenRl})
 
 	server.RegisterDashboardRoutes(router)
 

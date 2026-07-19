@@ -5,7 +5,7 @@ package apk
 import "golang.org/x/sys/unix"
 
 func init() {
-	publishNoReplace = publishNoReplaceLinux
+	publishNoReplaceFn = publishNoReplaceLinux
 }
 
 func publishNoReplaceLinux(temp, dest string) error {

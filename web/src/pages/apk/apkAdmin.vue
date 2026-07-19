@@ -173,7 +173,7 @@ onMounted(() => loadPage());
 
   <apk-edit-url-modal
     ref="editModal"
-    @updated="loadPage"
+    @updated="() => loadPage()"
     :auto-close-modal="false"
   />
 </template>
