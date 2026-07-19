@@ -1,0 +1,7 @@
+node_modules/
+web/node_modules/
+web/dist/
+.git/
+.devenv/
+**/tmp/
+*.test
