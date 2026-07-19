@@ -109,12 +109,11 @@ jobs:
             fi
           done
           if ((${#missing[@]})); then
-            if ! sudo -n true; then
-              echo "Missing packages: ${missing[*]}. Install them or enable passwordless sudo for the runner." >&2
-              exit 1
-            fi
-            sudo -n apt-get update
-            sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
+            echo "Missing packages: ${missing[*]}" >&2
+            echo "Run these commands on the production server:" >&2
+            echo "  sudo apt-get update" >&2
+            echo "  sudo apt-get install -y ${missing[*]}" >&2
+            exit 1
           fi
 
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
