@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/libs/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/models"
 )
@@ -198,25 +199,9 @@ func AppMiddleware() gin.HandlerFunc {
 }
 
 func ParseID(idStr string) (uint, error) {
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		return 0, err
-	}
-	return uint(id), nil
+	return server.ParseID(idStr)
 }
 
 func CorsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
-		c.Writer.Header().Set("Access-Control-Expose-Headers", "*")
-
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		c.Next()
-	}
+	return server.CORS()
 }

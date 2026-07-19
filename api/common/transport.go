@@ -1,30 +1,19 @@
 package common
 
 import (
-	"io"
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"google.golang.org/protobuf/proto"
 )
 
 func RespondProto(c *gin.Context, status int, v proto.Message) {
-	data, err := proto.Marshal(v)
-	if err != nil {
-		c.String(http.StatusInternalServerError, "encoding error")
-		return
-	}
-	c.Data(status, "application/x-protobuf", data)
+	server.RespondProto(c, status, v)
 }
 
 func RespondError(c *gin.Context, status int, msg string) {
-	c.JSON(status, map[string]string{"error": msg})
+	server.RespondError(c, status, msg)
 }
 
 func ParseProtoBody(c *gin.Context, v proto.Message) error {
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		return err
-	}
-	return proto.Unmarshal(body, v)
+	return server.ParseProtoBody(c, v)
 }
