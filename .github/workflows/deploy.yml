@@ -102,7 +102,6 @@ jobs:
             echo "The production runner must use Ubuntu" >&2
             exit 1
           }
-          sudo -n true
           missing=()
           for package in ca-certificates curl git python3; do
             if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'install ok installed'; then
@@ -110,6 +109,10 @@ jobs:
             fi
           done
           if ((${#missing[@]})); then
+            if ! sudo -n true; then
+              echo "Missing packages: ${missing[*]}. Install them or enable passwordless sudo for the runner." >&2
+              exit 1
+            fi
             sudo -n apt-get update
             sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
           fi
@@ -138,7 +141,6 @@ jobs:
             echo "The production runner must run as iptv" >&2
             exit 1
           }
-          sudo -n true
           for command in curl git go node npm python3 systemctl; do
             command -v "$command" >/dev/null || {
               echo "Missing required command: $command" >&2
