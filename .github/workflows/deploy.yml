@@ -1,51 +1,130 @@
 name: Deploy
 
 on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy
+  group: production-deploy
   cancel-in-progress: false
 
 jobs:
   deploy:
     name: Deploy to production
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main')
+    runs-on: [self-hosted, iptv]
     environment:
       name: production
     timeout-minutes: 30
 
     steps:
+      - name: Select validated revision
+        id: revision
+        shell: bash
+        env:
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+              echo "Manual production deployments must run from main" >&2
+              exit 1
+            }
+            sha="$GITHUB_SHA"
+          else
+            sha="$WORKFLOW_RUN_SHA"
+          fi
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Invalid deployment SHA: $sha" >&2
+            exit 1
+          }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying validated revision $sha"
+
+      - name: Install base dependencies
+        shell: bash
+        run: |
+          source /etc/os-release
+          [[ "$ID" == "ubuntu" ]] || {
+            echo "The production runner must use Ubuntu" >&2
+            exit 1
+          }
+          sudo -n true
+          missing=()
+          for package in ca-certificates curl git; do
+            if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'install ok installed'; then
+              missing+=("$package")
+            fi
+          done
+          if ((${#missing[@]})); then
+            sudo -n apt-get update
+            sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
+          fi
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ steps.revision.outputs.sha }}
+          clean: true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to container registry
-        uses: docker/login-action@v3
+      - uses: actions/setup-go@v5
         with:
-          registry: ${{ secrets.CONTAINER_REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          go-version-file: go.mod
+          cache: true
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - uses: actions/setup-node@v4
         with:
-          context: .
-          push: true
-          tags: |
-            ${{ secrets.CONTAINER_REGISTRY }}/${{ secrets.IMAGE_NAME }}:${{ github.sha }}
-            ${{ secrets.CONTAINER_REGISTRY }}/${{ secrets.IMAGE_NAME }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      - name: Deploy notification
+      - name: Verify production prerequisites
+        shell: bash
         run: |
-          echo "Deployed ${{ secrets.IMAGE_NAME }}:${{ github.sha }}"
-          echo "Registry: ${{ secrets.CONTAINER_REGISTRY }}"
+          [[ "$(uname -s)" == "Linux" ]]
+          [[ "$(id -un)" == "iptv" ]] || {
+            echo "The production runner must run as iptv" >&2
+            exit 1
+          }
+          sudo -n true
+          for command in curl git go node npm systemctl; do
+            command -v "$command" >/dev/null || {
+              echo "Missing required command: $command" >&2
+              exit 1
+            }
+          done
+          systemctl --user show iptv.service --property=LoadState --value | grep -qx loaded
+          [[ -d /opt/iptv && -w /opt/iptv ]]
+          for storage in /opt/iptv/apk_storage /opt/iptv/image_storage; do
+            [[ -d "$storage" && -w "$storage" ]] || {
+              echo "Storage is not writable: $storage" >&2
+              exit 1
+            }
+          done
+
+      - name: Build dashboard
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build native server
+        run: |
+          mkdir -p build
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o build/iptv ./cmd/server
+
+      - name: Publish and verify
+        run: deployments/native/deploy.sh build/iptv web/dist
+
+      - name: Service diagnostics
+        if: failure()
+        run: |
+          systemctl --user status iptv.service --no-pager || true
+          journalctl --user -u iptv.service -n 100 --no-pager || true
