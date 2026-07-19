@@ -20,6 +20,8 @@ import type {
   GlobalTournamentConfig as ProtoGlobalTournamentConfig,
   LogPlaybackRequest,
   PlaybackLog as ProtoPlaybackLog,
+  PlaybackLogList,
+  PlaybackPage as ProtoPlaybackPage,
   SofaScoreEvent as ProtoSofaScoreEvent,
   Team as ProtoTeam,
   Tournament as ProtoTournament,
@@ -59,6 +61,7 @@ export type Device = ProtoDevice;
 export type RegisterDevicePayload = DeviceRegisterRequest;
 export type PlaybackLog = ProtoPlaybackLog;
 export type CreatePlaybackPayload = LogPlaybackRequest;
+export type PlaybackPageResponse = ProtoPlaybackPage;
 export interface UpdatePlaybackPayload {
   endedAt?: number;
 }

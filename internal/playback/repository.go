@@ -2,6 +2,7 @@ package playback
 
 import (
 	"context"
+	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 	"gorm.io/gorm"
@@ -62,4 +63,25 @@ func (r *Repository) TotalCount() int64 {
 	var count int64
 	_ = r.db.Model(&PlaybackLog{}).Count(&count)
 	return count
+}
+
+func (r *Repository) ListPage(ctx context.Context, createdAtStr string, id uint, limit int) ([]PlaybackLog, bool, error) {
+	query := r.db.WithContext(ctx).Order("created_at DESC, id DESC")
+	if createdAtStr != "" {
+		createdAt, err := time.Parse(time.RFC3339, createdAtStr)
+		if err != nil {
+			return nil, false, err
+		}
+		query = query.Where("created_at < ? OR (created_at = ? AND id < ?)", createdAt, createdAt, id)
+	}
+	var rows []PlaybackLog
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
 }

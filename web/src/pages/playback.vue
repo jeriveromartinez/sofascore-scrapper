@@ -4,27 +4,31 @@ import { playbackApiService } from "../store/services";
 import type { PlaybackLog } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
 
+const PAGE_LIMIT = 20;
+
 const state = reactive({
-  page: 1,
-  limit: 10,
-  total: 0,
   data: [] as PlaybackLog[],
   loading: false,
   error: "",
+  currentCursor: "" as string,
+  nextCursor: "" as string,
+  prevCursors: [] as string[],
+  hasNext: false,
+  hasPrev: false,
 });
 
-async function load() {
+async function load(cursor?: string) {
   state.error = "";
   state.data = [];
   state.loading = true;
 
   try {
-    const { list, total } = await playbackApiService.getPlayingNow(
-      state.page,
-      state.limit,
-    );
-    state.data = list;
-    state.total = total;
+    const page = await playbackApiService.getPlaybackPage(cursor, PAGE_LIMIT);
+    state.data = page.data;
+    state.nextCursor = page.page?.nextCursor ?? "";
+    state.hasNext = page.page?.hasMore ?? false;
+    state.currentCursor = cursor ?? "";
+    state.hasPrev = state.prevCursors.length > 0;
   } catch (error) {
     console.error("Error fetching playback data:", error);
     state.error =
@@ -34,17 +38,17 @@ async function load() {
   }
 }
 
-function nextPage(): void {
-  if (!state.data) return;
-  if (state.page >= Math.ceil(state.total / state.limit)) return;
-  state.page += 1;
-  void load();
+async function goNext(): Promise<void> {
+  if (!state.hasNext || !state.nextCursor) return;
+  state.prevCursors = [...state.prevCursors, state.currentCursor];
+  await load(state.nextCursor);
 }
 
-function prevPage(): void {
-  if (state.page <= 1) return;
-  state.page -= 1;
-  void load();
+async function goPrev(): Promise<void> {
+  if (state.prevCursors.length === 0) return;
+  const prev = state.prevCursors[state.prevCursors.length - 1];
+  state.prevCursors = state.prevCursors.slice(0, -1);
+  await load(prev || undefined);
 }
 
 onMounted(() => {
@@ -60,18 +64,9 @@ onMounted(() => {
       <div>
         <h5 class="mb-0">Playing Now</h5>
       </div>
-      <div class="d-flex gap-2">
-        <input
-          v-model.number="state.limit"
-          type="number"
-          min="1"
-          class="form-control"
-          style="width: 120px"
-        />
-        <button class="btn btn-primary" :disabled="state.loading" @click="load">
-          Consultar
-        </button>
-      </div>
+      <button class="btn btn-primary" :disabled="state.loading" @click="load(state.currentCursor || undefined)">
+        Consultar
+      </button>
     </div>
 
     <div class="card-body">
@@ -111,29 +106,19 @@ onMounted(() => {
         <div class="d-flex gap-2">
           <button
             class="btn btn-outline-secondary btn-sm"
-            @click="prevPage"
-            :disabled="state.page <= 1 || state.loading"
+            @click="goPrev"
+            :disabled="!state.hasPrev || state.loading"
           >
-            <span class="d-none d-sm-inline">Anterior</span>
-            <span class="d-inline d-sm-none">&lt;</span>
+            Anterior
           </button>
           <button
             class="btn btn-outline-secondary btn-sm"
-            @click="nextPage"
-            :disabled="
-              state.loading ||
-              state.page >= Math.ceil(state.total / state.limit)
-            "
+            @click="goNext"
+            :disabled="!state.hasNext || state.loading"
           >
-            <span class="d-none d-sm-inline">Siguiente</span>
-            <span class="d-inline d-sm-none">&gt;</span>
+            Siguiente
           </button>
         </div>
-        <span class="text-body-secondary small">
-          Pág. {{ state.page }} / {{ Math.ceil(state.total / state.limit) }} ({{
-            state.total
-          }})
-        </span>
       </div>
     </div>
   </div>
