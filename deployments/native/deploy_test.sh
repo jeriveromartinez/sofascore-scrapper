@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 deploy_script="$script_dir/deploy.sh"
+atomic_exchange="$script_dir/atomic_exchange.py"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -36,6 +37,12 @@ make_fixture() {
   cat > "$bin/systemctl" <<'SYSTEMCTL'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$SYSTEMCTL_LOG"
+if [[ "$*" == "--user restart iptv.service" && -n "${DASHBOARD_STATE_LOG:-}" ]]; then
+  [[ -f "$DEPLOY_ROOT/web/dist/index.html" && -f "$DEPLOY_ROOT/web/.dist.new/index.html" ]] || exit 1
+  printf '%s|%s\n' \
+    "$(<"$DEPLOY_ROOT/web/dist/index.html")" \
+    "$(<"$DEPLOY_ROOT/web/.dist.new/index.html")" >> "$DASHBOARD_STATE_LOG"
+fi
 exit 0
 SYSTEMCTL
   chmod +x "$bin/systemctl"
@@ -54,6 +61,7 @@ CURL
   DEPLOY_ROOT="$case_dir/root" \
   SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
   SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+  DASHBOARD_STATE_LOG="$case_dir/dashboard-state.log" \
   CURL_BIN="$case_dir/bin/curl" \
   HEALTH_ATTEMPTS=1 \
   HEALTH_DELAY_SECONDS=0 \
@@ -64,7 +72,31 @@ CURL
   assert_content old-binary "$case_dir/root/.deploy/previous/iptv"
   assert_content old-dashboard "$case_dir/root/.deploy/previous/web-dist/index.html"
   grep -Fq -- '--user restart iptv.service' "$case_dir/systemctl.log" || fail "service was not restarted"
+  grep -Fxq 'new-dashboard|old-dashboard' "$case_dir/dashboard-state.log" || fail "dashboard was not atomically exchanged before restart"
   [[ -x "$case_dir/root/iptv" ]] || fail "installed binary is not executable"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "exchanged dashboard was not cleaned up"
+}
+
+test_dashboard_publication_uses_atomic_exchange() {
+  [[ -f "$atomic_exchange" ]] || fail "missing atomic exchange helper"
+  if grep -Fq 'rm -rf "$current_dashboard"' "$deploy_script"; then
+    fail "dashboard publication still removes the live directory"
+  fi
+
+  local case_dir="$tmp/atomic"
+  mkdir -p "$case_dir/current" "$case_dir/replacement"
+  printf 'current' > "$case_dir/current/index.html"
+  printf 'replacement' > "$case_dir/replacement/index.html"
+
+  python3 "$atomic_exchange" "$case_dir/current" "$case_dir/replacement"
+
+  assert_content replacement "$case_dir/current/index.html"
+  assert_content current "$case_dir/replacement/index.html"
+
+  python3 "$atomic_exchange" "$case_dir/current" "$case_dir/replacement"
+
+  assert_content current "$case_dir/current/index.html"
+  assert_content replacement "$case_dir/replacement/index.html"
 }
 
 test_non_200_health_restores_previous_release() {
@@ -98,6 +130,7 @@ CURL
 
   assert_content old-binary "$case_dir/root/iptv"
   assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "failed dashboard was not cleaned up after rollback"
   [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 2 ]] || fail "non-200 health did not trigger rollback"
 }
 
@@ -132,6 +165,7 @@ CURL
 
   assert_content old-binary "$case_dir/root/iptv"
   assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "failed dashboard was not cleaned up after rollback"
   [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 2 ]] || fail "rollback did not restart service"
 }
 
@@ -185,11 +219,13 @@ INSTALL
     fail "failed rollback was reported as successful"
   fi
   assert_content new-binary "$case_dir/root/iptv"
-  assert_content new-dashboard "$case_dir/root/web/dist/index.html"
+  assert_content old-dashboard "$case_dir/root/web/dist/index.html"
+  [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "failed dashboard was not cleaned up after partial rollback"
   [[ $(grep -Fc -- '--user restart iptv.service' "$case_dir/systemctl.log") -eq 1 ]] || fail "rollback continued to service restart after operation failure"
 }
 
 test_successful_publication
+test_dashboard_publication_uses_atomic_exchange
 test_non_200_health_restores_previous_release
 test_failed_health_restores_previous_release
 test_rollback_operation_failure_is_reported

@@ -283,7 +283,7 @@ All jobs use distributed Redis locks to prevent duplicate execution across insta
 
 ## Native Production Deployment
 
-Merges to `main` deploy automatically after the `CI` workflow succeeds. The deploy workflow runs only on the self-hosted runner labeled `iptv` and installs the exact SHA reported by the successful CI run.
+Merges to `main` deploy automatically after the `CI` workflow succeeds. The deploy workflow runs only on the self-hosted runner labeled `iptv`, installs the exact SHA reported by the successful CI run, and refuses publication if that SHA is no longer the current remote `main`.
 
 Production layout:
 
@@ -305,7 +305,7 @@ curl --fail http://127.0.0.1:8080/health/ready
 journalctl --user -u iptv.service -n 100 --no-pager
 ```
 
-If health verification fails, the deployment script restores the previous binary and dashboard and restarts the service. If a migration prevents application rollback, follow `docs/operations/rollback.md` instead of manually running down migrations.
+Dashboard publication and rollback atomically exchange same-filesystem directories, so `/opt/iptv/web/dist` remains present throughout each operation. If health verification fails, the deployment script restores the previous binary and dashboard and restarts the service. If a migration prevents application rollback, follow `docs/operations/rollback.md` instead of manually running down migrations.
 
 ## Common Operational Commands
 

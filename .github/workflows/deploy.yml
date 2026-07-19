@@ -69,6 +69,18 @@ jobs:
             }
           fi
 
+          main_ref=$(curl --fail-with-body --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main")
+          jq -e --arg sha "$sha" '
+            .object.type == "commit" and .object.sha == $sha
+          ' <<<"$main_ref" >/dev/null || {
+            echo "Refusing stale deployment: selected SHA $sha is not current main" >&2
+            exit 1
+          }
+
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Deploying validated revision $sha"
 
@@ -92,7 +104,7 @@ jobs:
           }
           sudo -n true
           missing=()
-          for package in ca-certificates curl git; do
+          for package in ca-certificates curl git python3; do
             if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'install ok installed'; then
               missing+=("$package")
             fi
@@ -127,7 +139,7 @@ jobs:
             exit 1
           }
           sudo -n true
-          for command in curl git go node npm systemctl; do
+          for command in curl git go node npm python3 systemctl; do
             command -v "$command" >/dev/null || {
               echo "Missing required command: $command" >&2
               exit 1
@@ -154,7 +166,20 @@ jobs:
           CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o build/iptv ./cmd/server
 
       - name: Publish and verify
-        run: deployments/native/deploy.sh build/iptv web/dist
+        env:
+          EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]] || {
+            echo "Checked out revision does not match selected SHA $EXPECTED_SHA" >&2
+            exit 1
+          }
+          remote_main=$(git ls-remote --exit-code origin refs/heads/main)
+          remote_main_sha=${remote_main%%[[:space:]]*}
+          [[ "$remote_main_sha" == "$EXPECTED_SHA" ]] || {
+            echo "Refusing stale deployment: selected SHA $EXPECTED_SHA is not current main $remote_main_sha" >&2
+            exit 1
+          }
+          deployments/native/deploy.sh build/iptv web/dist
 
       - name: Service diagnostics
         if: failure()
