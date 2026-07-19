@@ -8,17 +8,31 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 )
 
-func startScrape(ctx context.Context, svc *scraper.Service, wg *sync.WaitGroup) {
+const (
+	lockScrapeToday  = "scheduler:lock:scrape:today"
+	lockScrapeFuture = "scheduler:lock:scrape:future"
+
+	ttlScrapeToday  = 10 * time.Minute
+	ttlScrapeFuture = 30 * time.Minute
+)
+
+func startScrape(ctx context.Context, svc *scraper.Service, runner *Runner, wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		svc.ScrapeToday(ctx, time.Now())
+		_ = runner.RunLocked(ctx, lockScrapeToday, ttlScrapeToday, func(jobCtx context.Context) error {
+			svc.ScrapeToday(jobCtx, time.Now())
+			return nil
+		})
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		svc.ScrapeNext7Days(ctx)
+		_ = runner.RunLocked(ctx, lockScrapeFuture, ttlScrapeFuture, func(jobCtx context.Context) error {
+			svc.ScrapeNext7Days(jobCtx)
+			return nil
+		})
 	}()
 
 	wg.Add(1)
@@ -31,7 +45,9 @@ func startScrape(ctx context.Context, svc *scraper.Service, wg *sync.WaitGroup) 
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				svc.Scrape(ctx, scraper.FOOTBALL, time.Now())
+				_ = runner.RunLocked(ctx, lockScrapeToday, ttlScrapeToday, func(jobCtx context.Context) error {
+					return svc.Scrape(jobCtx, scraper.FOOTBALL, time.Now())
+				})
 			}
 		}
 	}()
@@ -58,7 +74,10 @@ func startScrape(ctx context.Context, svc *scraper.Service, wg *sync.WaitGroup) 
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Until(next)):
-				svc.ScrapeNext7Days(ctx)
+				_ = runner.RunLocked(ctx, lockScrapeFuture, ttlScrapeFuture, func(jobCtx context.Context) error {
+					svc.ScrapeNext7Days(jobCtx)
+					return nil
+				})
 			}
 		}
 	}()
