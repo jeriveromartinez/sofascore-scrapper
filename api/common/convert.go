@@ -1,9 +1,9 @@
 package common
 
 import (
-	"fmt"
 	"time"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
@@ -161,29 +161,9 @@ func EventStatsToProto(stats []repository.EventStats) []*pb.EventStats {
 }
 
 func ApkToProto(v models.ApkVersion, downloadURL string) *pb.ApkInfo {
-	return &pb.ApkInfo{
-		Id:               uint32(v.ID),
-		Version:          v.Version,
-		FileName:         v.FileName,
-		FileSize:         v.FileSize,
-		Description:      v.Description,
-		IsActive:         v.IsActive,
-		PackageName:      v.PackageName,
-		VersionCode:      v.VersionCode,
-		MinSdkVersion:    v.MinSDKVersion,
-		TargetSdkVersion: v.TargetSDKVersion,
-		DownloadToken:    v.DownloadToken,
-		DownloadUrl:      downloadURL,
-		CreatedAt:        FormatTime(v.CreatedAt),
-		Downloads:        int32(v.TotalDownloads),
-		PanelUrl:         v.IPTVUrl,
-	}
+	return apk.ApkToProto(v, downloadURL)
 }
 
 func ApksToProto(versions []models.ApkVersion) []*pb.ApkInfo {
-	result := make([]*pb.ApkInfo, 0, len(versions))
-	for _, v := range versions {
-		result = append(result, ApkToProto(v, fmt.Sprintf("/api/app/v1/apk/download/%s", v.DownloadToken)))
-	}
-	return result
+	return apk.ApksToProto(versions)
 }
