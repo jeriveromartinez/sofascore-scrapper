@@ -1,4 +1,4 @@
-name: IPTV-TrueNas-CI
+name: CI
 
 on:
   push:
@@ -6,112 +6,151 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.25"
+  NODE_VERSION: "22"
+
 jobs:
-  build-staging:
-    runs-on:
-      - iptv
-
-    env:
-      DB_HOST: 192.168.0.15
-      DB_PORT: 3306
-      DB_USER: root
-      DB_PASSWORD: ju1io
-      DB_NAME: iptv
-      API_ADDR: 0.0.0.0:9065
-      VITE_API_BASE_URL: /api/web/v1
-
+  proto-diff:
+    name: Proto regeneration diff
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Install protoc
+        run: |
+          PROTOC_VERSION=28.3
+          curl -sSL "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" -o protoc.zip
+          sudo unzip -o protoc.zip -d /usr/local
+          rm protoc.zip
+
+      - name: Install protoc-gen-go
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+      - name: Regenerate proto
+        run: |
+          protoc \
+            --go_out=. \
+            --go_opt=module=github.com/jeriveromartinez/sofascore-scrapper \
+            proto/api.proto
+
+      - name: Check proto is up to date
+        run: |
+          if ! git diff --exit-code internal/gen/; then
+            echo "Generated protobuf code is out of date. Run 'protoc --go_out=...' and commit."
+            git diff internal/gen/
+            exit 1
+          fi
+
+  gofmt:
+    name: gofmt check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Download Go modules
-        run: go mod download
-
-      - name: Build Go binary
+      - name: Check formatting
         run: |
-          mkdir -p bin
-          GOTOOLCHAIN=go1.25.0 CGO_ENABLED=0 go build -trimpath -o iptv .
+          fmt=$(gofmt -l .)
+          if [ -n "$fmt" ]; then
+            echo "Files not formatted:"
+            echo "$fmt"
+            exit 1
+          fi
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+  govet:
+    name: go vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
-          node-version: 22
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Install web dependencies
+      - name: go vet
+        run: go vet ./...
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run unit tests
+        run: go test -count=1 -timeout 120s ./...
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run tests with race detector
+        run: go test -race -count=1 -timeout 300s ./...
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
         working-directory: web
-        run: yarn
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Build Vue app
-        working-directory: web
-        run: yarn build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      - name: Ensure database exists
-        run: |
-          mysql \
-            -h "$DB_HOST" \
-            -P "$DB_PORT" \
-            -u"$DB_USER" \
-            -p"$DB_PASSWORD" \
-            -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Install backend and frontend artifacts on runner
-        run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          systemctl --user stop iptv.service
-          mkdir -p /opt/iptv/web
-          mkdir -p /opt/iptv/apk_storage
-          mkdir -p /opt/iptv/image_storage
-          cp ./iptv /opt/iptv/iptv
-          rm -rf /opt/iptv/web/dist
-          cp -R ./web/dist /opt/iptv/web/dist
-          chmod +x /opt/iptv/iptv
+      - name: Lint
+        run: npm run lint
 
-      - name: Write service environment file
-        run: |
-          mkdir -p /etc/iptv
-          tee /etc/iptv/iptv.env >/dev/null <<EOF
-          DB_HOST=${DB_HOST}
-          DB_PORT=${DB_PORT}
-          DB_USER=${DB_USER}
-          DB_PASSWORD=${DB_PASSWORD}
-          DB_NAME=${DB_NAME}
-          API_ADDR=${API_ADDR}
-          EOF
-          chmod 600 /etc/iptv/iptv.env
+      - name: Type check
+        run: npx vue-tsc -b --noEmit
 
-      - name: Create or update user systemd service
-        run: |
-          mkdir -p "$HOME/.config/systemd/user"
-          tee "$HOME/.config/systemd/user/iptv.service" >/dev/null <<EOF
-          [Unit]
-          Description=IPTV Go API Service
-          After=network-online.target
-          Wants=network-online.target
+      - name: Unit tests
+        run: npm run test:unit -- --run
 
-          [Service]
-          Type=simple
-          WorkingDirectory=/opt/iptv
-          ExecStart=/opt/iptv/iptv
-          EnvironmentFile=/etc/iptv/iptv.env
-          Restart=always
-          RestartSec=5
+      - name: Build
+        run: npm run build
 
-          [Install]
-          WantedBy=default.target
-          EOF
+      - name: Bundle budget
+        run: npm run bundle-budget
 
-      - name: Restart and enable user systemd service
-        run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          systemctl --user daemon-reload
-          systemctl --user enable iptv.service
-          systemctl --user restart iptv.service
-          systemctl --user --no-pager --full status iptv.service
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t sofascore-scrapper:ci .
