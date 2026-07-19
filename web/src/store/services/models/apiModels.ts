@@ -11,6 +11,8 @@ import type {
   DevicePage as ProtoDevicePage,
   DeviceRegisterRequest,
   DeviceTournament as ProtoDeviceTournament,
+  DeviceTournamentList,
+  DeviceTournamentPage as ProtoDeviceTournamentPage,
   EventsList,
   GlobalTournamentConfig as ProtoGlobalTournamentConfig,
   LogPlaybackRequest,
@@ -39,6 +41,7 @@ export type UsersResponse = UserList;
 export type UserPageResponse = ProtoUserPage;
 export type DomainPageResponse = ProtoDomainPage;
 export type TournamentPageResponse = ProtoTournamentPage;
+export type DeviceTournamentPageResponse = ProtoDeviceTournamentPage;
 export type DomainsResponse = DomainList;
 
 export interface EventsQuery {

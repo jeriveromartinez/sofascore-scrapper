@@ -3,11 +3,13 @@ import {
   AssignTournamentRequest,
   DeviceTournament as ProtoDeviceTournamentMessage,
   DeviceTournamentList,
+  DeviceTournamentPage,
   SetTournamentIdsRequest,
   StatusMessage,
 } from "../../proto/api";
 import type {
   DeviceTournament,
+  DeviceTournamentPageResponse,
   AssignTournamentPayload,
   SetDeviceTournamentsPayload,
   StatusResponse,
@@ -20,6 +22,18 @@ export class DeviceTournamentsApiService extends BaseApiService {
 
   async getAllDeviceTournaments(): Promise<DeviceTournament[]> {
     return (await this.get("", DeviceTournamentList)).deviceTournaments;
+  }
+
+  async getDeviceTournamentPage(
+    cursor?: string,
+    limit?: number,
+  ): Promise<DeviceTournamentPageResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    const url = qs ? `/page?${qs}` : "/page";
+    return this.get(url, DeviceTournamentPage);
   }
 
   async getDeviceTournaments(deviceId: number): Promise<DeviceTournament[]> {
