@@ -7,7 +7,7 @@
 | **dev** | `compose.dev.yml` | MariaDB 10.11 (persistent) | Redis 7 (persistent) | 1 | none | Local development |
 | **test** | `compose.test.yml` | MariaDB 10.11 (tmpfs/ephemeral) | Redis 7 (tmpfs/ephemeral) | 1 + init | none | CI / integration tests |
 | **multi** | `compose.multi.yml` | MariaDB 10.11 (persistent) | Redis 7 (persistent) | 3 | nginx 1.27 | Staging / load-test |
-| **prod** | `compose.multi.yml` (adapted) | MariaDB 10.11 (persistent, external vol) | Redis 7 (persistent, external vol) | 3+ | nginx / external LB | Production |
+| **prod** | Native binary + user systemd | MariaDB (persistent) | Redis (persistent) | 1 | external proxy/LB | Production on runner `iptv` |
 
 ### Key Environment Variables
 
@@ -281,14 +281,42 @@ All jobs use distributed Redis locks to prevent duplicate execution across insta
 
 ---
 
+## Native Production Deployment
+
+Merges to `main` deploy automatically after the `CI` workflow succeeds. The deploy workflow runs only on the self-hosted runner labeled `iptv` and installs the exact SHA reported by the successful CI run.
+
+Production layout:
+
+| Path | Purpose |
+|---|---|
+| `/opt/iptv/iptv` | Native Go executable |
+| `/opt/iptv/web/dist` | Vue dashboard assets |
+| `/opt/iptv/apk_storage` | Persistent APK data; never replaced by deployment |
+| `/opt/iptv/image_storage` | Persistent team logos; never replaced by deployment |
+| `/opt/iptv/.deploy/previous` | Previous executable and dashboard for artifact rollback |
+
+The existing user service is `/home/iptv/.config/systemd/user/iptv.service`. Its environment remains outside the repository. Startup applies forward database migrations; automatic artifact rollback does not run down migrations.
+
+Verification and diagnostics:
+
+```bash
+systemctl --user status iptv.service --no-pager
+curl --fail http://127.0.0.1:8080/health/ready
+journalctl --user -u iptv.service -n 100 --no-pager
+```
+
+If health verification fails, the deployment script restores the previous binary and dashboard and restarts the service. If a migration prevents application rollback, follow `docs/operations/rollback.md` instead of manually running down migrations.
+
 ## Common Operational Commands
 
 ```bash
 # Development
 docker compose -f deployments/docker/compose.dev.yml up --build
 
-# Multi-instance (staging/prod-like)
-docker compose -f deployments/docker/compose.multi.yml up --build
+# Native production service
+systemctl --user restart iptv.service
+systemctl --user status iptv.service --no-pager
+curl --fail http://127.0.0.1:8080/health/ready
 
 # Run tests (requires compose.test.yml services up)
 docker compose -f deployments/docker/compose.test.yml up -d mariadb redis
