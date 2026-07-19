@@ -3,6 +3,8 @@ import { reactive, onMounted } from "vue";
 import { tournamentsApiService } from "../store/services";
 import type { Tournament } from "../store/services/models";
 
+const PAGE_LIMIT = 20;
+
 const state = reactive({
   tournaments: [] as Tournament[],
   loading: false,
@@ -12,13 +14,23 @@ const state = reactive({
     name: "",
     slug: "",
   },
+  currentCursor: "" as string,
+  nextCursor: "" as string,
+  prevCursors: [] as string[],
+  hasNext: false,
+  hasPrev: false,
 });
 
-async function loadTournaments(): Promise<void> {
+async function loadPage(cursor?: string): Promise<void> {
   state.loading = true;
   state.error = "";
   try {
-    state.tournaments = await tournamentsApiService.getAllTournaments();
+    const page = await tournamentsApiService.getTournamentPage(cursor, PAGE_LIMIT);
+    state.tournaments = page.data;
+    state.nextCursor = page.page?.nextCursor ?? "";
+    state.hasNext = page.page?.hasMore ?? false;
+    state.currentCursor = cursor ?? "";
+    state.hasPrev = state.prevCursors.length > 0;
   } catch (error) {
     state.error =
       error instanceof Error
@@ -27,6 +39,19 @@ async function loadTournaments(): Promise<void> {
   } finally {
     state.loading = false;
   }
+}
+
+async function goNext(): Promise<void> {
+  if (!state.hasNext || !state.nextCursor) return;
+  state.prevCursors = [...state.prevCursors, state.currentCursor];
+  await loadPage(state.nextCursor);
+}
+
+async function goPrev(): Promise<void> {
+  if (state.prevCursors.length === 0) return;
+  const prev = state.prevCursors[state.prevCursors.length - 1];
+  state.prevCursors = state.prevCursors.slice(0, -1);
+  await loadPage(prev || undefined);
 }
 
 async function createTournament(): Promise<void> {
@@ -44,7 +69,7 @@ async function createTournament(): Promise<void> {
     });
     state.form.name = "";
     state.form.slug = "";
-    await loadTournaments();
+    await loadPage(state.currentCursor || undefined);
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "No se pudo crear el torneo";
@@ -76,7 +101,7 @@ async function updateTournament(): Promise<void> {
       slug: state.form.slug,
     });
     cancelEdit();
-    await loadTournaments();
+    await loadPage(state.currentCursor || undefined);
   } catch (error) {
     state.error =
       error instanceof Error
@@ -94,7 +119,7 @@ async function deleteTournament(id: number): Promise<void> {
   state.error = "";
   try {
     await tournamentsApiService.deleteTournament(id);
-    await loadTournaments();
+    await loadPage(state.currentCursor || undefined);
   } catch (error) {
     state.error =
       error instanceof Error ? error.message : "No se pudo eliminar el torneo";
@@ -104,7 +129,7 @@ async function deleteTournament(id: number): Promise<void> {
 }
 
 onMounted(() => {
-  loadTournaments();
+  loadPage();
 });
 </script>
 
@@ -193,6 +218,23 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <button
+            class="btn btn-outline-secondary"
+            :disabled="!state.hasPrev || state.loading"
+            @click="goPrev"
+          >
+            Anterior
+          </button>
+          <button
+            class="btn btn-outline-secondary"
+            :disabled="!state.hasNext || state.loading"
+            @click="goNext"
+          >
+            Siguiente
+          </button>
+        </div>
       </div>
 
       <div v-else class="text-center text-muted">

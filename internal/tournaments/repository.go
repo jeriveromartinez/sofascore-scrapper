@@ -1,6 +1,10 @@
 package tournaments
 
-import "gorm.io/gorm"
+import (
+	"context"
+
+	"gorm.io/gorm"
+)
 
 type Repository struct {
 	db *gorm.DB
@@ -14,6 +18,23 @@ func (r *Repository) GetAll() ([]Tournament, error) {
 	var tournaments []Tournament
 	result := r.db.Order("slug ASC").Find(&tournaments)
 	return tournaments, result.Error
+}
+
+func (r *Repository) ListPage(ctx context.Context, slug string, id uint, limit int) ([]Tournament, bool, error) {
+	query := r.db.WithContext(ctx).Order("slug ASC, id ASC")
+	if slug != "" {
+		query = query.Where("slug > ? OR (slug = ? AND id > ?)", slug, slug, id)
+	}
+	var rows []Tournament
+	err := query.Limit(limit + 1).Find(&rows).Error
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
 }
 
 func (r *Repository) GetByID(id uint) (*Tournament, error) {

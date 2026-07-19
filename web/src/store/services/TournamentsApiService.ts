@@ -3,6 +3,7 @@ import {
   StatusMessage,
   Tournament as ProtoTournamentMessage,
   TournamentList,
+  TournamentPage,
   TournamentRequest,
 } from "../../proto/api";
 import type {
@@ -10,6 +11,7 @@ import type {
   CreateTournamentPayload,
   UpdateTournamentPayload,
   StatusResponse,
+  TournamentPageResponse,
 } from "./models";
 
 export class TournamentsApiService extends BaseApiService {
@@ -19,6 +21,18 @@ export class TournamentsApiService extends BaseApiService {
 
   async getAllTournaments(): Promise<Tournament[]> {
     return (await this.get("", TournamentList)).tournaments;
+  }
+
+  async getTournamentPage(
+    cursor?: string,
+    limit?: number,
+  ): Promise<TournamentPageResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    const url = qs ? `/page?${qs}` : "/page";
+    return this.get(url, TournamentPage);
   }
 
   async getTournament(id: number): Promise<Tournament> {
