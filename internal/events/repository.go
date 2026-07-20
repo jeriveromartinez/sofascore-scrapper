@@ -168,27 +168,19 @@ func isProxiedLogoURL(url string) bool {
 	return strings.HasPrefix(url, "/teams/logo/") || strings.HasPrefix(url, "/api/app/v1/teams/logo/")
 }
 
-func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
-	select {
-	case downloadSem <- struct{}{}:
-		go func() {
-			defer func() { <-downloadSem }()
-			downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
-		}()
-	default:
-	}
+func enqueueTeamLogo(group *singleflight.Group, semaphore chan struct{}, teamID int64, work func()) {
+	key := fmt.Sprintf("logo-%d", teamID)
+	group.DoChan(key, func() (interface{}, error) {
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		work()
+		return nil, nil
+	})
 }
 
 func scheduleLogoSingleflight(db *gorm.DB, teamID int64, sourceURL string) {
-	key := fmt.Sprintf("logo-%d", teamID)
-	logoSF.DoChan(key, func() (interface{}, error) {
-		select {
-		case downloadSem <- struct{}{}:
-			defer func() { <-downloadSem }()
-			downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
-		default:
-		}
-		return nil, nil
+	enqueueTeamLogo(&logoSF, downloadSem, teamID, func() {
+		downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
 	})
 }
 
