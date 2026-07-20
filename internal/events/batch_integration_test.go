@@ -5,6 +5,9 @@ package events
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -269,6 +272,47 @@ func TestUpsertScrapeBatch_PersistsLocalLogoURLAndSchedulesRemoteSource(t *testi
 	}
 	if len(scheduled) != 1 || scheduled[0].teamID != 10 || scheduled[0].sourceURL != remoteURL {
 		t.Fatalf("scheduled = %#v, want team 10 from %q", scheduled, remoteURL)
+	}
+}
+
+func TestReconcileTeamLogosNormalizesRowsAndSchedulesMissingFiles(t *testing.T) {
+	db := setupBatchTestDB(t)
+	storage := t.TempDir()
+	t.Setenv("IMAGE_STORAGE_PATH", storage)
+
+	remote := Team{TeamId: 10, Name: "Remote", LogoUrl: TeamLogoSourceURL(10)}
+	cached := Team{TeamId: 20, Name: "Cached", LogoUrl: TeamLogoSourceURL(20)}
+	if err := db.Create(&[]Team{remote, cached}).Error; err != nil {
+		t.Fatalf("seed teams: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(TeamLogoLocalPath(20)), 0o755); err != nil {
+		t.Fatalf("create logo dir: %v", err)
+	}
+	if err := os.WriteFile(TeamLogoLocalPath(20), []byte("cached"), 0o644); err != nil {
+		t.Fatalf("write cached logo: %v", err)
+	}
+
+	repo := NewRepository(db)
+	var scheduled []int64
+	repo.scheduleLogo = func(_ *gorm.DB, teamID int64, sourceURL string) {
+		scheduled = append(scheduled, teamID)
+		if sourceURL != TeamLogoSourceURL(teamID) {
+			t.Errorf("source URL = %q for team %d", sourceURL, teamID)
+		}
+	}
+	if err := repo.ReconcileTeamLogos(context.Background()); err != nil {
+		t.Fatalf("ReconcileTeamLogos: %v", err)
+	}
+
+	var teams []Team
+	if err := db.Order("team_id").Find(&teams).Error; err != nil {
+		t.Fatalf("load teams: %v", err)
+	}
+	if teams[0].LogoUrl != "/teams/logo/10" || teams[1].LogoUrl != "/teams/logo/20" {
+		t.Fatalf("reconciled teams = %#v", teams)
+	}
+	if !reflect.DeepEqual(scheduled, []int64{10}) {
+		t.Fatalf("scheduled = %v, want [10]", scheduled)
 	}
 }
 

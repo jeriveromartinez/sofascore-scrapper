@@ -2,7 +2,10 @@ package events
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -20,6 +23,38 @@ type Repository struct {
 
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db, scheduleLogo: scheduleLogoDownload}
+}
+
+func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
+	var teams []Team
+	if err := r.db.WithContext(ctx).Find(&teams).Error; err != nil {
+		return fmt.Errorf("load teams for logo reconciliation: %w", err)
+	}
+
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, team := range teams {
+			localURL := TeamLogoAPIPath(team.TeamId)
+			if team.LogoUrl == localURL {
+				continue
+			}
+			if err := tx.Model(&Team{}).Where("team_id = ?", team.TeamId).Update("logo_url", localURL).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("normalize team logo URLs: %w", err)
+	}
+
+	for _, team := range teams {
+		if _, err := os.Stat(TeamLogoLocalPath(team.TeamId)); err == nil {
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect logo for team %d: %w", team.TeamId, err)
+		}
+		r.scheduleLogo(r.db, team.TeamId, TeamLogoSourceURL(team.TeamId))
+	}
+	return nil
 }
 
 type pendingLogo struct {
