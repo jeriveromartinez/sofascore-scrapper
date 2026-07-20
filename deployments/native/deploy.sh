@@ -20,6 +20,10 @@ git_bin=${GIT_BIN:-git}
 health_attempts=${HEALTH_ATTEMPTS:-30}
 health_delay=${HEALTH_DELAY_SECONDS:-2}
 
+if [[ -z "${XDG_RUNTIME_DIR:-}" ]]; then
+  export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
+
 state_dir="$deploy_root/.deploy"
 stage_dir="$state_dir/stage"
 previous_dir="$state_dir/previous"

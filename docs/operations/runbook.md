@@ -297,12 +297,21 @@ Production layout:
 
 The existing user service is `/home/iptv/.config/systemd/user/iptv.service`. Its environment remains outside the repository. Startup applies forward database migrations; automatic artifact rollback does not run down migrations.
 
+The runner executes inside a TrueNAS system container with systemd as PID 1.
+The `iptv` user manager must remain active with its bus at
+`/run/user/$(id -u iptv)/bus`. GitHub Actions derives and propagates
+`XDG_RUNTIME_DIR` dynamically; the UID must not be hardcoded.
+
 Verification and diagnostics:
 
 ```bash
-systemctl --user status iptv.service --no-pager
+sudo -u iptv env XDG_RUNTIME_DIR="/run/user/$(id -u iptv)" \
+  systemctl --user status iptv.service --no-pager
+sudo -u iptv env XDG_RUNTIME_DIR="/run/user/$(id -u iptv)" \
+  systemctl --user restart iptv.service
+sudo -u iptv env XDG_RUNTIME_DIR="/run/user/$(id -u iptv)" \
+  journalctl --user -u iptv.service -n 100 --no-pager
 curl --fail http://127.0.0.1:9065/health/ready
-journalctl --user -u iptv.service -n 100 --no-pager
 ```
 
 Dashboard publication and rollback atomically exchange same-filesystem directories, so `/opt/iptv/web/dist` remains present throughout each operation. If health verification fails, the deployment script restores the previous binary and dashboard and restarts the service. If a migration prevents application rollback, follow `docs/operations/rollback.md` instead of manually running down migrations.
@@ -314,8 +323,10 @@ Dashboard publication and rollback atomically exchange same-filesystem directori
 docker compose -f deployments/docker/compose.dev.yml up --build
 
 # Native production service
-systemctl --user restart iptv.service
-systemctl --user status iptv.service --no-pager
+sudo -u iptv env XDG_RUNTIME_DIR="/run/user/$(id -u iptv)" \
+  systemctl --user restart iptv.service
+sudo -u iptv env XDG_RUNTIME_DIR="/run/user/$(id -u iptv)" \
+  systemctl --user status iptv.service --no-pager
 curl --fail http://127.0.0.1:9065/health/ready
 
 # Run tests (requires compose.test.yml services up)
