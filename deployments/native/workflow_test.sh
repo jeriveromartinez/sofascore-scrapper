@@ -96,6 +96,11 @@ fi
   exit 1
 }
 require 'systemctl --user show iptv.service'
+require 'runtime_dir="/run/user/$(id -u)"'
+require '[[ -S "$runtime_dir/bus" ]]'
+require 'export XDG_RUNTIME_DIR="$runtime_dir"'
+require 'echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"'
+reject '/run/user/1001'
 require 'id: runtime'
 require 'environment_file=/etc/iptv/iptv.env'
 require "grep -Eq '^JWT_SECRET=.+$' \"\$environment_file\""

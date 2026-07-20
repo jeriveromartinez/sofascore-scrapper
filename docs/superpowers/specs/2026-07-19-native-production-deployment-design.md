@@ -15,9 +15,14 @@ The deployment must not use Docker or a container registry. It must preserve the
 - Image storage: `/opt/iptv/image_storage`
 - Service: `iptv.service`, managed with `systemctl --user`
 - Runner: self-hosted Linux runner with labels `self-hosted` and `iptv`
-- Service account: `iptv`, with passwordless `sudo` on Ubuntu
+- Service account: `iptv`
+- Host: TrueNAS system container running systemd as PID 1
 
 The workflow must not replace the service unit or its environment configuration.
+
+The `iptv` user manager exposes its bus at `/run/user/<uid>/bus`. GitHub Actions
+jobs do not inherit `XDG_RUNTIME_DIR`, so the workflow must derive
+`XDG_RUNTIME_DIR=/run/user/$(id -u)` instead of hardcoding the production UID.
 
 ## Trigger And Revision Selection
 
@@ -50,21 +55,30 @@ No repository checkout or source build occurs inside `/opt/iptv`.
 
 ## Dependency Provisioning And Preflight
 
-The runner is Ubuntu. The workflow uses non-interactive passwordless `sudo` to install missing base packages with `apt-get`, including `ca-certificates`, `curl`, and `git`.
+The runner is Ubuntu. The workflow reports commands for an operator to install
+missing base packages with `apt-get`; the deployment itself does not require
+non-interactive sudo access.
 
 Exact build toolchains are provisioned automatically with maintained GitHub Actions:
 
 - Go from `go.mod` (`1.25.x`)
 - Node.js 22 with npm cache keyed by `web/package-lock.json`
 
-Before modifying production, preflight checks must verify:
+Before modifying production, preflight checks must:
 
-- the runner is Linux and passwordless `sudo` works;
-- `systemctl --user` can find `iptv.service`;
+- verify the runner is Linux and executes as `iptv`;
+- derive and export `XDG_RUNTIME_DIR` from the effective UID;
+- verify `$XDG_RUNTIME_DIR/bus` is a Unix socket;
+- propagate `XDG_RUNTIME_DIR` through `$GITHUB_ENV` for later workflow steps;
+- verify `systemctl --user` can find `iptv.service`;
 - `/opt/iptv` exists and is writable by the runner account;
 - `/opt/iptv/apk_storage` and `/opt/iptv/image_storage` exist and are writable;
 - the current service configuration is left in place;
 - `curl`, Go, Node.js, and npm are available after provisioning.
+
+`deployments/native/deploy.sh` derives the same runtime-directory default when
+it is invoked outside the workflow. It preserves an explicitly supplied value
+for tests and alternate systemd user-manager layouts.
 
 Database and Redis connectivity are verified through the application's readiness endpoint after restart. The current scraper uses HTTP with uTLS and has no Chromium runtime dependency.
 
@@ -117,7 +131,7 @@ Application startup runs forward database migrations. Artifact rollback must nev
 - Pull request code never executes on the `iptv` runner.
 - No production secrets are copied into the repository or Actions workspace by this workflow.
 - Existing environment values remain owned by `iptv.service`.
-- `sudo` is used only for package provisioning if a base dependency is missing; application publication and service management run as `iptv`.
+- Base dependency installation is an explicit operator action; application publication and service management run as `iptv`.
 - Workflow logs include the deployed commit SHA but no environment values or credentials.
 
 ## Verification
@@ -127,6 +141,7 @@ Implementation verification must include:
 - YAML parsing and inspection of workflow triggers, permissions, runner labels, concurrency, and SHA selection;
 - `bash -n deployments/native/deploy.sh`;
 - script tests with temporary deployment roots and fake `systemctl`/health commands covering successful publication and failed-health rollback;
+- workflow contract checks for dynamic user runtime-directory derivation, user-bus socket validation, `$GITHUB_ENV` propagation, and absence of a hardcoded UID;
 - `npm ci && npm run build`;
 - `CGO_ENABLED=0 go build ./cmd/server`;
 - existing Go tests and vet checks;

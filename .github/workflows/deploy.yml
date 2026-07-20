@@ -141,6 +141,13 @@ jobs:
             echo "The production runner must run as iptv" >&2
             exit 1
           }
+          runtime_dir="/run/user/$(id -u)"
+          [[ -S "$runtime_dir/bus" ]] || {
+            echo "systemd user bus is unavailable: $runtime_dir/bus" >&2
+            exit 1
+          }
+          export XDG_RUNTIME_DIR="$runtime_dir"
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
           for command in curl git go node npm python3 systemctl; do
             command -v "$command" >/dev/null || {
               echo "Missing required command: $command" >&2

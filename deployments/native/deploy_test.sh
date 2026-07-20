@@ -38,6 +38,9 @@ make_fixture() {
 
   cat > "$bin/systemctl" <<'SYSTEMCTL'
 #!/usr/bin/env bash
+if [[ -n "${SYSTEMCTL_ENV_LOG:-}" ]]; then
+  printf '%s\n' "${XDG_RUNTIME_DIR:-}" >> "$SYSTEMCTL_ENV_LOG"
+fi
 printf '%s\n' "$*" >> "$SYSTEMCTL_LOG"
 if [[ ("$*" == "--user restart iptv.service" || "$*" == "--user --no-block restart iptv.service") \
   && -n "${SERVICE_STATE_LOG:-}" ]]; then
@@ -373,16 +376,18 @@ printf '200'
 CURL
   chmod +x "$case_dir/bin/curl"
 
-  DEPLOY_ROOT="$case_dir/root" \
-  SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
-  SYSTEMCTL_LOG="$case_dir/systemctl.log" \
-  DASHBOARD_STATE_LOG="$case_dir/dashboard-state.log" \
-  CURL_BIN="$case_dir/bin/curl" \
-  GIT_BIN="$case_dir/bin/git" \
-  GIT_COUNT_FILE="$case_dir/git.count" \
-  REMOTE_MAIN_SHA="$expected_sha" \
-  HEALTH_ATTEMPTS=1 \
-  HEALTH_DELAY_SECONDS=0 \
+  env -u XDG_RUNTIME_DIR \
+    DEPLOY_ROOT="$case_dir/root" \
+    SYSTEMCTL_BIN="$case_dir/bin/systemctl" \
+    SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+    SYSTEMCTL_ENV_LOG="$case_dir/systemctl-env.log" \
+    DASHBOARD_STATE_LOG="$case_dir/dashboard-state.log" \
+    CURL_BIN="$case_dir/bin/curl" \
+    GIT_BIN="$case_dir/bin/git" \
+    GIT_COUNT_FILE="$case_dir/git.count" \
+    REMOTE_MAIN_SHA="$expected_sha" \
+    HEALTH_ATTEMPTS=1 \
+    HEALTH_DELAY_SECONDS=0 \
     "$deploy_script" "$case_dir/artifacts/iptv" "$case_dir/artifacts/web-dist" "$expected_sha"
 
   assert_content new-binary "$case_dir/root/iptv"
@@ -391,6 +396,8 @@ CURL
   assert_content old-binary "$case_dir/root/.deploy/previous/iptv"
   assert_content old-dashboard "$case_dir/root/.deploy/previous/web-dist/index.html"
   grep -Fq -- '--user restart iptv.service' "$case_dir/systemctl.log" || fail "service was not restarted"
+  grep -Fxq "/run/user/$(id -u)" "$case_dir/systemctl-env.log" \
+    || fail "systemctl did not receive the derived user runtime directory"
   grep -Fxq 'new-dashboard|old-dashboard' "$case_dir/dashboard-state.log" || fail "dashboard was not atomically exchanged before restart"
   [[ -x "$case_dir/root/iptv" ]] || fail "installed binary is not executable"
   [[ ! -e "$case_dir/root/web/.dist.new" ]] || fail "exchanged dashboard was not cleaned up"
