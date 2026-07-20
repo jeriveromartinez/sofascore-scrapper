@@ -146,8 +146,7 @@ func repairDirtyAPKSemverMigration(ctx context.Context, conn *sql.Conn) error {
 		var nonUnique int
 		var ignored string
 		if err := rows.Scan(&column, &subPart, &collation, &indexType, &nonUnique, &ignored); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan idx_apk_latest: %w", err)
+			return errors.Join(fmt.Errorf("scan idx_apk_latest: %w", err), rows.Close())
 		}
 		if !collation.Valid || collation.String != "A" {
 			allAscending = false
