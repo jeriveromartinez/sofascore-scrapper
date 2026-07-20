@@ -11,7 +11,7 @@ func TestEventToProtoNormalizesLogoURLsWithoutMutatingModels(t *testing.T) {
 		{
 			name: "external SofaScore URL",
 			url:  "https://img.sofascore.com/api/v1/team/123/image",
-			want: "https://img.sofascore.com/api/v1/team/123/image",
+			want: "/api/app/v1/teams/logo/123",
 		},
 		{
 			name: "local relative URL",
@@ -26,7 +26,7 @@ func TestEventToProtoNormalizesLogoURLsWithoutMutatingModels(t *testing.T) {
 		{
 			name: "already prefixed root URL",
 			url:  "/api/app/v1",
-			want: "/api/app/v1",
+			want: "/api/app/v1/teams/logo/123",
 		},
 	}
 

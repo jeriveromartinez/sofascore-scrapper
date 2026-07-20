@@ -80,7 +80,7 @@ func newTestRouter(t *testing.T, cfg config.Config) *gin.Engine {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewRouter(nil, nil, cfg, tokens)
+	return NewRouter(nil, nil, cfg, tokens, nil)
 }
 
 func TestCrashReportInheritsOneMiBBodyLimit(t *testing.T) {
@@ -142,7 +142,7 @@ func TestAdminRateLimitRunsBeforeProtectedHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	router := NewRouter(nil, nil, config.Config{JWTSecret: "test-secret"}, tokens)
+	router := NewRouter(nil, nil, config.Config{JWTSecret: "test-secret"}, tokens, nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/web/v1/apk/uploads", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -160,7 +160,7 @@ func TestRouteCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := config.Config{JWTSecret: "test-secret"}
-	router := NewRouter(nil, nil, cfg, tokens)
+	router := NewRouter(nil, nil, cfg, tokens, nil)
 	got := make(map[string]bool)
 	for _, route := range router.Routes() {
 		got[route.Method+" "+route.Path] = true

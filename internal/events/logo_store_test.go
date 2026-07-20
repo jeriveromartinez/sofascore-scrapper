@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	utls "github.com/refraction-networking/utls"
 )
@@ -45,6 +47,39 @@ func TestDownloadTeamLogoClosesIdleConnections(t *testing.T) {
 	}
 	if !transport.closed {
 		t.Fatal("downloadTeamLogo did not close idle connections")
+	}
+}
+
+func TestDownloadTeamLogoWithContextCancelsRequest(t *testing.T) {
+	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
+
+	requestStarted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := downloadTeamLogoWithContext(ctx, 123, server.URL, server.Client())
+		done <- err
+	}()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("image request did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("download succeeded after its context was canceled")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("download did not stop after context cancellation")
 	}
 }
 

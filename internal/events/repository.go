@@ -2,28 +2,95 @@ package events
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
-	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-var (
-	downloadSem = make(chan struct{}, 10)
-	logoSF      singleflight.Group
-)
-
 type Repository struct {
-	db *gorm.DB
+	db           *gorm.DB
+	scheduleLogo func(*gorm.DB, int64, string)
 }
 
 func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db}
+	return &Repository{
+		db:           db,
+		scheduleLogo: func(*gorm.DB, int64, string) {},
+	}
+}
+
+func NewRepositoryWithLogoScheduler(db *gorm.DB, scheduler TeamLogoScheduler) *Repository {
+	repository := NewRepository(db)
+	if scheduler != nil {
+		repository.scheduleLogo = scheduler.Schedule
+	}
+	return repository
+}
+
+func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
+	var teams []Team
+	if err := r.db.WithContext(ctx).Find(&teams).Error; err != nil {
+		return fmt.Errorf("load teams for logo reconciliation: %w", err)
+	}
+
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, team := range teams {
+			localURL := TeamLogoAPIPath(team.TeamId)
+			if team.LogoUrl == localURL {
+				continue
+			}
+			if err := tx.Model(&Team{}).Where("team_id = ?", team.TeamId).Update("logo_url", localURL).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("normalize team logo URLs: %w", err)
+	}
+
+	for _, team := range teams {
+		if _, err := os.Stat(TeamLogoLocalPath(team.TeamId)); err == nil {
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect logo for team %d: %w", team.TeamId, err)
+		}
+		r.scheduleLogo(r.db, team.TeamId, TeamLogoSourceURL(team.TeamId))
+	}
+	return nil
+}
+
+type pendingLogo struct {
+	teamID    int64
+	sourceURL string
+}
+
+func prepareTeamLogo(team *Team) pendingLogo {
+	pending := pendingLogo{teamID: team.TeamId, sourceURL: team.LogoUrl}
+	team.LogoUrl = TeamLogoAPIPath(team.TeamId)
+	return pending
+}
+
+func (r *Repository) upsertTeam(ctx context.Context, team *Team) error {
+	pending := prepareTeamLogo(team)
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "team_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"name", "logo_url", "primary_color", "secondary_color", "text_color",
+		}),
+	}).Create(team).Error; err != nil {
+		return err
+	}
+	if pending.sourceURL != "" && !isProxiedLogoURL(pending.sourceURL) {
+		r.scheduleLogo(r.db, pending.teamID, pending.sourceURL)
+	}
+	return nil
 }
 
 func (r *Repository) Upsert(ctx context.Context, events []Event, sport string) error {
@@ -34,16 +101,14 @@ func (r *Repository) Upsert(ctx context.Context, events []Event, sport string) e
 		event.Sport = sport
 
 		if event.HomeTeamModel != nil {
-			r.db.WithContext(nil).FirstOrCreate(event.HomeTeamModel, Team{TeamId: event.HomeTeamModel.TeamId})
-			if !isProxiedLogoURL(event.HomeTeamModel.LogoUrl) {
-				scheduleLogoDownload(r.db, event.HomeTeamModel.TeamId, event.HomeTeamModel.LogoUrl)
+			if err := r.upsertTeam(ctx, event.HomeTeamModel); err != nil {
+				return err
 			}
 		}
 
 		if event.AwayTeamModel != nil {
-			r.db.WithContext(nil).FirstOrCreate(event.AwayTeamModel, Team{TeamId: event.AwayTeamModel.TeamId})
-			if !isProxiedLogoURL(event.AwayTeamModel.LogoUrl) {
-				scheduleLogoDownload(r.db, event.AwayTeamModel.TeamId, event.AwayTeamModel.LogoUrl)
+			if err := r.upsertTeam(ctx, event.AwayTeamModel); err != nil {
+				return err
 			}
 		}
 
@@ -72,6 +137,14 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 		batchSize = 500
 	}
 
+	pendingLogos := make([]pendingLogo, 0, len(batch.Teams))
+	for i := range batch.Teams {
+		pending := prepareTeamLogo(&batch.Teams[i])
+		if pending.sourceURL != "" && !isProxiedLogoURL(pending.sourceURL) {
+			pendingLogos = append(pendingLogos, pending)
+		}
+	}
+
 	now := time.Now().Unix()
 	for i := range batch.Events {
 		batch.Events[i].ScrapedAt = now
@@ -85,7 +158,7 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "team_id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"name", "primary_color", "secondary_color", "text_color",
+					"name", "logo_url", "primary_color", "secondary_color", "text_color",
 				}),
 			}).CreateInBatches(batch.Teams, batchSize).Error; err != nil {
 				return err
@@ -123,10 +196,8 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 		return err
 	}
 
-	for _, team := range batch.Teams {
-		if !isProxiedLogoURL(team.LogoUrl) {
-			scheduleLogoSingleflight(r.db, team.TeamId, team.LogoUrl)
-		}
+	for _, pending := range pendingLogos {
+		r.scheduleLogo(r.db, pending.teamID, pending.sourceURL)
 	}
 
 	return nil
@@ -136,38 +207,17 @@ func isProxiedLogoURL(url string) bool {
 	return strings.HasPrefix(url, "/teams/logo/") || strings.HasPrefix(url, "/api/app/v1/teams/logo/")
 }
 
-func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
-	select {
-	case downloadSem <- struct{}{}:
-		go func() {
-			defer func() { <-downloadSem }()
-			downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
-		}()
-	default:
-	}
-}
-
-func scheduleLogoSingleflight(db *gorm.DB, teamID int64, sourceURL string) {
-	key := fmt.Sprintf("logo-%d", teamID)
-	logoSF.DoChan(key, func() (interface{}, error) {
-		select {
-		case downloadSem <- struct{}{}:
-			defer func() { <-downloadSem }()
-			downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
-		default:
-		}
-		return nil, nil
-	})
-}
-
-func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {
-	if _, err := DownloadTeamLogo(teamID, sourceURL); err != nil {
+func downloadAndUpdateTeamLogo(ctx context.Context, db *gorm.DB, teamID int64, sourceURL string) {
+	if _, err := DownloadTeamLogoWithContext(ctx, teamID, sourceURL); err != nil {
 		log.Printf("events: failed to download logo for team %d: %v", teamID, err)
+		return
+	}
+	if ctx.Err() != nil {
 		return
 	}
 
 	apiPath := TeamLogoAPIPath(teamID)
-	if err := db.Model(&Team{}).Where("team_id = ?", teamID).Update("logo_url", apiPath).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&Team{}).Where("team_id = ?", teamID).Update("logo_url", apiPath).Error; err != nil {
 		log.Printf("events: failed to update logo URL for team %d: %v", teamID, err)
 	}
 }

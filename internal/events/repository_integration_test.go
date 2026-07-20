@@ -223,3 +223,32 @@ func TestUpsert_ErrorReturned(t *testing.T) {
 		t.Errorf("upsert with conflict should not error: %v", err)
 	}
 }
+
+func TestUpsertPersistsLocalLogoURLs(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepository(db)
+	repo.scheduleLogo = func(_ *gorm.DB, _ int64, _ string) {}
+
+	const remoteURL = "https://img.sofascore.com/api/v1/team/10/image"
+	home := &Team{TeamId: 10, Name: "Home", LogoUrl: remoteURL}
+	away := &Team{TeamId: 20, Name: "Away", LogoUrl: remoteURL}
+	event := Event{
+		SofaScoreEventId: 1,
+		HomeTeamId:       10,
+		AwayTeamId:       20,
+		HomeTeamModel:    home,
+		AwayTeamModel:    away,
+		StatusType:       "notstarted",
+	}
+	if err := repo.Upsert(context.Background(), []Event{event}, "football"); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	var teams []Team
+	if err := db.Order("team_id").Find(&teams).Error; err != nil {
+		t.Fatalf("load teams: %v", err)
+	}
+	if len(teams) != 2 || teams[0].LogoUrl != "/teams/logo/10" || teams[1].LogoUrl != "/teams/logo/20" {
+		t.Fatalf("persisted teams = %#v", teams)
+	}
+}

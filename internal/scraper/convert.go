@@ -1,7 +1,6 @@
 package scraper
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -17,7 +16,7 @@ func ToTeam(source TeamApi) events.Team {
 		PrimaryColor:   source.Colors.Primary,
 		SecondaryColor: source.Colors.Secondary,
 		TextColor:      source.Colors.Text,
-		LogoUrl:        "https://img.sofascore.com/api/v1/team/" + fmt.Sprint(source.ID) + "/image",
+		LogoUrl:        events.TeamLogoSourceURL(source.ID),
 	}
 }
 

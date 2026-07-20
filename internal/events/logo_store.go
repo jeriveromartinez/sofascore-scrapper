@@ -103,11 +103,23 @@ func TeamLogoAPIPath(teamID int64) string {
 	return fmt.Sprintf("/teams/logo/%d", teamID)
 }
 
+func TeamLogoSourceURL(teamID int64) string {
+	return fmt.Sprintf("https://img.sofascore.com/api/v1/team/%d/image", teamID)
+}
+
 func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
-	return downloadTeamLogo(teamID, sourceURL, newImageHTTPClient())
+	return DownloadTeamLogoWithContext(context.Background(), teamID, sourceURL)
+}
+
+func DownloadTeamLogoWithContext(ctx context.Context, teamID int64, sourceURL string) (string, error) {
+	return downloadTeamLogoWithContext(ctx, teamID, sourceURL, newImageHTTPClient())
 }
 
 func downloadTeamLogo(teamID int64, sourceURL string, client *http.Client) (string, error) {
+	return downloadTeamLogoWithContext(context.Background(), teamID, sourceURL, client)
+}
+
+func downloadTeamLogoWithContext(ctx context.Context, teamID int64, sourceURL string, client *http.Client) (string, error) {
 	defer client.CloseIdleConnections()
 
 	localPath := TeamLogoLocalPath(teamID)
@@ -121,7 +133,7 @@ func downloadTeamLogo(teamID int64, sourceURL string, client *http.Client) (stri
 		return "", fmt.Errorf("could not create image storage directory: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, sourceURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("could not create image request: %w", err)
 	}

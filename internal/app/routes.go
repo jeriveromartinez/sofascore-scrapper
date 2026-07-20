@@ -21,7 +21,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService) *gin.Engine {
+func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService, logoScheduler events.TeamLogoScheduler) *gin.Engine {
 	if cfg.ScrapeBatchSize <= 0 {
 		cfg.ScrapeBatchSize = 500
 	}
@@ -105,7 +105,7 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	statsHandler := reporting.NewStatsHandler(reportingRepo)
 	statsHandler.RegisterRoutes(webV1, reporting.StatsHandlerDeps{AuthMiddleware: adminThenRl})
 
-	eventsRepo := events.NewRepository(db)
+	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
 	eventsCache := events.NewCurrentEventsCache(redisClient)
 	eventsEpoch := events.NewEpochStore(redisClient)
 	eventsService := events.NewService(eventsRepo, eventsCache, eventsEpoch)
@@ -155,12 +155,12 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logger *slog.Logger) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger) (*scraper.Service, *reporting.AggregationRepository) {
 	client, err := scraper.NewClient(scraper.ClientConfig{})
 	if err != nil {
 		panic("scraper: failed to create client: " + err.Error())
 	}
-	eventsRepo := events.NewRepository(db)
+	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
 	scrapeSvc, err := scraper.NewService(eventsRepo, client, batchSize, concurrency, logger)
 	if err != nil {
 		panic("scraper: failed to create service: " + err.Error())

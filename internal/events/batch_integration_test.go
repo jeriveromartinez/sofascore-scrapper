@@ -5,6 +5,9 @@ package events
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -233,37 +236,83 @@ func TestUpsertScrapeBatch_RollbackOnFailure(t *testing.T) {
 	}
 }
 
-func TestUpsertScrapeBatch_LogoURLNotUpdated(t *testing.T) {
+func TestUpsertScrapeBatch_PersistsLocalLogoURLAndSchedulesRemoteSource(t *testing.T) {
 	db := setupBatchTestDB(t)
 	repo := NewRepository(db)
 
-	proxiedURL := "/teams/logo/10"
+	const remoteURL = "https://img.sofascore.com/api/v1/team/10/image"
+	if err := db.Create(&Team{TeamId: 10, Name: "Old", LogoUrl: remoteURL}).Error; err != nil {
+		t.Fatalf("seed team: %v", err)
+	}
+
+	type scheduledLogo struct {
+		teamID    int64
+		sourceURL string
+	}
+	var scheduled []scheduledLogo
+	repo.scheduleLogo = func(_ *gorm.DB, teamID int64, sourceURL string) {
+		scheduled = append(scheduled, scheduledLogo{teamID: teamID, sourceURL: sourceURL})
+	}
+
 	batch := ScrapeBatch{
-		Teams:       []Team{{TeamId: 10, Name: "Team", LogoUrl: "https://img.sofascore.com/api/v1/team/10/image"}},
+		Teams:       []Team{{TeamId: 10, Name: "Updated", LogoUrl: remoteURL}},
 		Tournaments: []tournaments.Tournament{testTournament(1)},
 		Events:      []Event{testEvent(1, 10, 10)},
 	}
-
 	if err := repo.UpsertScrapeBatch(context.Background(), batch, 500); err != nil {
-		t.Fatalf("first UpsertScrapeBatch: %v", err)
-	}
-
-	db.Model(&Team{}).Where("team_id = ?", 10).Update("logo_url", proxiedURL)
-
-	batch2 := ScrapeBatch{
-		Teams:       []Team{{TeamId: 10, Name: "Team Updated", LogoUrl: "https://img.sofascore.com/api/v1/team/10/image", PrimaryColor: "#111"}},
-		Tournaments: []tournaments.Tournament{testTournament(1)},
-		Events:      []Event{{SofaScoreEventId: 1, Sport: "football", HomeTeamId: 10, AwayTeamId: 10, ScrapedAt: 2000, Slug: "x", LeagueId: 1, StatusType: "finished"}},
-	}
-
-	if err := repo.UpsertScrapeBatch(context.Background(), batch2, 500); err != nil {
-		t.Fatalf("second UpsertScrapeBatch: %v", err)
+		t.Fatalf("UpsertScrapeBatch: %v", err)
 	}
 
 	var team Team
-	db.Where("team_id = ?", 10).First(&team)
-	if team.LogoUrl != proxiedURL {
-		t.Errorf("logo_url should not be overwritten by OnConflict upsert: expected %s, got %s", proxiedURL, team.LogoUrl)
+	if err := db.Where("team_id = ?", 10).First(&team).Error; err != nil {
+		t.Fatalf("load team: %v", err)
+	}
+	if team.LogoUrl != "/teams/logo/10" {
+		t.Fatalf("logo URL = %q, want local path", team.LogoUrl)
+	}
+	if len(scheduled) != 1 || scheduled[0].teamID != 10 || scheduled[0].sourceURL != remoteURL {
+		t.Fatalf("scheduled = %#v, want team 10 from %q", scheduled, remoteURL)
+	}
+}
+
+func TestReconcileTeamLogosNormalizesRowsAndSchedulesMissingFiles(t *testing.T) {
+	db := setupBatchTestDB(t)
+	storage := t.TempDir()
+	t.Setenv("IMAGE_STORAGE_PATH", storage)
+
+	remote := Team{TeamId: 10, Name: "Remote", LogoUrl: TeamLogoSourceURL(10)}
+	cached := Team{TeamId: 20, Name: "Cached", LogoUrl: TeamLogoSourceURL(20)}
+	if err := db.Create(&[]Team{remote, cached}).Error; err != nil {
+		t.Fatalf("seed teams: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(TeamLogoLocalPath(20)), 0o755); err != nil {
+		t.Fatalf("create logo dir: %v", err)
+	}
+	if err := os.WriteFile(TeamLogoLocalPath(20), []byte("cached"), 0o644); err != nil {
+		t.Fatalf("write cached logo: %v", err)
+	}
+
+	repo := NewRepository(db)
+	var scheduled []int64
+	repo.scheduleLogo = func(_ *gorm.DB, teamID int64, sourceURL string) {
+		scheduled = append(scheduled, teamID)
+		if sourceURL != TeamLogoSourceURL(teamID) {
+			t.Errorf("source URL = %q for team %d", sourceURL, teamID)
+		}
+	}
+	if err := repo.ReconcileTeamLogos(context.Background()); err != nil {
+		t.Fatalf("ReconcileTeamLogos: %v", err)
+	}
+
+	var teams []Team
+	if err := db.Order("team_id").Find(&teams).Error; err != nil {
+		t.Fatalf("load teams: %v", err)
+	}
+	if teams[0].LogoUrl != "/teams/logo/10" || teams[1].LogoUrl != "/teams/logo/20" {
+		t.Fatalf("reconciled teams = %#v", teams)
+	}
+	if !reflect.DeepEqual(scheduled, []int64{10}) {
+		t.Fatalf("scheduled = %v, want [10]", scheduled)
 	}
 }
 
