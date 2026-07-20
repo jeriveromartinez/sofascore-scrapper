@@ -108,6 +108,29 @@ docker compose -f deployments/docker/compose.multi.yml exec mariadb \
 
 ---
 
+## Automatic Recovery: Dirty Migration 5
+
+Migration 5 can be left dirty when production's `package_name` column is wider
+than the baseline and `idx_apk_latest` exceeds InnoDB's key limit. The corrected
+binary automatically repairs only `version=5, dirty=true` when all of these
+preconditions hold:
+
+1. `version_major`, `version_minor`, and `version_patch` all exist as `BIGINT UNSIGNED NOT NULL DEFAULT 0`.
+2. Every `version` is `MAJOR.MINOR.PATCH` with decimal digits only, and every component is at most 20 digits and no greater than `18446744073709551615`.
+3. `package_name` is an indexable character column with a positive declared length.
+4. `idx_apk_latest` is absent, or it is a visible, ascending, non-unique `BTREE` over `package_name`, `is_active`, `version_major`, `version_minor`, `version_patch`, and `id` in that order. Its effective `package_name` prefix must be `min(package_name declared length, 191)`; a full-column first key is compatible only when the declared length is at most 191.
+
+When these checks pass, recovery recalculates semver values, creates the missing
+prefix index without changing `package_name`, marks version 5 clean, and
+continues later migrations. Recovery never drops or rewrites an incompatible
+existing index or column definition.
+
+No direct database command is required for this known state. Deploy the
+corrected binary and verify `/health/ready`. Any other dirty version or an
+unexpected partial schema still fails closed and requires database inspection.
+
+---
+
 ## Rollback Procedure (Non-Destructive Migrations)
 
 For non-destructive migrations (001, 002, 005, 006, 007), rollback follows the standard `golang-migrate` approach:
