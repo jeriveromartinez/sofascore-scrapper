@@ -1,21 +1,43 @@
 package events
 
-import "sync"
+import (
+	"context"
+	"sync"
+
+	"gorm.io/gorm"
+)
 
 const logoWorkerCount = 10
 
-type logoScheduler struct {
-	mu       sync.Mutex
-	ready    *sync.Cond
-	pending  map[int64]func()
-	queue    []int64
-	head     int
-	stopping bool
-	workers  sync.WaitGroup
+type TeamLogoScheduler interface {
+	Schedule(*gorm.DB, int64, string)
+	Stop()
+	Shutdown(context.Context)
 }
 
-func newLogoScheduler(workerCount int) *logoScheduler {
-	scheduler := &logoScheduler{pending: make(map[int64]func())}
+type LogoScheduler struct {
+	mu         sync.Mutex
+	ready      *sync.Cond
+	pending    map[int64]func(context.Context)
+	queue      []int64
+	head       int
+	stopping   bool
+	workCtx    context.Context
+	cancelWork context.CancelFunc
+	workers    sync.WaitGroup
+}
+
+func NewLogoScheduler() *LogoScheduler {
+	return newLogoScheduler(logoWorkerCount)
+}
+
+func newLogoScheduler(workerCount int) *LogoScheduler {
+	workCtx, cancelWork := context.WithCancel(context.Background())
+	scheduler := &LogoScheduler{
+		pending:    make(map[int64]func(context.Context)),
+		workCtx:    workCtx,
+		cancelWork: cancelWork,
+	}
 	scheduler.ready = sync.NewCond(&scheduler.mu)
 	scheduler.workers.Add(workerCount)
 	for range workerCount {
@@ -24,23 +46,30 @@ func newLogoScheduler(workerCount int) *logoScheduler {
 	return scheduler
 }
 
-func (s *logoScheduler) enqueue(teamID int64, work func()) {
+func (s *LogoScheduler) enqueue(teamID int64, work func(context.Context)) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.stopping {
-		return
+		return false
 	}
 	if _, exists := s.pending[teamID]; exists {
-		return
+		return true
 	}
 
 	s.pending[teamID] = work
 	s.queue = append(s.queue, teamID)
 	s.ready.Signal()
+	return true
 }
 
-func (s *logoScheduler) run() {
+func (s *LogoScheduler) Schedule(db *gorm.DB, teamID int64, sourceURL string) {
+	s.enqueue(teamID, func(ctx context.Context) {
+		downloadAndUpdateTeamLogo(ctx, db.Session(&gorm.Session{}), teamID, sourceURL)
+	})
+}
+
+func (s *LogoScheduler) run() {
 	defer s.workers.Done()
 	for {
 		s.mu.Lock()
@@ -62,7 +91,7 @@ func (s *logoScheduler) run() {
 		}
 		s.mu.Unlock()
 
-		work()
+		work(s.workCtx)
 
 		s.mu.Lock()
 		delete(s.pending, teamID)
@@ -70,10 +99,36 @@ func (s *logoScheduler) run() {
 	}
 }
 
-func (s *logoScheduler) shutdown() {
+func (s *LogoScheduler) Stop() {
 	s.mu.Lock()
+	if s.stopping {
+		s.mu.Unlock()
+		return
+	}
 	s.stopping = true
+	for _, teamID := range s.queue[s.head:] {
+		delete(s.pending, teamID)
+	}
+	s.queue = nil
+	s.head = 0
 	s.ready.Broadcast()
 	s.mu.Unlock()
-	s.workers.Wait()
+}
+
+func (s *LogoScheduler) Shutdown(ctx context.Context) {
+	s.Stop()
+
+	done := make(chan struct{})
+	go func() {
+		s.workers.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.cancelWork()
+	case <-ctx.Done():
+		s.cancelWork()
+		<-done
+	}
 }

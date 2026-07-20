@@ -24,17 +24,18 @@ import (
 )
 
 type App struct {
-	HTTP        *http.Server
-	Pprof       *http.Server
-	Scheduler   *scheduler.Scheduler
-	DB          *gorm.DB
-	SQL         *sql.DB
-	Redis       *goredis.Client
-	ready       atomic.Bool
-	batchSize   int
-	concur      int
-	storagePath string
-	logger      *slog.Logger
+	HTTP          *http.Server
+	Pprof         *http.Server
+	Scheduler     *scheduler.Scheduler
+	DB            *gorm.DB
+	SQL           *sql.DB
+	Redis         *goredis.Client
+	logoScheduler events.TeamLogoScheduler
+	ready         atomic.Bool
+	batchSize     int
+	concur        int
+	storagePath   string
+	logger        *slog.Logger
 }
 
 func (a *App) IsReady() bool {
@@ -72,23 +73,25 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	sched := scheduler.New(slog.Default())
+	logoScheduler := events.NewLogoScheduler()
 
 	pprofSrv := observability.NewPprofServer(cfg.PprofAddr)
 
 	app := &App{
-		Scheduler:   sched,
-		DB:          db,
-		SQL:         sqlDB,
-		Redis:       redisClient,
-		Pprof:       pprofSrv,
-		batchSize:   cfg.ScrapeBatchSize,
-		concur:      cfg.ScrapeConcurrency,
-		storagePath: cfg.APKStoragePath,
-		logger:      logger,
+		Scheduler:     sched,
+		DB:            db,
+		SQL:           sqlDB,
+		Redis:         redisClient,
+		logoScheduler: logoScheduler,
+		Pprof:         pprofSrv,
+		batchSize:     cfg.ScrapeBatchSize,
+		concur:        cfg.ScrapeConcurrency,
+		storagePath:   cfg.APKStoragePath,
+		logger:        logger,
 	}
 	app.ready.Store(true)
 
-	router := NewRouter(db, redisClient, cfg, tokens)
+	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler)
 	router.Use(server.ReadinessMiddleware(&app.ready))
 
 	app.HTTP = &http.Server{
@@ -106,12 +109,12 @@ func New(cfg config.Config) (*App, error) {
 
 func (a *App) Run(ctx context.Context) error {
 	if a.DB != nil {
-		if err := events.NewRepository(a.DB).ReconcileTeamLogos(ctx); err != nil {
+		if err := events.NewRepositoryWithLogoScheduler(a.DB, a.logoScheduler).ReconcileTeamLogos(ctx); err != nil {
 			return err
 		}
 	}
 
-	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis), a.logger)
+	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis), a.logoScheduler, a.logger)
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))

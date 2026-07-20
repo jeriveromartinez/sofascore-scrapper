@@ -14,6 +14,9 @@ func (a *App) shutdown() error {
 	a.logger.Info("shutting down application")
 
 	a.ready.Store(false)
+	if a.logoScheduler != nil {
+		a.logoScheduler.Stop()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -31,6 +34,9 @@ func (a *App) shutdown() error {
 	}
 
 	a.Scheduler.Shutdown()
+	if a.logoScheduler != nil {
+		a.logoScheduler.Shutdown(shutdownCtx)
+	}
 
 	if a.Redis != nil {
 		if err := a.Redis.Close(); err != nil {

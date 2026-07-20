@@ -14,15 +14,24 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-var teamLogoScheduler = newLogoScheduler(logoWorkerCount)
-
 type Repository struct {
 	db           *gorm.DB
 	scheduleLogo func(*gorm.DB, int64, string)
 }
 
 func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db, scheduleLogo: scheduleLogoDownload}
+	return &Repository{
+		db:           db,
+		scheduleLogo: func(*gorm.DB, int64, string) {},
+	}
+}
+
+func NewRepositoryWithLogoScheduler(db *gorm.DB, scheduler TeamLogoScheduler) *Repository {
+	repository := NewRepository(db)
+	if scheduler != nil {
+		repository.scheduleLogo = scheduler.Schedule
+	}
+	return repository
 }
 
 func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
@@ -198,20 +207,17 @@ func isProxiedLogoURL(url string) bool {
 	return strings.HasPrefix(url, "/teams/logo/") || strings.HasPrefix(url, "/api/app/v1/teams/logo/")
 }
 
-func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
-	teamLogoScheduler.enqueue(teamID, func() {
-		downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
-	})
-}
-
-func downloadAndUpdateTeamLogo(db *gorm.DB, teamID int64, sourceURL string) {
-	if _, err := DownloadTeamLogo(teamID, sourceURL); err != nil {
+func downloadAndUpdateTeamLogo(ctx context.Context, db *gorm.DB, teamID int64, sourceURL string) {
+	if _, err := DownloadTeamLogoWithContext(ctx, teamID, sourceURL); err != nil {
 		log.Printf("events: failed to download logo for team %d: %v", teamID, err)
+		return
+	}
+	if ctx.Err() != nil {
 		return
 	}
 
 	apiPath := TeamLogoAPIPath(teamID)
-	if err := db.Model(&Team{}).Where("team_id = ?", teamID).Update("logo_url", apiPath).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&Team{}).Where("team_id = ?", teamID).Update("logo_url", apiPath).Error; err != nil {
 		log.Printf("events: failed to update logo URL for team %d: %v", teamID, err)
 	}
 }

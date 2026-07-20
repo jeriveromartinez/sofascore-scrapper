@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -10,13 +11,13 @@ import (
 
 func TestLogoSchedulerProcessesWorkBeyondWorkerCount(t *testing.T) {
 	scheduler := newLogoScheduler(logoWorkerCount)
-	t.Cleanup(scheduler.shutdown)
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	const total = logoWorkerCount + 5
 	completed := make(chan int64, total)
 	for teamID := int64(1); teamID <= total; teamID++ {
 		id := teamID
-		scheduler.enqueue(id, func() { completed <- id })
+		scheduler.enqueue(id, func(context.Context) { completed <- id })
 	}
 
 	seen := make(map[int64]bool, total)
@@ -39,7 +40,7 @@ func TestLogoSchedulerLimitsActiveWork(t *testing.T) {
 	var releaseOnce sync.Once
 	t.Cleanup(func() {
 		releaseOnce.Do(func() { close(release) })
-		scheduler.shutdown()
+		scheduler.Shutdown(context.Background())
 	})
 
 	const total = logoWorkerCount * 2
@@ -48,7 +49,7 @@ func TestLogoSchedulerLimitsActiveWork(t *testing.T) {
 	var active atomic.Int64
 	var maximum atomic.Int64
 	for teamID := int64(1); teamID <= total; teamID++ {
-		scheduler.enqueue(teamID, func() {
+		scheduler.enqueue(teamID, func(context.Context) {
 			current := active.Add(1)
 			for observed := maximum.Load(); current > observed && !maximum.CompareAndSwap(observed, current); observed = maximum.Load() {
 			}
@@ -91,12 +92,12 @@ func TestLogoSchedulerCoalescesDuplicateTeamIDs(t *testing.T) {
 	var releaseOnce sync.Once
 	t.Cleanup(func() {
 		releaseOnce.Do(func() { close(release) })
-		scheduler.shutdown()
+		scheduler.Shutdown(context.Background())
 	})
 
 	started := make(chan struct{})
 	var executions atomic.Int64
-	scheduler.enqueue(1, func() {
+	scheduler.enqueue(1, func(context.Context) {
 		executions.Add(1)
 		close(started)
 		<-release
@@ -108,10 +109,10 @@ func TestLogoSchedulerCoalescesDuplicateTeamIDs(t *testing.T) {
 	}
 
 	for range 100 {
-		scheduler.enqueue(1, func() { executions.Add(1) })
+		scheduler.enqueue(1, func(context.Context) { executions.Add(1) })
 	}
 	releaseOnce.Do(func() { close(release) })
-	scheduler.shutdown()
+	scheduler.Shutdown(context.Background())
 
 	if got := executions.Load(); got != 1 {
 		t.Fatalf("duplicate team executed %d times, want 1", got)
@@ -124,12 +125,12 @@ func TestLogoSchedulerQueuedWorkDoesNotCreateGoroutines(t *testing.T) {
 	var releaseOnce sync.Once
 	t.Cleanup(func() {
 		releaseOnce.Do(func() { close(release) })
-		scheduler.shutdown()
+		scheduler.Shutdown(context.Background())
 	})
 
 	started := make(chan struct{}, logoWorkerCount)
 	for teamID := int64(1); teamID <= logoWorkerCount; teamID++ {
-		scheduler.enqueue(teamID, func() {
+		scheduler.enqueue(teamID, func(context.Context) {
 			started <- struct{}{}
 			<-release
 		})
@@ -144,7 +145,7 @@ func TestLogoSchedulerQueuedWorkDoesNotCreateGoroutines(t *testing.T) {
 
 	before := runtime.NumGoroutine()
 	for teamID := int64(logoWorkerCount + 1); teamID <= 1000; teamID++ {
-		scheduler.enqueue(teamID, func() { <-release })
+		scheduler.enqueue(teamID, func(context.Context) { <-release })
 	}
 	runtime.Gosched()
 	after := runtime.NumGoroutine()
@@ -153,4 +154,78 @@ func TestLogoSchedulerQueuedWorkDoesNotCreateGoroutines(t *testing.T) {
 	}
 
 	releaseOnce.Do(func() { close(release) })
+}
+
+func TestLogoSchedulerShutdownFinishesActiveAndDiscardsQueuedWork(t *testing.T) {
+	scheduler := NewLogoScheduler()
+	release := make(chan struct{})
+	started := make(chan struct{}, logoWorkerCount)
+	completed := make(chan struct{}, logoWorkerCount)
+	for teamID := int64(1); teamID <= logoWorkerCount; teamID++ {
+		if !scheduler.enqueue(teamID, func(context.Context) {
+			started <- struct{}{}
+			<-release
+			completed <- struct{}{}
+		}) {
+			t.Fatalf("active team %d was rejected", teamID)
+		}
+	}
+	for range logoWorkerCount {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("workers did not start")
+		}
+	}
+
+	var queuedRan atomic.Bool
+	if !scheduler.enqueue(logoWorkerCount+1, func(context.Context) { queuedRan.Store(true) }) {
+		t.Fatal("queued work was rejected before shutdown")
+	}
+
+	scheduler.Stop()
+	if scheduler.enqueue(logoWorkerCount+2, func(context.Context) {}) {
+		t.Fatal("work was accepted after shutdown began")
+	}
+	close(release)
+	scheduler.Shutdown(context.Background())
+
+	for range logoWorkerCount {
+		select {
+		case <-completed:
+		default:
+			t.Fatal("active work did not finish")
+		}
+	}
+	if queuedRan.Load() {
+		t.Fatal("queued work ran after shutdown began")
+	}
+}
+
+func TestLogoSchedulerShutdownCancelsActiveWorkAtDeadline(t *testing.T) {
+	scheduler := NewLogoScheduler()
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	if !scheduler.enqueue(1, func(ctx context.Context) {
+		close(started)
+		<-ctx.Done()
+		close(canceled)
+	}) {
+		t.Fatal("active work was rejected")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("work did not start")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	scheduler.Shutdown(ctx)
+
+	select {
+	case <-canceled:
+	default:
+		t.Fatal("shutdown returned before canceled work exited")
+	}
 }
