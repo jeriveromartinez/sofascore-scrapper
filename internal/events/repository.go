@@ -2,21 +2,16 @@ package events
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
-	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-var (
-	downloadSem = make(chan struct{}, 10)
-	logoSF      singleflight.Group
-)
+var teamLogoScheduler = newLogoScheduler(logoWorkerCount)
 
 type Repository struct {
 	db           *gorm.DB
@@ -24,7 +19,7 @@ type Repository struct {
 }
 
 func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db, scheduleLogo: scheduleLogoSingleflight}
+	return &Repository{db: db, scheduleLogo: scheduleLogoDownload}
 }
 
 type pendingLogo struct {
@@ -168,18 +163,8 @@ func isProxiedLogoURL(url string) bool {
 	return strings.HasPrefix(url, "/teams/logo/") || strings.HasPrefix(url, "/api/app/v1/teams/logo/")
 }
 
-func enqueueTeamLogo(group *singleflight.Group, semaphore chan struct{}, teamID int64, work func()) {
-	key := fmt.Sprintf("logo-%d", teamID)
-	group.DoChan(key, func() (interface{}, error) {
-		semaphore <- struct{}{}
-		defer func() { <-semaphore }()
-		work()
-		return nil, nil
-	})
-}
-
-func scheduleLogoSingleflight(db *gorm.DB, teamID int64, sourceURL string) {
-	enqueueTeamLogo(&logoSF, downloadSem, teamID, func() {
+func scheduleLogoDownload(db *gorm.DB, teamID int64, sourceURL string) {
+	teamLogoScheduler.enqueue(teamID, func() {
 		downloadAndUpdateTeamLogo(db.Session(&gorm.Session{}), teamID, sourceURL)
 	})
 }
