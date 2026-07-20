@@ -1,7 +1,6 @@
 package events
 
 import (
-	"strings"
 	"time"
 
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
@@ -15,8 +14,8 @@ func TeamToProto(t *Team) *pb.Team {
 	return &pb.Team{
 		Id:             uint32(t.ID),
 		TeamId:         t.TeamId,
-		LogoUrl:        t.LogoUrl,
 		Name:           t.Name,
+		LogoUrl:        "/api/app/v1" + TeamLogoAPIPath(t.TeamId),
 		PrimaryColor:   t.PrimaryColor,
 		SecondaryColor: t.SecondaryColor,
 		TextColor:      t.TextColor,
@@ -25,13 +24,7 @@ func TeamToProto(t *Team) *pb.Team {
 
 func EventToProto(e Event) *pb.SofaScoreEvent {
 	homeTeam := TeamToProto(e.HomeTeamModel)
-	if homeTeam != nil {
-		homeTeam.LogoUrl = logoURLForAPI(homeTeam.LogoUrl)
-	}
 	awayTeam := TeamToProto(e.AwayTeamModel)
-	if awayTeam != nil {
-		awayTeam.LogoUrl = logoURLForAPI(awayTeam.LogoUrl)
-	}
 
 	return &pb.SofaScoreEvent{
 		Id:                          uint32(e.ID),
@@ -52,14 +45,6 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 		TeamAway:                    awayTeam,
 		League:                      tournaments.TournamentPtrToProto(e.League),
 	}
-}
-
-func logoURLForAPI(rawURL string) string {
-	const apiPrefix = "/api/app/v1"
-	if strings.HasPrefix(rawURL, "/") && rawURL != apiPrefix && !strings.HasPrefix(rawURL, apiPrefix+"/") {
-		return apiPrefix + rawURL
-	}
-	return rawURL
 }
 
 func EventsToProto(events []Event) []*pb.SofaScoreEvent {

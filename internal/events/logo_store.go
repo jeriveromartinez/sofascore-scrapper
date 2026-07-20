@@ -103,6 +103,10 @@ func TeamLogoAPIPath(teamID int64) string {
 	return fmt.Sprintf("/teams/logo/%d", teamID)
 }
 
+func TeamLogoSourceURL(teamID int64) string {
+	return fmt.Sprintf("https://img.sofascore.com/api/v1/team/%d/image", teamID)
+}
+
 func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
 	return downloadTeamLogo(teamID, sourceURL, newImageHTTPClient())
 }

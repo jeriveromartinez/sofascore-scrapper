@@ -19,11 +19,39 @@ var (
 )
 
 type Repository struct {
-	db *gorm.DB
+	db           *gorm.DB
+	scheduleLogo func(*gorm.DB, int64, string)
 }
 
 func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db}
+	return &Repository{db: db, scheduleLogo: scheduleLogoSingleflight}
+}
+
+type pendingLogo struct {
+	teamID    int64
+	sourceURL string
+}
+
+func prepareTeamLogo(team *Team) pendingLogo {
+	pending := pendingLogo{teamID: team.TeamId, sourceURL: team.LogoUrl}
+	team.LogoUrl = TeamLogoAPIPath(team.TeamId)
+	return pending
+}
+
+func (r *Repository) upsertTeam(ctx context.Context, team *Team) error {
+	pending := prepareTeamLogo(team)
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "team_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"name", "logo_url", "primary_color", "secondary_color", "text_color",
+		}),
+	}).Create(team).Error; err != nil {
+		return err
+	}
+	if pending.sourceURL != "" && !isProxiedLogoURL(pending.sourceURL) {
+		r.scheduleLogo(r.db, pending.teamID, pending.sourceURL)
+	}
+	return nil
 }
 
 func (r *Repository) Upsert(ctx context.Context, events []Event, sport string) error {
@@ -34,16 +62,14 @@ func (r *Repository) Upsert(ctx context.Context, events []Event, sport string) e
 		event.Sport = sport
 
 		if event.HomeTeamModel != nil {
-			r.db.WithContext(nil).FirstOrCreate(event.HomeTeamModel, Team{TeamId: event.HomeTeamModel.TeamId})
-			if !isProxiedLogoURL(event.HomeTeamModel.LogoUrl) {
-				scheduleLogoDownload(r.db, event.HomeTeamModel.TeamId, event.HomeTeamModel.LogoUrl)
+			if err := r.upsertTeam(ctx, event.HomeTeamModel); err != nil {
+				return err
 			}
 		}
 
 		if event.AwayTeamModel != nil {
-			r.db.WithContext(nil).FirstOrCreate(event.AwayTeamModel, Team{TeamId: event.AwayTeamModel.TeamId})
-			if !isProxiedLogoURL(event.AwayTeamModel.LogoUrl) {
-				scheduleLogoDownload(r.db, event.AwayTeamModel.TeamId, event.AwayTeamModel.LogoUrl)
+			if err := r.upsertTeam(ctx, event.AwayTeamModel); err != nil {
+				return err
 			}
 		}
 
@@ -72,6 +98,14 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 		batchSize = 500
 	}
 
+	pendingLogos := make([]pendingLogo, 0, len(batch.Teams))
+	for i := range batch.Teams {
+		pending := prepareTeamLogo(&batch.Teams[i])
+		if pending.sourceURL != "" && !isProxiedLogoURL(pending.sourceURL) {
+			pendingLogos = append(pendingLogos, pending)
+		}
+	}
+
 	now := time.Now().Unix()
 	for i := range batch.Events {
 		batch.Events[i].ScrapedAt = now
@@ -85,7 +119,7 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "team_id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"name", "primary_color", "secondary_color", "text_color",
+					"name", "logo_url", "primary_color", "secondary_color", "text_color",
 				}),
 			}).CreateInBatches(batch.Teams, batchSize).Error; err != nil {
 				return err
@@ -123,10 +157,8 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 		return err
 	}
 
-	for _, team := range batch.Teams {
-		if !isProxiedLogoURL(team.LogoUrl) {
-			scheduleLogoSingleflight(r.db, team.TeamId, team.LogoUrl)
-		}
+	for _, pending := range pendingLogos {
+		r.scheduleLogo(r.db, pending.teamID, pending.sourceURL)
 	}
 
 	return nil
