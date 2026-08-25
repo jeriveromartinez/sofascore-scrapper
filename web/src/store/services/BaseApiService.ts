@@ -22,6 +22,12 @@ function redirectToLogin(): void {
   });
 }
 
+export function headerString(headers: unknown, name: string): string {
+  if (!headers || typeof headers !== "object") return "";
+  const value = (headers as Record<string, unknown>)[name];
+  return typeof value === "string" ? value : "";
+}
+
 async function refreshAuth(): Promise<UserAuthModel | null> {
   if (refreshPromise) {
     return refreshPromise;
@@ -208,7 +214,7 @@ export abstract class BaseApiService {
       validateStatus: () => true,
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
@@ -232,7 +238,7 @@ export abstract class BaseApiService {
       transformRequest: [(data) => data],
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
@@ -253,7 +259,7 @@ export abstract class BaseApiService {
       validateStatus: () => true,
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
@@ -277,7 +283,7 @@ export abstract class BaseApiService {
       transformRequest: [(data) => data],
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
@@ -301,7 +307,7 @@ export abstract class BaseApiService {
       transformRequest: [(data) => data],
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
@@ -325,7 +331,7 @@ export abstract class BaseApiService {
       validateStatus: () => true,
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
@@ -374,7 +380,7 @@ export abstract class BaseApiService {
       validateStatus: () => true,
     });
 
-    const contentType = response.headers["content-type"] ?? "";
+    const contentType = headerString(response.headers, "content-type");
     if (
       contentType.includes(PROTO_CONTENT_TYPE) ||
       contentType.includes("application/json")
@@ -401,7 +407,7 @@ export abstract class BaseApiService {
       validateStatus: () => true,
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
@@ -425,7 +431,7 @@ export abstract class BaseApiService {
       validateStatus: () => true,
     });
 
-    this.assertSuccess(status, data, responseHeaders["content-type"] ?? "");
+    this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
 
     return this.decodeResponse<T>(data, decoder);
   }
