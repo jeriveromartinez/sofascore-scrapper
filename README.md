@@ -149,21 +149,24 @@ cd web && npm run test:unit
 cd web && npm run test:e2e
 cd web && npm run build
 
-# Generate protobuf (Go)
-PATH="$PATH:/D/.go/bin" protoc \
-  --proto_path="E:/Projects/IPTV/sofascore-scrapper" \
-  --go_out="E:/Projects/IPTV/sofascore-scrapper" \
-  --go_opt=module=github.com/jeriveromartinez/sofascore-scrapper \
-  "E:/Projects/IPTV/sofascore-scrapper/proto/api.proto"
+# Regenerate Go protobuf bindings (this repo is the source of truth for proto/api.proto)
+make proto
 
-# Generate protobuf (Vue/TypeScript)
-protoc \
-  --proto_path=E:/Projects/IPTV/sofascore-scrapper \
-  --plugin=protoc-gen-ts_proto=E:/Projects/IPTV/sofascore-scrapper/web/node_modules/.bin/protoc-gen-ts_proto.cmd \
-  --ts_proto_out=E:/Projects/IPTV/sofascore-scrapper/web/src \
-  --ts_proto_opt=esModuleInterop=true,outputClientImpl=false \
-  E:/Projects/IPTV/sofascore-scrapper/proto/api.proto
+# Verify generated bindings match proto/api.proto
+make proto-check
+
+# Verify flutter-apptv/proto/api.proto mirrors this repo's (cross-repo contract)
+make proto-verify-flutter
+
+# Generate protobuf (Vue/TypeScript) — see web/package.json scripts
+cd web && npm run proto
 ```
+
+> **Proto sync contract.** `proto/api.proto` in this repo is the single source of
+> truth. The Flutter client (`flutter-apptv/proto/api.proto`) and the Vue/TypeScript
+> web client (`web/src/...`) must mirror it. CI enforces the Go bindings via
+> `make proto-check`; the cross-repo check against Flutter is `make proto-verify-flutter`
+> (run it locally before opening a PR that touches `proto/api.proto`).
 
 ## API Endpoints
 

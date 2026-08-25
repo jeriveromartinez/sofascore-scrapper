@@ -36,20 +36,11 @@ jobs:
       - name: Install protoc-gen-go
         run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
-      - name: Regenerate proto
-        run: |
-          protoc \
-            --go_out=. \
-            --go_opt=module=github.com/jeriveromartinez/sofascore-scrapper \
-            proto/api.proto
+      - name: Install make
+        run: sudo apt-get update && sudo apt-get install -y make
 
-      - name: Check proto is up to date
-        run: |
-          if ! git diff --exit-code internal/gen/; then
-            echo "Generated protobuf code is out of date. Run 'protoc --go_out=...' and commit."
-            git diff internal/gen/
-            exit 1
-          fi
+      - name: Regenerate proto and verify
+        run: make proto-check
 
   gofmt:
     name: gofmt check
