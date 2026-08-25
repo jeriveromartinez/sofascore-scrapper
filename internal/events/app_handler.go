@@ -10,6 +10,11 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 )
 
+const (
+	currentEventsDefaultLimit = 6
+	currentEventsMaxLimit     = 6
+)
+
 type AppHandlerDeps struct {
 	AppMiddleware gin.HandlerFunc
 }
@@ -26,13 +31,24 @@ func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup, deps AppHandlerDeps)
 	group.GET("/current-events", deps.AppMiddleware, h.handleGetCurrentEvents)
 }
 
+func parseCurrentEventsLimit(raw string) (int, bool) {
+	if raw == "" {
+		return currentEventsDefaultLimit, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 || n > currentEventsMaxLimit {
+		return 0, false
+	}
+	return n, true
+}
+
 func (h *AppHandler) handleGetCurrentEvents(c *gin.Context) {
 	device := c.MustGet("device").(devices.Device)
-	limit := 6
-	if limitParam := c.Query("limit"); limitParam != "" {
-		if parsedLimit, err := strconv.Atoi(limitParam); err == nil && parsedLimit > 0 && parsedLimit <= 6 {
-			limit = parsedLimit
-		}
+
+	limit, ok := parseCurrentEventsLimit(c.Query("limit"))
+	if !ok {
+		server.RespondError(c, http.StatusBadRequest, "limit must be between 1 and 6")
+		return
 	}
 
 	events, err := h.svc.GetCurrentAndUpcoming(c.Request.Context(), device.ID, limit)
