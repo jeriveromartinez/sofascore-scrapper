@@ -209,6 +209,14 @@ Every other `/api/web/v1/*` route requires **Admin** — user, device, event, pl
 (including resumable uploads), tournament, domain, and global-config management, plus
 reporting (`GET /stats/top-events`). See `internal/app/routes.go` for the authoritative list.
 
+#### Query parameters worth knowing
+
+- `GET /api/web/v1/events?date=YYYY-MM-DD` — `date` is parsed as **midnight-to-midnight
+  UTC** (`time.Parse("2006-01-02", date)`). An operator outside UTC sees events for the
+  previous/next day at the boundary; convert to UTC before passing the value. Other
+  query parameters (`sport`, `page`, `limit`) are local to that endpoint; see the
+  handler for details.
+
 ## Authorization & Roles
 
 The management API uses JWT bearer authentication (`AuthMiddleware`) plus role-based access control:

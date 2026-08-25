@@ -122,7 +122,7 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 	if date != "" {
 		t, err := time.Parse("2006-01-02", date)
 		if err != nil {
-			server.RespondError(c, http.StatusBadRequest, "date must use YYYY-MM-DD format")
+			server.RespondError(c, http.StatusBadRequest, "date must use YYYY-MM-DD format (UTC)")
 			return
 		}
 		start := t.UnixMilli()

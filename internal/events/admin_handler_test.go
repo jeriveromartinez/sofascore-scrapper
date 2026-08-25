@@ -1,8 +1,10 @@
 package events
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,5 +92,23 @@ func TestAdminEventsRejectsInvalidDate(t *testing.T) {
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
+	}
+}
+
+func TestAdminEventsInvalidDateMentionsUTC(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+
+	recorder, _ := getAdminEvents(t, NewAdminHandler(db), "/events?date=not-a-date")
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
+	}
+
+	body := map[string]string{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if !strings.Contains(body["error"], "UTC") {
+		t.Errorf("error message should mention UTC so callers know the day boundary is interpreted in UTC; got %q", body["error"])
 	}
 }
