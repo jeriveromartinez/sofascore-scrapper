@@ -18,10 +18,11 @@ export default defineConfig({
     {
       name: "api",
       testMatch: "**/*.spec.ts",
+      testIgnore: /-ui\.spec\.ts$/,
     },
     {
       name: "ui",
-      testMatch: "web/e2e/pagination-ui.spec.ts",
+      testMatch: /-ui\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"] },
     },
   ],
