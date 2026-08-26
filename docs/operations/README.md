@@ -1,0 +1,149 @@
+# Operations & Deployment
+
+This document is the entry point for **operators, sysadmins, and SREs**
+who install, upgrade, monitor, troubleshoot, and recover the
+sofascore-scrapper platform.
+
+For product-level information, see
+[`docs/sales/README.md`](../sales/README.md). For building, testing and
+contributing, see [`docs/development/README.md`](../development/README.md).
+
+## Quick links by task
+
+| You need to… | Go to |
+|---|---|
+| Install or upgrade on Ubuntu | [`deb-package.md`](deb-package.md) |
+| Run the platform day-to-day (alerts, cache, recovery) | [`runbook.md`](runbook.md) |
+| Roll back a deployment or migration | [`rollback.md`](rollback.md) |
+| Run a load test | [`../performance/load-test.md`](../performance/load-test.md) |
+| Understand migrations and destructive-migration policy | [`rollback.md`](rollback.md#migration-policy) |
+| Configure environment variables | [Environment variables](#environment-variables) below |
+| Run the native production deploy script | [`runbook.md` § Native Production Deployment](runbook.md#native-production-deployment) |
+
+## Choose a deployment path
+
+| Path | Use when | Doc |
+|---|---|---|
+| **Ubuntu `.deb` package** | Production on Ubuntu 22.04/24.04 (recommended) | [`deb-package.md`](deb-package.md) |
+| **Docker Compose (dev)** | Local development on any OS | [`../development/README.md` § Local development setup](../development/README.md#local-development-setup) |
+| **Docker Compose (test)** | CI / automated integration tests | [`../development/README.md` § Integration tests](../development/README.md#integration-tests) |
+| **Docker Compose (multi)** | Staging / load test (3 instances behind nginx) | [`runbook.md` § Environment Matrix](runbook.md#environment-matrix) |
+| **Native systemd service** | Production on the dedicated runner (`iptv`) — automated via GitHub Actions `deploy.yml` | [`runbook.md` § Native Production Deployment](runbook.md#native-production-deployment) |
+
+## Lifecycle (the order operators actually follow)
+
+```
+ install ──▶ operate ──▶ upgrade ──▶ (rollback if needed) ──▶ uninstall
+   │           │             │                │                    │
+   ▼           ▼             ▼                ▼                    ▼
+ deb-       runbook.md    deb-package.md    rollback.md         deb-package.md
+ package.md                                   § Scenarios          § Uninstall
+```
+
+1. **Install** with [`deb-package.md`](deb-package.md). The postinst script
+   creates the `iptv` system user, generates `/etc/iptv/env` with random
+   DB credentials, creates the `iptv` database and user in MariaDB, and
+   starts `iptv.service`.
+2. **Bootstrap the first admin** with `bootstrap-invitation` (see
+   [`deb-package.md` § First login](deb-package.md#first-login-bootstrap)).
+3. **Operate** using [`runbook.md`](runbook.md): health checks, alerts,
+   Redis outage behavior, cache invalidation, counter recovery.
+4. **Upgrade** by installing the new `.deb`; the postinst preserves
+   `/etc/iptv/env` and stored data; the service restarts automatically.
+5. **Rollback** only when needed; follow [`rollback.md`](rollback.md).
+6. **Uninstall** with `sudo apt remove iptv` (keeps `/etc/iptv/env` and
+   data) or `sudo apt purge iptv` (also removes config and storage).
+
+## Environment variables
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `DB_HOST` | `localhost` | Yes | MariaDB hostname |
+| `DB_PORT` | `3306` | No | MariaDB port |
+| `DB_USER` | `root` | No | MariaDB user |
+| `DB_PASSWORD` | *(empty)* | Yes (prod) | MariaDB password |
+| `DB_NAME` | `sofascore` | No | Database name |
+| `DB_MAX_OPEN_CONNS` | `25` | No | Max open DB connections |
+| `DB_MAX_IDLE_CONNS` | `10` | No | Max idle DB connections |
+| `DB_CONN_MAX_LIFETIME` | `30m` | No | Max connection lifetime |
+| `DB_CONN_MAX_IDLE_TIME` | `5m` | No | Max connection idle time |
+| `REDIS_URL` | `redis://localhost:6379/0` | No | Redis connection URL |
+| `REDIS_KEY_PREFIX` | *(empty)* | No | Redis key prefix (use when sharing an instance) |
+| `REDIS_DIAL_TIMEOUT` | `5s` | No | Redis dial timeout |
+| `REDIS_READ_TIMEOUT` | `3s` | No | Redis read timeout |
+| `REDIS_WRITE_TIMEOUT` | `3s` | No | Redis write timeout |
+| `JWT_SECRET` | *(none)* | **Yes** | JWT signing secret (≥ 32 chars) |
+| `API_ADDR` | `:8080` | No | HTTP listen address |
+| `PPROF_ADDR` | *(empty)* | No | Pprof debug address (e.g. `:6060`) |
+| `APK_STORAGE_PATH` | `./apk_storage` | No | APK chunk storage directory |
+| `IMAGE_STORAGE_PATH` | `./image_storage` | No | Team logo storage directory |
+| `SCRAPE_BATCH_SIZE` | `500` | No | Events per scrape batch |
+| `SCRAPE_CONCURRENCY` | `8` | No | Concurrent scrape goroutines |
+| `HTTP_READ_HEADER_TIMEOUT` | `5s` | No | HTTP read header timeout |
+| `HTTP_WRITE_TIMEOUT` | `10s` | No | HTTP write timeout |
+| `HTTP_IDLE_TIMEOUT` | `120s` | No | HTTP idle timeout |
+
+The full reference with examples lives in the autogenerated `/etc/iptv/env`
+written by the `.deb` postinst (see
+[`deb-package.md` § What postinst does](deb-package.md#what-postinst-does-automatically)).
+
+## Pre-deployment checklist
+
+For a fresh Ubuntu 22.04/24.04 host (amd64):
+
+- [ ] Outbound HTTPS to `www.sofascore.com` is reachable from the server
+      (the scraper will hard-fail without it).
+- [ ] Inbound TCP `80` (and/or `8080` if the dashboard is exposed
+      directly) is allowed by the firewall / security group.
+- [ ] DNS records for the dashboard hostname and for the APK distribution
+      domain (if used) point to the server's public IP.
+- [ ] The `iptv` system user does **not** yet exist (the `.deb` postinst
+      creates it; pre-existing accounts are left untouched).
+- [ ] A backup destination is configured (see
+      [`rollback.md` § Backup Schedule Recommendations](rollback.md#backup-schedule-recommendations)).
+- [ ] `mariadb-server` (≥ 10.5) and `redis-server` (≥ 5.0) are
+      installable from the configured apt sources — the `.deb` declares
+      them as `Depends` and will pull them in automatically when
+      installed via `apt install`.
+- [ ] A strong `JWT_SECRET` is decided for the autogenerated
+      `/etc/iptv/env` (or the file is edited right after install).
+
+After install, verify:
+
+- [ ] `curl http://127.0.0.1:8080/health/ready` returns `200`.
+- [ ] `curl http://127.0.0.1:8080/health/live` returns `200`.
+- [ ] `systemctl status iptv.service` shows `active (running)`.
+- [ ] `/etc/iptv/env` exists with `0640 root:iptv` permissions and a
+      non-empty `JWT_SECRET`.
+- [ ] `sudo mariadb -uroot -e "SHOW DATABASES"` lists `iptv` after
+      postinst ran.
+
+## Service management (Ubuntu `.deb`)
+
+```bash
+sudo systemctl status iptv.service
+sudo systemctl restart iptv.service
+sudo journalctl -u iptv.service -f
+```
+
+The unit runs `Type=simple`, user/group `iptv`, `WorkingDirectory=/opt/iptv`,
+`EnvironmentFile=/etc/iptv/env`, with `NoNewPrivileges`,
+`ProtectSystem=full`, `ReadWritePaths=/opt/iptv`, `ProtectHome=true`. See
+[`deb-package.md`](deb-package.md) for the full unit file.
+
+## Backup & restore
+
+MariaDB is the only durable store beyond on-disk content (APKs and team
+logos in `/opt/iptv/apk_storage` and `/opt/iptv/image_storage`). The full
+backup and restore procedure (including destructive-migration pre-flight)
+is in [`rollback.md` § Database Backup & Restore](rollback.md#database-backup--restore).
+
+## Where to escalate
+
+- **Alert response** — start with the matching section in
+  [`runbook.md` § Alert Response](runbook.md#alert-response).
+- **Application owner** — repository `CODEOWNERS` / GitHub collaborators.
+- **Upstream dependencies** —
+  [SofaScore](https://www.sofascore.com),
+  [MariaDB](https://mariadb.org),
+  [Redis](https://redis.io).
