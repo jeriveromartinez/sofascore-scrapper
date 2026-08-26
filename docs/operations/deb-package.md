@@ -12,16 +12,26 @@ systemd unit — install it and the panel is up.
 - Docker (the build runs entirely inside a container; no Go/Node toolchain
   needed on the host).
 - `bash` (the build script is `bash`, works on Linux/macOS and Git Bash on
-  Windows).
+  Windows) **or** PowerShell 5.1+ / PowerShell Core (`pwsh`) on Windows.
 
 ### Build the package
 
+Linux, macOS or Git Bash on Windows:
+
 ```bash
-./deployments/package/build-deb.sh [version]
+./deployments/package/build-deb.sh [-h|--help] [version]
 ```
 
-- `version` defaults to the latest git tag (`git describe --tags --abbrev=0`),
-  falling back to `0.1.0` when there are no tags.
+Windows (PowerShell):
+
+```powershell
+.\deployments\package\build-deb.ps1 [-Version <version>]
+Get-Help .\deployments\package\build-deb.ps1 -Full
+```
+
+- `version` defaults to the latest git tag (`git describe --tags --abbrev=0`).
+  A leading `v` is stripped (`v1.2.3` → `1.2.3`) so the value is a valid
+  Debian version. Falls back to `0.1.0` when there are no tags.
 - The version becomes the `.deb` version (`Version:` in the control file) and
   the output filename.
 - Output: `dist/iptv_<version>_amd64.deb` (the `dist/` directory is created
@@ -32,6 +42,11 @@ Examples:
 ```bash
 ./deployments/package/build-deb.sh 0.1.0
 ./deployments/package/build-deb.sh 1.2.3
+./deployments/package/build-deb.sh -h
+```
+
+```powershell
+.\deployments\package\build-deb.ps1 -Version 1.2.3
 ```
 
 ### How the build works
@@ -46,9 +61,9 @@ Examples:
    tree, runs `dpkg-deb --build --root-owner-group`, and leaves the `.deb`
    at `/iptv.deb`.
 
-The final image keeps `/iptv.deb`; `build-deb.sh` extracts it with
-`docker create` + `docker cp` (this avoids MSYS path mangling of `/bin/sh`
-on Windows/Git Bash hosts).
+The final image keeps `/iptv.deb`; both `build-deb.sh` and `build-deb.ps1`
+extract it with `docker create` + `docker cp` (this avoids MSYS / PowerShell
+path mangling of `/bin/sh` on Windows hosts).
 
 ### What goes inside
 
@@ -127,6 +142,14 @@ The unit runs `Type=simple`, user/group `iptv`, `WorkingDirectory=/opt/iptv`,
 ```bash
 ./deployments/package/build-deb.sh <new-version>
 sudo apt install ./dist/iptv_<new-version>_amd64.deb
+```
+
+Or on Windows:
+
+```powershell
+.\deployments\package\build-deb.ps1 -Version <new-version>
+# Copy dist\iptv_<new-version>_amd64.deb to the target Ubuntu host, then:
+sudo apt install ./iptv_<new-version>_amd64.deb
 ```
 
 `postinst` runs again; `/etc/iptv/env` and stored data (DB, `apk_storage`,
