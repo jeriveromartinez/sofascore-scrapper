@@ -300,14 +300,24 @@ func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []
 	return events, nil
 }
 
-func (r *Repository) ListPage(ctx context.Context, startTimestamp int64, id uint, limit int) ([]Event, bool, error) {
-	query := r.db.WithContext(ctx).Order("start_timestamp ASC, id ASC").
+func (r *Repository) ListPage(ctx context.Context, startTimestamp int64, id uint, limit int, direction string) ([]Event, bool, error) {
+	desc := strings.EqualFold(direction, "desc")
+	order := "start_timestamp ASC, id ASC"
+	if desc {
+		order = "start_timestamp DESC, id DESC"
+	}
+
+	query := r.db.WithContext(ctx).Order(order).
 		Preload("HomeTeamModel").
 		Preload("AwayTeamModel").
 		Preload("League")
 
 	if startTimestamp > 0 {
-		query = query.Where("start_timestamp > ? OR (start_timestamp = ? AND id > ?)", startTimestamp, startTimestamp, id)
+		if desc {
+			query = query.Where("start_timestamp < ? OR (start_timestamp = ? AND id < ?)", startTimestamp, startTimestamp, id)
+		} else {
+			query = query.Where("start_timestamp > ? OR (start_timestamp = ? AND id > ?)", startTimestamp, startTimestamp, id)
+		}
 	}
 
 	var rows []Event

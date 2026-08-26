@@ -112,3 +112,56 @@ func TestAdminEventsInvalidDateMentionsUTC(t *testing.T) {
 		t.Errorf("error message should mention UTC so callers know the day boundary is interpreted in UTC; got %q", body["error"])
 	}
 }
+
+func getAdminEventsPage(t *testing.T, handler *AdminHandler, target string) (*httptest.ResponseRecorder, *pb.EventPage) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, target, nil)
+
+	handler.handleGetEventsPage(ctx)
+
+	response := &pb.EventPage{}
+	if recorder.Code == http.StatusOK {
+		if err := proto.Unmarshal(recorder.Body.Bytes(), response); err != nil {
+			t.Fatalf("decode events page response: %v", err)
+		}
+	}
+	return recorder, response
+}
+
+func TestHandleGetEventsPage_DescendingOrder(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	now := time.Now().UnixMilli()
+	for i, ts := range []int64{now, now + 3600_000, now + 7200_000} {
+		if err := db.Create(&Event{
+			SofaScoreEventId: int64(1000 + i),
+			StartTimestamp:   ts,
+			Sport:            "football",
+			StatusType:       "notstarted",
+		}).Error; err != nil {
+			t.Fatalf("seed event: %v", err)
+		}
+	}
+
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?limit=10&direction=desc")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want %d, got %d (%s)", http.StatusOK, recorder.Code, recorder.Body.String())
+	}
+	if len(response.Data) != 3 {
+		t.Fatalf("want 3 events, got %d", len(response.Data))
+	}
+	if response.Data[0].StartTimestamp < response.Data[1].StartTimestamp {
+		t.Errorf("expected descending order, got %d before %d", response.Data[0].StartTimestamp, response.Data[1].StartTimestamp)
+	}
+}
+
+func TestHandleGetEventsPage_RejectsInvalidDirection(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?direction=sideways")
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
+	}
+}
