@@ -59,7 +59,7 @@ onBeforeUnmount(() => {
   document.body.style.overflow = "";
 });
 
-defineExpose({ open });
+defineExpose({ open, reset });
 </script>
 
 <template>

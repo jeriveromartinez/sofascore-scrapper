@@ -36,12 +36,14 @@ async function onSubmit(payload: { id: number | null; email: string; password: s
         email: payload.email,
         password: payload.password,
       });
+      modalRef.value?.reset();
       toast.success("Usuario actualizado");
     } else {
       await usersApiService.createUser({
         email: payload.email,
         password: payload.password,
       });
+      modalRef.value?.reset();
       toast.success("Usuario creado");
     }
     await pagination.reload();
@@ -148,5 +150,5 @@ onMounted(() => pagination.loadPage());
     </div>
   </div>
 
-  <UserFormModal ref="modalRef" @submit="onSubmit" :auto-close-modal="true" />
+  <UserFormModal ref="modalRef" @submit="onSubmit" :auto-close-modal="false" />
 </template>

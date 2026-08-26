@@ -36,12 +36,14 @@ async function onSubmit(payload: { id: number | null; name: string; slug: string
         name: payload.name,
         slug: payload.slug,
       });
+      modalRef.value?.reset();
       toast.success("Torneo actualizado");
     } else {
       await tournamentsApiService.createTournament({
         name: payload.name,
         slug: payload.slug,
       });
+      modalRef.value?.reset();
       toast.success("Torneo creado");
     }
     await pagination.reload();
@@ -143,5 +145,5 @@ onMounted(() => pagination.loadPage());
     </div>
   </div>
 
-  <TournamentFormModal ref="modalRef" @submit="onSubmit" :auto-close-modal="true" />
+  <TournamentFormModal ref="modalRef" @submit="onSubmit" :auto-close-modal="false" />
 </template>

@@ -41,12 +41,14 @@ async function onSubmit(payload: { id: number | null; domain: string; userId: nu
         domain: payload.domain,
         userId: payload.userId,
       });
+      modalRef.value?.reset();
       toast.success("Dominio actualizado");
     } else {
       await domainsApiService.createDomain({
         domain: payload.domain,
         userId: payload.userId,
       });
+      modalRef.value?.reset();
       toast.success("Dominio creado");
     }
     await pagination.reload();
@@ -173,5 +175,5 @@ onMounted(async () => {
     </div>
   </div>
 
-  <DomainFormModal ref="modalRef" :users="users" @submit="onSubmit" :auto-close-modal="true" />
+  <DomainFormModal ref="modalRef" :users="users" @submit="onSubmit" :auto-close-modal="false" />
 </template>
