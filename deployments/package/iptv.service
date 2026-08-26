@@ -1,0 +1,26 @@
+[Unit]
+Description=SofaScore scraper and IPTV panel
+After=network-online.target mariadb.service redis-server.service
+Wants=network-online.target
+Requires=mariadb.service redis-server.service
+
+[Service]
+Type=simple
+User=iptv
+Group=iptv
+WorkingDirectory=/opt/iptv
+EnvironmentFile=/etc/iptv/env
+ExecStart=/opt/iptv/iptv
+Restart=on-failure
+RestartSec=5
+# Storage paths default to ./apk_storage and ./image_storage relative to
+# WorkingDirectory; override via /etc/iptv/env if a different layout is wanted.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/iptv
+ProtectHome=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

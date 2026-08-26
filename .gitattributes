@@ -1,0 +1,5 @@
+# Shell scripts must stay LF so they run inside Linux containers
+*.sh text eol=lf
+
+# Go source
+*.go text eol=lf

@@ -114,6 +114,29 @@ Requires `.env` with `JWT_SECRET` set.
 docker compose -f deployments/docker/compose.multi.yml up --build
 ```
 
+### Ubuntu .deb package
+
+Build a `.deb` (binary + dashboard + systemd service) with Docker:
+
+```bash
+./deployments/package/build-deb.sh 0.1.0
+# Output: dist/iptv_0.1.0_amd64.deb
+```
+
+Install on Ubuntu 22.04/24.04 (resolves mariadb/redis dependencies):
+
+```bash
+sudo apt install ./dist/iptv_0.1.0_amd64.deb
+```
+
+The postinst script creates the `iptv` system user, generates
+`/etc/iptv/env` (random DB password + JWT secret), creates the `iptv`
+database/user in MariaDB, and starts `iptv.service`. The dashboard is
+served at `http://<host>:8080`.
+
+See [docs/operations/deb-package.md](docs/operations/deb-package.md) for
+the full guide (build, install, upgrade, uninstall, troubleshooting).
+
 ### Local Development
 
 Requirements: Go 1.25+, MariaDB, Redis, Node.js 22+.
@@ -265,3 +288,5 @@ Core tables (see `migrations/000001_baseline.up.sql` for full DDL):
 See [docs/operations/runbook.md](docs/operations/runbook.md) for production runbook (alerts, Redis outage behavior, counter recovery, cache invalidation).
 
 See [docs/operations/rollback.md](docs/operations/rollback.md) for rollback procedures (migration policy, backup/restore, destructive migration warnings).
+
+See [docs/operations/deb-package.md](docs/operations/deb-package.md) for the Ubuntu `.deb` packaging guide (build, install, upgrade, uninstall).
