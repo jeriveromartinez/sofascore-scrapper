@@ -1,8 +1,46 @@
+# Files / directories never needed by any build stage in this repo.
+# Used by: Dockerfile, deployments/docker/Dockerfile.test,
+# deployments/package/Dockerfile.builder.
+
+# --- Package managers / build caches -----------------------------------
 node_modules/
 web/node_modules/
 web/dist/
+dist/
+build/
+web/pkg/
+
+# --- Runtime data written by the server (not source) -------------------
+apk_storage/
+image_storage/
+
+# --- Tooling / editor artifacts ----------------------------------------
 .git/
 .devenv/
+.superpowers/
+docs/superpowers/
+.commandcode/
+.vscode/
+.idea/
+
+# --- Sensitive / local files -------------------------------------------
+.env
+.env.*
+!.env.example
+*.local
+
+# --- Tests / coverage / scratch ----------------------------------------
 **/tmp/
 *.test
-dist/
+*.out
+coverage.*
+*.cover
+*.coverprofile
+
+# --- Logs --------------------------------------------------------------
+*.log
+
+# --- OS-specific junk --------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
