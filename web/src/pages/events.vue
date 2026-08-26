@@ -1,55 +1,24 @@
 <script setup lang="ts">
-import { onMounted, reactive } from "vue";
+import { onMounted } from "vue";
+import { useCursorPagination } from "../composables/useCursorPagination";
 import { eventsApiService } from "../store/services";
-import type { SofaScoreEvent } from "../store/services/models";
+import type { EventPageResponse, SofaScoreEvent } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
 
-const PAGE_LIMIT = 20;
-
-const state = reactive({
-  events: [] as SofaScoreEvent[],
-  loading: false,
-  error: "",
-  currentCursor: "" as string,
-  nextCursor: "" as string,
-  prevCursors: [] as string[],
-  hasNext: false,
-  hasPrev: false,
+const pagination = useCursorPagination<SofaScoreEvent>({
+  routeName: "Events",
+  defaultSize: 20,
+  fetchPage: async (cursor, size) => {
+    const page: EventPageResponse = await eventsApiService.getEventPage(cursor, size, "desc");
+    return {
+      data: page.data,
+      nextCursor: page.page?.nextCursor ?? "",
+      hasMore: page.page?.hasMore ?? false,
+    };
+  },
 });
 
-async function loadPage(cursor?: string): Promise<void> {
-  state.loading = true;
-  state.error = "";
-
-  try {
-    const page = await eventsApiService.getEventPage(cursor, PAGE_LIMIT);
-    state.events = page.data;
-    state.nextCursor = page.page?.nextCursor ?? "";
-    state.hasNext = page.page?.hasMore ?? false;
-    state.currentCursor = cursor ?? "";
-    state.hasPrev = state.prevCursors.length > 0;
-  } catch (error) {
-    state.error =
-      error instanceof Error ? error.message : "Error cargando eventos";
-  } finally {
-    state.loading = false;
-  }
-}
-
-async function goNext(): Promise<void> {
-  if (!state.hasNext || !state.nextCursor) return;
-  state.prevCursors = [...state.prevCursors, state.currentCursor];
-  await loadPage(state.nextCursor);
-}
-
-async function goPrev(): Promise<void> {
-  if (state.prevCursors.length === 0) return;
-  const prev = state.prevCursors[state.prevCursors.length - 1];
-  state.prevCursors = state.prevCursors.slice(0, -1);
-  await loadPage(prev || undefined);
-}
-
-onMounted(() => loadPage());
+onMounted(() => pagination.loadPage());
 </script>
 
 <template>
@@ -62,20 +31,22 @@ onMounted(() => loadPage());
       </div>
       <button
         class="btn btn-outline-primary"
-        :disabled="state.loading"
-        @click="loadPage(state.currentCursor || undefined)"
+        :disabled="pagination.state.loading"
+        @click="pagination.reload()"
       >
         Recargar
       </button>
     </div>
 
     <div class="card-body">
-      <div v-if="state.error" class="alert alert-danger">{{ state.error }}</div>
-      <div v-if="state.loading" class="alert alert-info">
+      <div v-if="pagination.state.error" class="alert alert-danger">
+        {{ pagination.state.error }}
+      </div>
+      <div v-if="pagination.state.loading" class="alert alert-info">
         Cargando eventos...
       </div>
 
-      <div v-if="state.events.length > 0" class="table-responsive">
+      <div v-if="pagination.state.data.length > 0" class="table-responsive">
         <table class="table table-sm table-striped align-middle">
           <thead>
             <tr>
@@ -88,7 +59,7 @@ onMounted(() => loadPage());
             </tr>
           </thead>
           <tbody>
-            <tr v-for="event in state.events" :key="event.id">
+            <tr v-for="event in pagination.state.data" :key="event.id">
               <td class="d-none d-md-table-cell">
                 {{ event.sofaScoreEventId }}
               </td>
@@ -106,13 +77,9 @@ onMounted(() => loadPage());
                     height="30px"
                     style="object-fit: contain"
                   />
-                  <span class="text-nowrap">{{
-                    event.teamHome?.name ?? "Home"
-                  }}</span>
+                  <span class="text-nowrap">{{ event.teamHome?.name ?? "Home" }}</span>
                   <span class="mx-1">vs</span>
-                  <span class="text-nowrap">{{
-                    event.teamAway?.name ?? "Away"
-                  }}</span>
+                  <span class="text-nowrap">{{ event.teamAway?.name ?? "Away" }}</span>
                   <img
                     :src="event.teamAway?.logoUrl"
                     :alt="event.teamAway?.name ?? 'Away Team'"
@@ -139,22 +106,22 @@ onMounted(() => loadPage());
         <div class="d-flex justify-content-between align-items-center mt-3">
           <button
             class="btn btn-outline-secondary btn-sm"
-            :disabled="!state.hasPrev || state.loading"
-            @click="goPrev"
+            :disabled="!pagination.state.hasPrev || pagination.state.loading"
+            @click="pagination.goPrev()"
           >
             Anterior
           </button>
           <button
             class="btn btn-outline-secondary btn-sm"
-            :disabled="!state.hasNext || state.loading"
-            @click="goNext"
+            :disabled="!pagination.state.hasNext || pagination.state.loading"
+            @click="pagination.goNext()"
           >
             Siguiente
           </button>
         </div>
       </div>
 
-      <div v-else-if="!state.loading" class="text-center text-muted">
+      <div v-else-if="!pagination.state.loading" class="text-center text-muted">
         No hay eventos disponibles
       </div>
     </div>
