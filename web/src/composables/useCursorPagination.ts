@@ -116,7 +116,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
 
       if (cached !== null) {
         const resp = await fetchWith(cached, state.size);
-        state.data = resp.data;
+        state.data = resp.data as never;
         state.hasNext = resp.hasMore;
         if (resp.nextCursor) {
           sessionStorage.setItem(cacheKey(options.routeName, targetPage), resp.nextCursor);
@@ -143,7 +143,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
           await writeQuery(state.page, state.size);
         }
         if (lastResp) {
-          state.data = lastResp.data;
+          state.data = lastResp.data as never;
           state.hasNext = lastResp.hasMore;
         }
       }

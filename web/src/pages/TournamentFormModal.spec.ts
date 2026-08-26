@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import TournamentFormModal from "./TournamentFormModal.vue";
-import type { Tournament } from "./services/models";
+import type { Tournament } from "../store/services/models";
 
 vi.mock("../store/services", () => ({
   tournamentsApiService: {
@@ -11,7 +11,14 @@ vi.mock("../store/services", () => ({
   },
 }));
 
-const base: Tournament = { id: 1, name: "Premier", slug: "premier" };
+const base: Tournament = {
+  id: 1,
+  createdAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+  name: "Premier",
+  slug: "premier",
+  region: "EU",
+};
 
 describe("TournamentFormModal", () => {
   beforeEach(() => {
@@ -61,7 +68,7 @@ describe("TournamentFormModal", () => {
     await vm.submit();
     const emitted = wrapper.emitted("submit");
     expect(emitted).toBeTruthy();
-    expect(emitted![0][0]).toEqual({ id: null, name: "Copa", slug: "copa" });
+    expect(emitted![0]![0]).toEqual({ id: null, name: "Copa", slug: "copa" });
   });
 
   it("submit in edit mode emits submit event with id", async () => {
@@ -77,6 +84,6 @@ describe("TournamentFormModal", () => {
     await vm.submit();
     const emitted = wrapper.emitted("submit");
     expect(emitted).toBeTruthy();
-    expect(emitted![0][0]).toEqual({ id: 1, name: "Premier League", slug: "premier" });
+    expect(emitted![0]![0]).toEqual({ id: 1, name: "Premier League", slug: "premier" });
   });
 });
