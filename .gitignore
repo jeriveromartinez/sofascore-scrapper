@@ -2,6 +2,7 @@
 sofascore-scrapper
 *.exe
 *.out
+dist/
 
 # Environment files
 .env
@@ -13,3 +14,4 @@ web/dist/
 web/pkg/
 docs/superpowers/
 .superpowers/
+.commandcode/
