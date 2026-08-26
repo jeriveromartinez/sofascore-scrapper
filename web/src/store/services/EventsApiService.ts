@@ -26,10 +26,12 @@ export class EventsApiService extends BaseApiService {
   async getEventPage(
     cursor?: string,
     limit?: number,
+    direction: "asc" | "desc" = "asc",
   ): Promise<EventPageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
+    params.set("direction", direction);
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
     return this.get(url, EventPage);
