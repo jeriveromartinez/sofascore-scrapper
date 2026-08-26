@@ -1,56 +1,31 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { onMounted, ref } from "vue";
+import { useCursorPagination } from "../../composables/useCursorPagination";
 import apkUploadModal from "./apkUploadModal.vue";
 import apkEditUrlModal from "./apkEditUrl.vue";
 import { apkApiService } from "../../store/services";
-import type { ApkVersionInfo } from "../../store/services/models";
-
-const PAGE_LIMIT = 10;
+import type {
+  ApkPageResponse,
+  ApkVersionInfo,
+} from "../../store/services/models";
 
 const editModal = ref<typeof apkEditUrlModal>();
 
-const listState = reactive({
-  loading: false,
-  error: "",
-  versions: [] as ApkVersionInfo[],
-  currentCursor: "" as string,
-  nextCursor: "" as string,
-  prevCursors: [] as string[],
-  hasNext: false,
-  hasPrev: false,
+const pagination = useCursorPagination<ApkVersionInfo>({
+  routeName: "ApkAdmin",
+  defaultSize: 10,
+  fetchPage: async (cursor, size) => {
+    const page: ApkPageResponse = await apkApiService.listVersionsPage(
+      cursor,
+      size,
+    );
+    return {
+      data: page.data,
+      nextCursor: page.page?.nextCursor ?? "",
+      hasMore: page.page?.hasMore ?? false,
+    };
+  },
 });
-
-async function loadPage(cursor?: string): Promise<void> {
-  listState.loading = true;
-  listState.error = "";
-
-  try {
-    const page = await apkApiService.listVersionsPage(cursor, PAGE_LIMIT);
-    listState.versions = page.data;
-    listState.nextCursor = page.page?.nextCursor ?? "";
-    listState.hasNext = page.page?.hasMore ?? false;
-    listState.currentCursor = cursor ?? "";
-    listState.hasPrev = listState.prevCursors.length > 0;
-  } catch (error) {
-    listState.error =
-      error instanceof Error ? error.message : "No se pudo cargar el listado";
-  } finally {
-    listState.loading = false;
-  }
-}
-
-async function goNext(): Promise<void> {
-  if (!listState.hasNext || !listState.nextCursor) return;
-  listState.prevCursors = [...listState.prevCursors, listState.currentCursor];
-  await loadPage(listState.nextCursor);
-}
-
-async function goPrev(): Promise<void> {
-  if (listState.prevCursors.length === 0) return;
-  const prev = listState.prevCursors[listState.prevCursors.length - 1];
-  listState.prevCursors = listState.prevCursors.slice(0, -1);
-  await loadPage(prev || undefined);
-}
 
 function getDownloadUrl(appKey: string): string {
   return apkApiService.getDownloadUrl(appKey);
@@ -70,7 +45,7 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
-onMounted(() => loadPage());
+onMounted(() => pagination.loadPage());
 </script>
 
 <template>
@@ -84,13 +59,13 @@ onMounted(() => loadPage());
         </div>
         <div>
           <apk-upload-modal
-            @uploaded="loadPage"
+            @uploaded="() => pagination.reload()"
             :auto-close-modal="false"
           />
           <button
             class="btn btn-outline-primary btn-sm ms-2"
-            :disabled="listState.loading"
-            @click="loadPage()"
+            :disabled="pagination.state.loading"
+            @click="pagination.reload()"
           >
             Recargar
           </button>
@@ -98,16 +73,16 @@ onMounted(() => loadPage());
       </div>
 
       <div class="card-body">
-        <div v-if="listState.error" class="alert alert-danger">
-          {{ listState.error }}
+        <div v-if="pagination.state.error" class="alert alert-danger">
+          {{ pagination.state.error }}
         </div>
-        <div v-if="listState.loading" class="alert alert-info">
+        <div v-if="pagination.state.loading" class="alert alert-info">
           Cargando versiones...
         </div>
 
         <div
           class="table-responsive text-nowrap"
-          v-if="listState.versions.length"
+          v-if="pagination.state.data.length"
         >
           <table class="table table-sm table-striped align-middle">
             <thead>
@@ -122,7 +97,7 @@ onMounted(() => loadPage());
               </tr>
             </thead>
             <tbody>
-              <tr v-for="version in listState.versions" :key="version.id">
+              <tr v-for="version in pagination.state.data" :key="version.id">
                 <td>{{ version.version }}</td>
                 <td>{{ version.packageName }}</td>
                 <td>{{ version.downloadToken }}</td>
@@ -150,21 +125,24 @@ onMounted(() => loadPage());
           <div class="d-flex justify-content-between align-items-center mt-3">
             <button
               class="btn btn-outline-secondary btn-sm"
-              :disabled="!listState.hasPrev || listState.loading"
-              @click="goPrev"
+              :disabled="!pagination.state.hasPrev || pagination.state.loading"
+              @click="pagination.goPrev()"
             >
               Anterior
             </button>
             <button
               class="btn btn-outline-secondary btn-sm"
-              :disabled="!listState.hasNext || listState.loading"
-              @click="goNext"
+              :disabled="!pagination.state.hasNext || pagination.state.loading"
+              @click="pagination.goNext()"
             >
               Siguiente
             </button>
           </div>
         </div>
-        <p class="text-body-secondary mb-0" v-else-if="!listState.loading">
+        <p
+          class="text-body-secondary mb-0"
+          v-else-if="!pagination.state.loading"
+        >
           No hay versiones cargadas.
         </p>
       </div>
@@ -173,7 +151,7 @@ onMounted(() => loadPage());
 
   <apk-edit-url-modal
     ref="editModal"
-    @updated="() => loadPage()"
+    @updated="() => pagination.reload()"
     :auto-close-modal="false"
   />
 </template>

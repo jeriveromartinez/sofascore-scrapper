@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,6 +18,12 @@ export default defineConfig({
     {
       name: "api",
       testMatch: "**/*.spec.ts",
+      testIgnore: /-ui\.spec\.ts$/,
+    },
+    {
+      name: "ui",
+      testMatch: /-ui\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
 });

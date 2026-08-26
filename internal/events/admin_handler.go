@@ -34,6 +34,11 @@ const defaultPageLimit = 20
 func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 	cursorRaw := c.Query("cursor")
 	limitStr := c.Query("limit")
+	direction := c.DefaultQuery("direction", "asc")
+	if direction != "asc" && direction != "desc" {
+		server.RespondError(c, http.StatusBadRequest, "direction must be 'asc' or 'desc'")
+		return
+	}
 	limit := defaultPageLimit
 	if limitStr != "" {
 		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 100 {
@@ -63,7 +68,7 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 		id = parsedID
 	}
 
-	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), startTimestamp, id, limit)
+	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), startTimestamp, id, limit, direction)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

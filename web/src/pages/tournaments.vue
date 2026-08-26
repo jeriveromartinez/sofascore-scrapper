@@ -1,192 +1,92 @@
 <script setup lang="ts">
-import { reactive, onMounted } from "vue";
+import { onMounted, ref } from "vue";
+import { toast } from "vue3-toastify";
+import { useCursorPagination } from "../composables/useCursorPagination";
+import TournamentFormModal from "./TournamentFormModal.vue";
 import { tournamentsApiService } from "../store/services";
-import type { Tournament } from "../store/services/models";
+import type { Tournament, TournamentPageResponse } from "../store/services/models";
 
-const PAGE_LIMIT = 20;
+const modalRef = ref<InstanceType<typeof TournamentFormModal> | null>(null);
 
-const state = reactive({
-  tournaments: [] as Tournament[],
-  loading: false,
-  error: "",
-  editingId: null as number | null,
-  form: {
-    name: "",
-    slug: "",
+const pagination = useCursorPagination<Tournament>({
+  routeName: "Tournaments",
+  defaultSize: 20,
+  fetchPage: async (cursor, size) => {
+    const page: TournamentPageResponse = await tournamentsApiService.getTournamentPage(cursor, size);
+    return {
+      data: page.data,
+      nextCursor: page.page?.nextCursor ?? "",
+      hasMore: page.page?.hasMore ?? false,
+    };
   },
-  currentCursor: "" as string,
-  nextCursor: "" as string,
-  prevCursors: [] as string[],
-  hasNext: false,
-  hasPrev: false,
 });
 
-async function loadPage(cursor?: string): Promise<void> {
-  state.loading = true;
-  state.error = "";
+function openCreate(): void {
+  modalRef.value?.open();
+}
+
+function openEdit(t: Tournament): void {
+  modalRef.value?.open(t);
+}
+
+async function onSubmit(payload: { id: number | null; name: string; slug: string }): Promise<void> {
   try {
-    const page = await tournamentsApiService.getTournamentPage(cursor, PAGE_LIMIT);
-    state.tournaments = page.data;
-    state.nextCursor = page.page?.nextCursor ?? "";
-    state.hasNext = page.page?.hasMore ?? false;
-    state.currentCursor = cursor ?? "";
-    state.hasPrev = state.prevCursors.length > 0;
-  } catch (error) {
-    state.error =
-      error instanceof Error
-        ? error.message
-        : "No se pudieron cargar los torneos";
-  } finally {
-    state.loading = false;
-  }
-}
-
-async function goNext(): Promise<void> {
-  if (!state.hasNext || !state.nextCursor) return;
-  state.prevCursors = [...state.prevCursors, state.currentCursor];
-  await loadPage(state.nextCursor);
-}
-
-async function goPrev(): Promise<void> {
-  if (state.prevCursors.length === 0) return;
-  const prev = state.prevCursors[state.prevCursors.length - 1];
-  state.prevCursors = state.prevCursors.slice(0, -1);
-  await loadPage(prev || undefined);
-}
-
-async function createTournament(): Promise<void> {
-  if (!state.form.name) {
-    state.error = "El nombre es requerido";
-    return;
-  }
-
-  state.loading = true;
-  state.error = "";
-  try {
-    await tournamentsApiService.createTournament({
-      name: state.form.name,
-      slug: state.form.slug,
-    });
-    state.form.name = "";
-    state.form.slug = "";
-    await loadPage(state.currentCursor || undefined);
-  } catch (error) {
-    state.error =
-      error instanceof Error ? error.message : "No se pudo crear el torneo";
-  } finally {
-    state.loading = false;
-  }
-}
-
-function startEdit(tournament: Tournament): void {
-  state.editingId = tournament.id;
-  state.form.name = tournament.name;
-  state.form.slug = tournament.slug;
-}
-
-function cancelEdit(): void {
-  state.editingId = null;
-  state.form.name = "";
-  state.form.slug = "";
-}
-
-async function updateTournament(): Promise<void> {
-  if (!state.editingId || !state.form.name) return;
-
-  state.loading = true;
-  state.error = "";
-  try {
-    await tournamentsApiService.updateTournament(state.editingId, {
-      name: state.form.name,
-      slug: state.form.slug,
-    });
-    cancelEdit();
-    await loadPage(state.currentCursor || undefined);
-  } catch (error) {
-    state.error =
-      error instanceof Error
-        ? error.message
-        : "No se pudo actualizar el torneo";
-  } finally {
-    state.loading = false;
+    if (payload.id) {
+      await tournamentsApiService.updateTournament(payload.id, {
+        name: payload.name,
+        slug: payload.slug,
+      });
+      modalRef.value?.reset();
+      toast.success("Torneo actualizado");
+    } else {
+      await tournamentsApiService.createTournament({
+        name: payload.name,
+        slug: payload.slug,
+      });
+      modalRef.value?.reset();
+      toast.success("Torneo creado");
+    }
+    await pagination.reload();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "No se pudo guardar el torneo");
   }
 }
 
 async function deleteTournament(id: number): Promise<void> {
   if (!confirm("¿Está seguro de que desea eliminar este torneo?")) return;
-
-  state.loading = true;
-  state.error = "";
   try {
     await tournamentsApiService.deleteTournament(id);
-    await loadPage(state.currentCursor || undefined);
-  } catch (error) {
-    state.error =
-      error instanceof Error ? error.message : "No se pudo eliminar el torneo";
-  } finally {
-    state.loading = false;
+    toast.success("Torneo eliminado");
+    await pagination.reload();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "No se pudo eliminar el torneo");
   }
 }
 
-onMounted(() => {
-  loadPage();
-});
+onMounted(() => pagination.loadPage());
 </script>
 
 <template>
   <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
       <h5 class="mb-0">Gestión de Torneos</h5>
+      <button class="btn btn-primary btn-sm" :disabled="pagination.state.loading" @click="openCreate">
+        Crear
+      </button>
     </div>
 
     <div class="card-body">
-      <div v-if="state.error" class="alert alert-danger">
-        {{ state.error }}
+      <div v-if="pagination.state.error" class="alert alert-danger">
+        {{ pagination.state.error }}
       </div>
 
-      <form
-        class="row g-3 mb-4"
-        @submit.prevent="state.editingId ? updateTournament() : createTournament()"
-      >
-        <div class="col-md-5">
-          <label class="form-label">Nombre *</label>
-          <input
-            v-model="state.form.name"
-            type="text"
-            class="form-control"
-            required
-          />
-        </div>
-        <div class="col-md-5">
-          <label class="form-label">Slug</label>
-          <input v-model="state.form.slug" type="text" class="form-control" />
-        </div>
-        <div class="col-md-2 d-flex align-items-end">
-          <button
-            v-if="!state.editingId"
-            class="btn btn-primary me-2"
-            :disabled="state.loading"
-          >
-            Crear
-          </button>
-          <template v-else>
-            <button class="btn btn-success me-2" :disabled="state.loading">
-              Actualizar
-            </button>
-            <button type="button" class="btn btn-secondary" @click="cancelEdit">
-              Cancelar
-            </button>
-          </template>
-        </div>
-      </form>
-
-      <div v-if="state.loading" class="text-center">
+      <div v-if="pagination.state.loading" class="text-center">
         <div class="spinner-border" role="status">
           <span class="visually-hidden">Cargando...</span>
         </div>
       </div>
 
-      <div v-else-if="state.tournaments.length > 0" class="table-responsive">
+      <div v-else-if="pagination.state.data.length > 0" class="table-responsive">
         <table class="table table-striped">
           <thead>
             <tr>
@@ -197,19 +97,21 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="tournament in state.tournaments" :key="tournament.id">
+            <tr v-for="tournament in pagination.state.data" :key="tournament.id">
               <td>{{ tournament.id }}</td>
               <td>{{ tournament.name }}</td>
               <td>{{ tournament.slug }}</td>
               <td>
                 <button
                   class="btn btn-sm btn-warning me-2"
-                  @click="startEdit(tournament)"
+                  :disabled="pagination.state.loading"
+                  @click="openEdit(tournament)"
                 >
                   Editar
                 </button>
                 <button
                   class="btn btn-sm btn-danger"
+                  :disabled="pagination.state.loading"
                   @click="deleteTournament(tournament.id)"
                 >
                   Eliminar
@@ -222,15 +124,15 @@ onMounted(() => {
         <div class="d-flex justify-content-between align-items-center mt-3">
           <button
             class="btn btn-outline-secondary"
-            :disabled="!state.hasPrev || state.loading"
-            @click="goPrev"
+            :disabled="!pagination.state.hasPrev || pagination.state.loading"
+            @click="pagination.goPrev()"
           >
             Anterior
           </button>
           <button
             class="btn btn-outline-secondary"
-            :disabled="!state.hasNext || state.loading"
-            @click="goNext"
+            :disabled="!pagination.state.hasNext || pagination.state.loading"
+            @click="pagination.goNext()"
           >
             Siguiente
           </button>
@@ -242,4 +144,6 @@ onMounted(() => {
       </div>
     </div>
   </div>
+
+  <TournamentFormModal ref="modalRef" @submit="onSubmit" :auto-close-modal="false" />
 </template>
