@@ -4,14 +4,45 @@ set -Eeuo pipefail
 # Builds the .deb package via Docker.
 #
 # Usage:
-#   ./deployments/package/build-deb.sh [version]
+#   ./deployments/package/build-deb.sh [-h|--help] [version]
 #
-#   version  defaults to the latest git tag (fallback 0.1.0)
+#   version  defaults to the latest git tag with a leading 'v' stripped
+#             (fallback 0.1.0 when no tag exists).
 # Output lands in dist/iptv_<version>_amd64.deb
+
+usage() {
+    sed -n '2,11p' "$0"
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    usage
+    exit 0
+fi
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
-version=${1:-$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || echo 0.1.0)}
+
+resolve_version() {
+    local explicit="${1:-}"
+    if [ -n "$explicit" ]; then
+        printf '%s\n' "$explicit"
+        return
+    fi
+    local tag
+    tag=$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || true)
+    if [ -n "$tag" ]; then
+        printf '%s\n' "${tag#v}"
+        return
+    fi
+    printf '%s\n' "0.1.0"
+}
+
+version=$(resolve_version "${1:-}")
+
+if ! [[ "$version" =~ ^[0-9][0-9a-zA-Z\.+~-]*$ ]]; then
+    echo ">> Invalid version '$version': must start with a digit and contain only [0-9a-zA-Z.+~-]" >&2
+    exit 1
+fi
 
 image="iptv-deb-builder:${version}"
 out_dir="$repo_root/dist"
