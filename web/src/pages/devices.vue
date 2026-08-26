@@ -1,57 +1,24 @@
 <script setup lang="ts">
-import { onMounted, reactive } from "vue";
+import { onMounted } from "vue";
+import { useCursorPagination } from "../composables/useCursorPagination";
 import { devicesApiService } from "../store/services";
-import type { Device } from "../store/services/models";
+import type { Device, DevicePageResponse } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
 
-const PAGE_LIMIT = 20;
-
-const state = reactive({
-  devices: [] as Device[],
-  loading: false,
-  error: "",
-  currentCursor: "" as string,
-  nextCursor: "" as string,
-  prevCursors: [] as string[],
-  hasNext: false,
-  hasPrev: false,
+const pagination = useCursorPagination<Device>({
+  routeName: "Devices",
+  defaultSize: 20,
+  fetchPage: async (cursor, size) => {
+    const page: DevicePageResponse = await devicesApiService.getDevicePage(cursor, size);
+    return {
+      data: page.data,
+      nextCursor: page.page?.nextCursor ?? "",
+      hasMore: page.page?.hasMore ?? false,
+    };
+  },
 });
 
-async function loadPage(cursor?: string): Promise<void> {
-  state.loading = true;
-  state.error = "";
-
-  try {
-    const page = await devicesApiService.getDevicePage(cursor, PAGE_LIMIT);
-    state.devices = page.data;
-    state.nextCursor = page.page?.nextCursor ?? "";
-    state.hasNext = page.page?.hasMore ?? false;
-    state.currentCursor = cursor ?? "";
-    state.hasPrev = state.prevCursors.length > 0;
-  } catch (error) {
-    state.error =
-      error instanceof Error ? error.message : "Error cargando dispositivos";
-  } finally {
-    state.loading = false;
-  }
-}
-
-async function goNext(): Promise<void> {
-  if (!state.hasNext || !state.nextCursor) return;
-  state.prevCursors = [...state.prevCursors, state.currentCursor];
-  await loadPage(state.nextCursor);
-}
-
-async function goPrev(): Promise<void> {
-  if (state.prevCursors.length === 0) return;
-  const prev = state.prevCursors[state.prevCursors.length - 1];
-  state.prevCursors = state.prevCursors.slice(0, -1);
-  await loadPage(prev || undefined);
-}
-
-onMounted(() => {
-  void loadPage();
-});
+onMounted(() => pagination.loadPage());
 </script>
 
 <template>
@@ -61,12 +28,14 @@ onMounted(() => {
     </div>
 
     <div class="card-body">
-      <div v-if="state.error" class="alert alert-danger">{{ state.error }}</div>
-      <div v-if="state.loading" class="alert alert-info">
+      <div v-if="pagination.state.error" class="alert alert-danger">
+        {{ pagination.state.error }}
+      </div>
+      <div v-if="pagination.state.loading" class="alert alert-info">
         Cargando dispositivos...
       </div>
 
-      <div v-if="state.devices.length > 0" class="table-responsive">
+      <div v-if="pagination.state.data.length > 0" class="table-responsive">
         <table class="table table-sm table-striped align-middle">
           <thead>
             <tr>
@@ -79,7 +48,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="device in state.devices" :key="device.id">
+            <tr v-for="device in pagination.state.data" :key="device.id">
               <td>{{ device.id }}</td>
               <td
                 class="text-truncate"
@@ -97,30 +66,27 @@ onMounted(() => {
         </table>
       </div>
 
-      <div
-        v-else-if="!state.loading"
-        class="text-center text-muted"
-      >
+      <div v-else-if="!pagination.state.loading" class="text-center text-muted">
         No hay dispositivos registrados
       </div>
 
       <div
-        v-if="state.devices.length > 0"
+        v-if="pagination.state.data.length > 0"
         class="d-flex gap-2 mt-3 align-items-center justify-content-between"
       >
         <div class="d-flex gap-2">
           <button
             class="btn btn-outline-secondary btn-sm"
-            :disabled="!state.hasPrev || state.loading"
-            @click="goPrev"
+            :disabled="!pagination.state.hasPrev || pagination.state.loading"
+            @click="pagination.goPrev()"
           >
             <span class="d-none d-sm-inline">Anterior</span>
             <span class="d-inline d-sm-none">&lt;</span>
           </button>
           <button
             class="btn btn-outline-secondary btn-sm"
-            :disabled="!state.hasNext || state.loading"
-            @click="goNext"
+            :disabled="!pagination.state.hasNext || pagination.state.loading"
+            @click="pagination.goNext()"
           >
             <span class="d-none d-sm-inline">Siguiente</span>
             <span class="d-inline d-sm-none">&gt;</span>
