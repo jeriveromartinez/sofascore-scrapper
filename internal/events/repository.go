@@ -14,6 +14,38 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// EventsPageFilter holds all query parameters for ListPage. The zero value
+// (with Direction="", Limit=0, etc.) is not valid; callers must set Limit and
+// Direction explicitly.
+type EventsPageFilter struct {
+	CursorStartTimestamp int64
+	CursorID             uint
+	Limit                int
+	Direction            string
+	FromTimestampMs      int64
+	Sport                string
+	Status               string
+	LeagueName           string
+	TeamName             string
+}
+
+// escapeLike escapes the two SQL LIKE wildcard/quote characters that the
+// caller did not intentionally provide: _ (single-char wildcard) and \
+// (escape char). The % wildcard is left alone so user-typed patterns like
+// "A%" continue to act as wildcards (verified by
+// TestListPage_LikeInputEscapesWildcards).
+func escapeLike(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '_' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 type Repository struct {
 	db           *gorm.DB
 	scheduleLogo func(*gorm.DB, int64, string)
@@ -300,34 +332,66 @@ func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []
 	return events, nil
 }
 
-func (r *Repository) ListPage(ctx context.Context, startTimestamp int64, id uint, limit int, direction string) ([]Event, bool, error) {
-	desc := strings.EqualFold(direction, "desc")
-	order := "start_timestamp ASC, id ASC"
+func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event, bool, error) {
+	if f.Limit <= 0 {
+		f.Limit = 20
+	}
+	if f.Direction == "" {
+		f.Direction = "asc"
+	}
+	desc := strings.EqualFold(f.Direction, "desc")
+	order := "events.start_timestamp ASC, events.id ASC"
 	if desc {
-		order = "start_timestamp DESC, id DESC"
+		order = "events.start_timestamp DESC, events.id DESC"
 	}
 
-	query := r.db.WithContext(ctx).Order(order).
+	query := r.db.WithContext(ctx).
+		Joins("LEFT JOIN tournaments AS leagues ON leagues.id = events.league_id").
+		Joins("LEFT JOIN teams AS home_team_models ON home_team_models.team_id = events.home_team_id").
+		Joins("LEFT JOIN teams AS away_team_models ON away_team_models.team_id = events.away_team_id").
+		Order(order).
 		Preload("HomeTeamModel").
 		Preload("AwayTeamModel").
 		Preload("League")
 
-	if startTimestamp > 0 {
+	if f.CursorStartTimestamp > 0 {
 		if desc {
-			query = query.Where("start_timestamp < ? OR (start_timestamp = ? AND id < ?)", startTimestamp, startTimestamp, id)
+			query = query.Where("events.start_timestamp < ? OR (events.start_timestamp = ? AND events.id < ?)",
+				f.CursorStartTimestamp, f.CursorStartTimestamp, f.CursorID)
 		} else {
-			query = query.Where("start_timestamp > ? OR (start_timestamp = ? AND id > ?)", startTimestamp, startTimestamp, id)
+			query = query.Where("events.start_timestamp > ? OR (events.start_timestamp = ? AND events.id > ?)",
+				f.CursorStartTimestamp, f.CursorStartTimestamp, f.CursorID)
 		}
 	}
 
+	if f.FromTimestampMs > 0 {
+		query = query.Where("events.start_timestamp >= ?", f.FromTimestampMs)
+	}
+	if f.Sport != "" {
+		query = query.Where("events.sport = ?", f.Sport)
+	}
+	if f.Status != "" {
+		query = query.Where("events.status_type = ?", f.Status)
+	}
+	if f.LeagueName != "" {
+		query = query.Where("leagues.name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.LeagueName)+"%")
+	}
+	if f.TeamName != "" {
+		query = query.Where(
+			"(home_team_models.name LIKE ? ESCAPE '\\' OR away_team_models.name LIKE ? ESCAPE '\\')",
+			"%"+escapeLike(f.TeamName)+"%",
+			"%"+escapeLike(f.TeamName)+"%",
+		)
+	}
+
 	var rows []Event
-	err := query.Limit(limit + 1).Find(&rows).Error
+	err := query.Limit(f.Limit + 1).Find(&rows).Error
 	if err != nil {
 		return nil, false, err
 	}
-	hasMore := len(rows) > limit
+	hasMore := len(rows) > f.Limit
 	if hasMore {
-		rows = rows[:limit]
+		rows = rows[:f.Limit]
 	}
 	return rows, hasMore, nil
 }

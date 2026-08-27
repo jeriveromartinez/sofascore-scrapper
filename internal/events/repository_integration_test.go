@@ -18,6 +18,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
+	if err := db.Exec("PRAGMA case_sensitive_like = ON").Error; err != nil {
+		t.Fatalf("failed to set case_sensitive_like: %v", err)
+	}
 	if err := db.AutoMigrate(&Event{}, &Team{}, &tournaments.Tournament{}, &tournaments.DeviceTournament{}, &tournaments.GlobalTournamentConfig{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -221,6 +224,120 @@ func TestUpsert_ErrorReturned(t *testing.T) {
 	}
 	if err := repo.Upsert(context.Background(), []Event{event}, "football"); err != nil {
 		t.Errorf("upsert with conflict should not error: %v", err)
+	}
+}
+
+func TestListPage_SportFilter(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepository(db)
+	now := time.Now().UnixMilli()
+	for i, sport := range []string{"football", "basketball", "football"} {
+		if err := db.Create(&Event{
+			SofaScoreEventId: int64(2000 + i),
+			StartTimestamp:   now + int64(i*3600_000),
+			Sport:            sport,
+			StatusType:       "notstarted",
+		}).Error; err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	got, _, err := repo.ListPage(context.Background(), EventsPageFilter{
+		Limit:     10,
+		Direction: "asc",
+		Sport:     "basketball",
+	})
+	if err != nil {
+		t.Fatalf("ListPage: %v", err)
+	}
+	if len(got) != 1 || got[0].SofaScoreEventId != 2001 {
+		t.Fatalf("want 1 basketball event (id 2001), got %d events: %+v", len(got), got)
+	}
+}
+
+func TestListPage_AllFilters_Combined(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepository(db)
+	now := time.Now().UnixMilli()
+	league := &tournaments.Tournament{Name: "Primera Division", Slug: "primera"}
+	if err := db.Create(league).Error; err != nil {
+		t.Fatalf("seed league: %v", err)
+	}
+	home := &Team{TeamId: 5001, Name: "Barcelona SC"}
+	away := &Team{TeamId: 5002, Name: "Emelec"}
+	if err := db.Create(home).Error; err != nil {
+		t.Fatalf("seed home: %v", err)
+	}
+	if err := db.Create(away).Error; err != nil {
+		t.Fatalf("seed away: %v", err)
+	}
+	if err := db.Create(&Event{
+		SofaScoreEventId: 3000, Sport: "football", StatusType: "notstarted",
+		StartTimestamp: now + 3600_000, LeagueId: league.ID,
+		HomeTeamId: 5001, AwayTeamId: 5002,
+	}).Error; err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+	for i, sport := range []string{"basketball", "football", "football"} {
+		status := "inprogress"
+		if i == 2 {
+			status = "finished"
+		}
+		if err := db.Create(&Event{
+			SofaScoreEventId: int64(3001 + i),
+			Sport:            sport,
+			StatusType:       status,
+			StartTimestamp:   now + int64((i+1)*3600_000),
+			LeagueId:         league.ID,
+			HomeTeamId:       5001, AwayTeamId: 5002,
+		}).Error; err != nil {
+			t.Fatalf("seed decoy: %v", err)
+		}
+	}
+
+	got, _, err := repo.ListPage(context.Background(), EventsPageFilter{
+		Limit:      10,
+		Direction:  "asc",
+		Sport:      "football",
+		Status:     "notstarted",
+		LeagueName: "Primera",
+		TeamName:   "Barcelona",
+	})
+	if err != nil {
+		t.Fatalf("ListPage: %v", err)
+	}
+	if len(got) != 1 || got[0].SofaScoreEventId != 3000 {
+		t.Fatalf("want only event 3000 (football + notstarted + Primera + Barcelona), got %d events: %+v", len(got), got)
+	}
+}
+
+func TestListPage_LikeInputEscapesWildcards(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepository(db)
+	now := time.Now().UnixMilli()
+	for i, name := range []string{"Alpha FC", "Beta United", "Alphas"} {
+		tm := &Team{TeamId: int64(6000 + i), Name: name}
+		if err := db.Create(tm).Error; err != nil {
+			t.Fatalf("seed team: %v", err)
+		}
+		if err := db.Create(&Event{
+			SofaScoreEventId: int64(7000 + i),
+			Sport:            "football", StatusType: "notstarted",
+			StartTimestamp:   now + int64(i*3600_000),
+			HomeTeamId:       tm.TeamId,
+		}).Error; err != nil {
+			t.Fatalf("seed event: %v", err)
+		}
+	}
+
+	got, _, err := repo.ListPage(context.Background(), EventsPageFilter{
+		Limit: 10, Direction: "asc", TeamName: "A%",
+	})
+	if err != nil {
+		t.Fatalf("ListPage: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 events (Alpha FC + Alphas), got %d: %+v", len(got), got)
 	}
 }
 

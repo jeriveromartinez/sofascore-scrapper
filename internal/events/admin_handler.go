@@ -68,7 +68,12 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 		id = parsedID
 	}
 
-	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), startTimestamp, id, limit, direction)
+	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), EventsPageFilter{
+		CursorStartTimestamp: startTimestamp,
+		CursorID:             id,
+		Limit:                limit,
+		Direction:            direction,
+	})
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
