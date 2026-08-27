@@ -9,7 +9,7 @@ const pagination = useCursorPagination<SofaScoreEvent>({
   routeName: "Events",
   defaultSize: 20,
   fetchPage: async (cursor, size) => {
-    const page: EventPageResponse = await eventsApiService.getEventPage(cursor, size, "desc");
+    const page: EventPageResponse = await eventsApiService.getEventPage(cursor, size, { dir: "desc" });
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",
