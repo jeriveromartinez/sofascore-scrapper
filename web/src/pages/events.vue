@@ -1,15 +1,42 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { useCursorPagination } from "../composables/useCursorPagination";
 import { eventsApiService } from "../store/services";
-import type { EventPageResponse, SofaScoreEvent } from "../store/services/models";
+import type { EventPageResponse, EventsPageFilters, SofaScoreEvent } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
+import EventsFilterBar from "./EventsFilterBar.vue";
+
+function detectBrowserTZ(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) return tz;
+  } catch {
+    // fall through
+  }
+  return "UTC";
+}
+
+function todayInBrowserTZ(): string {
+  // ISO YYYY-MM-DD in the browser's local timezone.
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+const filters = ref<EventsPageFilters>({
+  direction: "asc",
+  from: todayInBrowserTZ(),
+  tz: detectBrowserTZ(),
+});
 
 const pagination = useCursorPagination<SofaScoreEvent>({
   routeName: "Events",
   defaultSize: 20,
+  filters: () => filters.value,
   fetchPage: async (cursor, size) => {
-    const page: EventPageResponse = await eventsApiService.getEventPage(cursor, size, "desc");
+    const page: EventPageResponse = await eventsApiService.getEventPage(cursor, size, filters.value);
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",
@@ -18,14 +45,17 @@ const pagination = useCursorPagination<SofaScoreEvent>({
   },
 });
 
+function onFiltersChange(newFilters: EventsPageFilters): void {
+  filters.value = newFilters;
+  void pagination.setFilters(newFilters as Record<string, unknown>);
+}
+
 onMounted(() => pagination.loadPage());
 </script>
 
 <template>
   <div class="card">
-    <div
-      class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center"
-    >
+    <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
       <div>
         <h5 class="mb-0">Eventos</h5>
       </div>
@@ -39,12 +69,12 @@ onMounted(() => pagination.loadPage());
     </div>
 
     <div class="card-body">
+      <EventsFilterBar :model-value="filters" @update:model-value="onFiltersChange" />
+
       <div v-if="pagination.state.error" class="alert alert-danger">
         {{ pagination.state.error }}
       </div>
-      <div v-if="pagination.state.loading" class="alert alert-info">
-        Cargando eventos...
-      </div>
+      <div v-if="pagination.state.loading" class="alert alert-info">Cargando eventos...</div>
 
       <div v-if="pagination.state.data.length > 0" class="table-responsive">
         <table class="table table-sm table-striped align-middle">
@@ -60,12 +90,8 @@ onMounted(() => pagination.loadPage());
           </thead>
           <tbody>
             <tr v-for="event in pagination.state.data" :key="event.id">
-              <td class="d-none d-md-table-cell">
-                {{ event.sofaScoreEventId }}
-              </td>
-              <td class="d-none d-lg-table-cell">
-                {{ event.league?.name || "-" }}
-              </td>
+              <td class="d-none d-md-table-cell">{{ event.sofaScoreEventId }}</td>
+              <td class="d-none d-lg-table-cell">{{ event.league?.name || "-" }}</td>
               <td class="d-none d-lg-table-cell">{{ event.sport }}</td>
               <td>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -122,7 +148,7 @@ onMounted(() => pagination.loadPage());
       </div>
 
       <div v-else-if="!pagination.state.loading" class="text-center text-muted">
-        No hay eventos disponibles
+        No hay eventos disponibles con los filtros actuales
       </div>
     </div>
   </div>

@@ -3,6 +3,7 @@ import { defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter, RouterView } from "vue-router";
 import { mount } from "@vue/test-utils";
 import { useCursorPagination } from "./useCursorPagination";
+import type { UseCursorPaginationOptions } from "./useCursorPagination";
 
 function makeFetchSpy(responses: Array<{ data: unknown[]; nextCursor: string; hasMore: boolean }>) {
   const spy = vi.fn(async (_cursor: string | undefined, _size: number) => {
@@ -65,7 +66,7 @@ describe("useCursorPagination", () => {
   });
 
   it("uses cached cursor when present, otherwise walks forward", async () => {
-    sessionStorage.setItem("pagination:Test:page-1", "cached-cursor-1");
+    sessionStorage.setItem("pagination:Test:default:10:page-1", "cached-cursor-1");
     const fetch = makeFetchSpy([
       { data: [{ id: 1 }], nextCursor: "next-1", hasMore: true },
     ]);
@@ -91,7 +92,7 @@ describe("useCursorPagination", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[0]).toEqual([undefined, 10]);
     expect(fetch.mock.calls[1]).toEqual(["c-1", 10]);
-    expect(sessionStorage.getItem("pagination:Test:page-2")).toBe("c-2");
+    expect(sessionStorage.getItem("pagination:Test:default:10:page-2")).toBe("c-2");
   });
 
   it("goNext advances page, caches cursor, updates URL", async () => {
@@ -108,11 +109,11 @@ describe("useCursorPagination", () => {
 
     expect(composable.state.page).toBe(2);
     expect(router.currentRoute.value.query.page).toBe("2");
-    expect(sessionStorage.getItem("pagination:Test:page-2")).toBe("c-2");
+    expect(sessionStorage.getItem("pagination:Test:default:10:page-2")).toBe("c-2");
   });
 
   it("goPrev re-fetches the previous page with the cached cursor", async () => {
-    sessionStorage.setItem("pagination:Test:page-1", "c-0");
+    sessionStorage.setItem("pagination:Test:default:10:page-1", "c-0");
     const fetch = makeFetchSpy([
       { data: [{ id: 2 }], nextCursor: "c-2", hasMore: true },
       { data: [{ id: 1 }], nextCursor: "c-1", hasMore: false },
@@ -131,7 +132,7 @@ describe("useCursorPagination", () => {
   });
 
   it("setSize resets to page 1, clears the cache, updates URL", async () => {
-    sessionStorage.setItem("pagination:Test:page-2", "c-2");
+    sessionStorage.setItem("pagination:Test:default:10:page-2", "c-2");
     const fetch = makeFetchSpy([
       { data: [], nextCursor: "", hasMore: false },
     ]);
@@ -146,11 +147,11 @@ describe("useCursorPagination", () => {
     expect(composable.state.size).toBe(50);
     expect(router.currentRoute.value.query.page).toBe("1");
     expect(router.currentRoute.value.query.size).toBe("50");
-    expect(sessionStorage.getItem("pagination:Test:page-2")).toBeNull();
+    expect(sessionStorage.getItem("pagination:Test:default:10:page-2")).toBeNull();
   });
 
   it("reload re-fetches the current page using the cursor that got us here", async () => {
-    sessionStorage.setItem("pagination:Test:page-1", "c-0");
+    sessionStorage.setItem("pagination:Test:default:10:page-1", "c-0");
     const fetch = makeFetchSpy([
       { data: [{ id: 2 }], nextCursor: "c-2", hasMore: true },
       { data: [{ id: 2, fresh: true }], nextCursor: "c-2", hasMore: true },
@@ -182,5 +183,90 @@ describe("useCursorPagination", () => {
     expect(composable.state.page).toBe(2);
     expect(router.currentRoute.value.query.page).toBe("2");
     expect(composable.state.data).toEqual([{ id: 2 }]);
+  });
+});
+
+describe("useCursorPagination filters", () => {
+  beforeEach(() => sessionStorage.clear());
+  afterEach(() => sessionStorage.clear());
+
+  function makeOpts(filtersValue: Record<string, unknown>) {
+    const opts: UseCursorPaginationOptions<unknown> = {
+      routeName: "Test",
+      defaultSize: 10,
+      filters: () => filtersValue,
+      fetchPage: vi.fn(async () => ({ data: [], nextCursor: "", hasMore: false })),
+    };
+    return opts;
+  }
+
+  it("setFilters resets to page 1, clears the cache for the new filter set, updates URL", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/:pathMatch(.*)*", component: { render: () => h(RouterView) } }],
+    });
+    await router.push("/?page=2&size=10");
+    await router.isReady();
+    sessionStorage.setItem("pagination:Test:sport=\"football\":10:page-2", "old-cursor");
+
+    let composable!: ReturnType<typeof useCursorPagination<unknown>>;
+    const Host = defineComponent({
+      setup() {
+        composable = useCursorPagination<unknown>(makeOpts({ sport: "football" }));
+        return () => h("div");
+      },
+    });
+    mount(Host, { global: { plugins: [router] } });
+    await nextTick();
+
+    await composable.setFilters({ sport: "basketball" });
+    await nextTick();
+
+    expect(composable.state.page).toBe(1);
+    expect(router.currentRoute.value.query.page).toBe("1");
+    expect(sessionStorage.getItem("pagination:Test:sport=\"football\":10:page-2")).toBeNull();
+  });
+
+  it("cache key includes filter hash — different filters get separate cache entries", async () => {
+    const fetchA = vi.fn(async () => ({
+      data: [{ id: "A" }], nextCursor: "c-A", hasMore: false,
+    }));
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/:pathMatch(.*)*", component: { render: () => h(RouterView) } }],
+    });
+    await router.push("/");
+    await router.isReady();
+
+    let composable!: ReturnType<typeof useCursorPagination<unknown>>;
+    const Host = defineComponent({
+      setup() {
+        composable = useCursorPagination<unknown>({
+          routeName: "Test", defaultSize: 10,
+          filters: () => ({ sport: "football" }),
+          fetchPage: fetchA,
+        });
+        return () => h("div");
+      },
+    });
+    mount(Host, { global: { plugins: [router] } });
+    await nextTick();
+
+    await composable.loadPage(1);
+    await nextTick();
+    expect(composable.state.data).toEqual([{ id: "A" }]);
+
+    await composable.setFilters({ sport: "basketball" });
+    await nextTick();
+
+    const expectedFootballKey = `pagination:Test:sport="football":10:page-1`;
+    const expectedBasketballKey = `pagination:Test:sport="basketball":10:page-1`;
+
+    expect(sessionStorage.getItem(expectedFootballKey)).toBe("c-A");
+
+    const basketballCache = sessionStorage.getItem(expectedBasketballKey);
+    expect(basketballCache === null || basketballCache === "c-B").toBe(true);
+    expect(basketballCache).not.toBe("c-A");
   });
 });

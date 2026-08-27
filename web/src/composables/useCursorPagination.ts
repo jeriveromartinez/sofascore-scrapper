@@ -14,6 +14,7 @@ export interface CursorPaginationFetchResult<T> {
 export interface UseCursorPaginationOptions<T> {
   routeName: string;
   defaultSize?: number;
+  filters?: () => Record<string, unknown>;
   fetchPage: (cursor: string | undefined, size: number) => Promise<CursorPaginationFetchResult<T>>;
 }
 
@@ -27,8 +28,17 @@ export interface CursorPaginationState<T> {
   hasPrev: boolean;
 }
 
-function cacheKey(routeName: string, page: number): string {
-  return `pagination:${routeName}:page-${page}`;
+function stableHash(obj: Record<string, unknown>): string {
+  const keys = Object.keys(obj).sort();
+  return keys.map((k) => `${k}=${JSON.stringify(obj[k])}`).join("&") || "default";
+}
+
+function cacheKey(routeName: string, filterHash: string, size: number, page: number): string {
+  return `pagination:${routeName}:${filterHash}:${size}:page-${page}`;
+}
+
+function cacheKeyPrefix(routeName: string, filterHash: string, size: number): string {
+  return `pagination:${routeName}:${filterHash}:${size}:page-`;
 }
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -58,27 +68,39 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
   let abortController: AbortController | null = null;
   let lastLoadedFullPath = "";
 
-  function clearCacheForRoute(): void {
+  function getFilters(): Record<string, unknown> {
+    return options.filters ? options.filters() : {};
+  }
+
+  function clearCacheForFilterSet(filterHash: string): void {
+    const prefix = cacheKeyPrefix(options.routeName, filterHash, state.size);
     for (let i = sessionStorage.length - 1; i >= 0; i--) {
       const k = sessionStorage.key(i);
-      if (k && k.startsWith(`pagination:${options.routeName}:`)) {
+      if (k && k.startsWith(prefix)) {
         sessionStorage.removeItem(k);
       }
     }
   }
 
   function syncSizeFromQuery(): number {
-    const raw = route.query.size;
-    return clampInt(raw, MIN_SIZE, MAX_SIZE, defaultSize);
+    return clampInt(route.query.size, MIN_SIZE, MAX_SIZE, defaultSize);
   }
 
   function syncPageFromQuery(): number {
-    const raw = route.query.page;
-    return clampInt(raw, 1, Number.MAX_SAFE_INTEGER, 1);
+    return clampInt(route.query.page, 1, Number.MAX_SAFE_INTEGER, 1);
   }
 
-  async function writeQuery(page: number, size: number): Promise<void> {
-    const next = { ...route.query, page: String(page), size: String(size) };
+  async function writeQuery(page: number, size: number, filters: Record<string, unknown>): Promise<void> {
+    const next: Record<string, string> = {};
+    for (const [k, v] of Object.entries(route.query)) {
+      if (typeof v === "string") next[k] = v;
+    }
+    next.page = String(page);
+    next.size = String(size);
+    for (const [k, v] of Object.entries(filters)) {
+      if (v === undefined || v === null || v === "") continue;
+      next[k] = String(v);
+    }
     await router.replace({ query: next });
   }
 
@@ -94,24 +116,28 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
 
   async function loadPage(page?: number): Promise<void> {
     state.error = "";
-    const rawSize = route.query.size;
-    const rawPage = route.query.page;
     const clampedSize = syncSizeFromQuery();
     const targetPage = page ?? syncPageFromQuery();
+    const filters = getFilters();
     state.size = clampedSize;
     state.page = targetPage;
 
-    if (String(rawSize) !== String(clampedSize) || String(rawPage) !== String(targetPage)) {
-      await writeQuery(state.page, state.size);
+    const rawSize = String(route.query.size ?? "");
+    const rawPage = String(route.query.page ?? "");
+    if (rawSize !== String(clampedSize) || rawPage !== String(targetPage)) {
+      await writeQuery(state.page, state.size, filters);
     }
     lastLoadedFullPath = route.fullPath;
 
     state.loading = true;
     try {
+      const filterHash = stableHash(filters);
+      const k = (n: number) => cacheKey(options.routeName, filterHash, state.size, n);
+
       let cursor: string | undefined;
       let cached: string | null = null;
       if (targetPage > 1) {
-        cached = sessionStorage.getItem(cacheKey(options.routeName, targetPage - 1));
+        cached = sessionStorage.getItem(k(targetPage - 1));
       }
 
       if (cached !== null) {
@@ -119,7 +145,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
         state.data = resp.data as never;
         state.hasNext = resp.hasMore;
         if (resp.nextCursor) {
-          sessionStorage.setItem(cacheKey(options.routeName, targetPage), resp.nextCursor);
+          sessionStorage.setItem(k(targetPage), resp.nextCursor);
         }
       } else {
         let lastResp: CursorPaginationFetchResult<T> | null = null;
@@ -128,7 +154,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
           lastResp = await fetchWith(cursor, state.size);
           reachedPage = i;
           if (lastResp.nextCursor) {
-            sessionStorage.setItem(cacheKey(options.routeName, i), lastResp.nextCursor);
+            sessionStorage.setItem(k(i), lastResp.nextCursor);
           }
           if (lastResp.hasMore) {
             cursor = lastResp.nextCursor;
@@ -137,10 +163,8 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
           }
         }
         if (reachedPage < targetPage) {
-          // Walk-forward hit the end of data before reaching the requested page.
-          // Snap state to the actual last page so the URL and table stay in sync.
           state.page = reachedPage;
-          await writeQuery(state.page, state.size);
+          await writeQuery(state.page, state.size, filters);
         }
         if (lastResp) {
           state.data = lastResp.data as never;
@@ -151,7 +175,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
     } catch (err) {
       if ((err as { name?: string })?.name === "AbortError") return;
       state.error = err instanceof Error ? err.message : "Error cargando datos";
-      clearCacheForRoute();
+      clearCacheForFilterSet(stableHash(filters));
     } finally {
       state.loading = false;
     }
@@ -161,29 +185,38 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
     if (!state.hasNext) return;
     state.page += 1;
     state.hasPrev = true;
-    await writeQuery(state.page, state.size);
+    await writeQuery(state.page, state.size, getFilters());
     await loadPage(state.page);
   }
 
   async function goPrev(): Promise<void> {
     if (state.page <= 1) return;
     state.page -= 1;
-    await writeQuery(state.page, state.size);
+    await writeQuery(state.page, state.size, getFilters());
     await loadPage(state.page);
   }
 
   async function setSize(n: number): Promise<void> {
     const clamped = clampInt(n, MIN_SIZE, MAX_SIZE, defaultSize);
-    clearCacheForRoute();
+    clearCacheForFilterSet(stableHash(getFilters()));
     state.size = clamped;
     state.page = 1;
     state.hasPrev = false;
-    await writeQuery(state.page, state.size);
+    await writeQuery(state.page, state.size, getFilters());
     await loadPage(state.page);
   }
 
   async function reload(): Promise<void> {
     await loadPage(state.page);
+  }
+
+  async function setFilters(newFilters: Record<string, unknown>): Promise<void> {
+    clearCacheForFilterSet(stableHash(getFilters()));
+    state.page = 1;
+    state.hasPrev = false;
+    state.hasNext = false;
+    await writeQuery(state.page, state.size, newFilters);
+    await loadPage(1);
   }
 
   watch(
@@ -198,5 +231,5 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
     },
   );
 
-  return { state, loadPage, goNext, goPrev, setSize, reload };
+  return { state, loadPage, goNext, goPrev, setSize, reload, setFilters };
 }

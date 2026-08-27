@@ -1,6 +1,11 @@
 import { BaseApiService } from "./BaseApiService";
 import { EventsList, EventPage } from "../../proto/api";
-import type { EventsQuery, EventsResponse, EventPageResponse } from "./models";
+import type {
+  EventsQuery,
+  EventsResponse,
+  EventPageResponse,
+  EventsPageFilters,
+} from "./models";
 
 function toQueryString(query: EventsQuery): string {
   const params = new URLSearchParams();
@@ -26,12 +31,18 @@ export class EventsApiService extends BaseApiService {
   async getEventPage(
     cursor?: string,
     limit?: number,
-    direction: "asc" | "desc" = "asc",
+    filters: EventsPageFilters = {},
   ): Promise<EventPageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
-    params.set("direction", direction);
+    if (filters.direction) params.set("direction", filters.direction);
+    if (filters.from) params.set("from", filters.from);
+    if (filters.tz) params.set("tz", filters.tz);
+    if (filters.sport) params.set("sport", filters.sport);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.league) params.set("league", filters.league);
+    if (filters.team) params.set("team", filters.team);
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
     return this.get(url, EventPage);
