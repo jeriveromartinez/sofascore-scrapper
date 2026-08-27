@@ -210,6 +210,45 @@ func TestHandleGetEventsPage_MalformedFrom_400(t *testing.T) {
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want 400, got %d", recorder.Code)
 	}
+
+	body := map[string]string{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if !strings.Contains(body["error"], "YYYY-MM-DD") {
+		t.Errorf("error should explain the expected 'from' format; got %q", body["error"])
+	}
+	if strings.Contains(body["error"], "UTC") {
+		t.Errorf("error should not claim 'from' is interpreted in UTC; got %q", body["error"])
+	}
+}
+
+func TestHandleGetEventsPage_FromInUserTZ(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	// Midnight of 2026-08-27 in Pacific/Auckland (NZST, UTC+12) is 2026-08-26T12:00Z.
+	// Interpreting the same date in UTC would push the boundary 12 hours later,
+	// so an event inside that window is the discriminator.
+	beforeAucklandMidnight := time.Date(2026, 8, 26, 11, 0, 0, 0, time.UTC)
+	afterAucklandMidnight := time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC)
+	if err := db.Create(&[]Event{
+		{SofaScoreEventId: 6000, StartTimestamp: beforeAucklandMidnight.UnixMilli(), Sport: "football", StatusType: "notstarted"},
+		{SofaScoreEventId: 6001, StartTimestamp: afterAucklandMidnight.UnixMilli(), Sport: "football", StatusType: "notstarted"},
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(db),
+		"/events/page?from=2026-08-27&tz=Pacific/Auckland&limit=10")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 6001 {
+		ids := make([]int64, 0, len(response.Data))
+		for _, e := range response.Data {
+			ids = append(ids, e.SofaScoreEventId)
+		}
+		t.Fatalf("want only event 6001 ('from' parsed in Pacific/Auckland, not UTC), got %v", ids)
+	}
 }
 
 func TestHandleGetEventsPage_FromInNonUTCBoundary(t *testing.T) {

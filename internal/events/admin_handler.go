@@ -47,16 +47,17 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 	}
 
 	tz := c.DefaultQuery("tz", "UTC")
-	if _, err := time.LoadLocation(tz); err != nil {
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
 		server.RespondError(c, http.StatusBadRequest, "invalid tz: must be a valid IANA timezone (e.g. UTC, America/Santo_Domingo)")
 		return
 	}
 
 	var fromMs int64
 	if raw := c.Query("from"); raw != "" {
-		t, err := time.ParseInLocation("2006-01-02", raw, time.UTC)
+		t, err := time.ParseInLocation("2006-01-02", raw, loc)
 		if err != nil {
-			server.RespondError(c, http.StatusBadRequest, "from must use YYYY-MM-DD format (UTC)")
+			server.RespondError(c, http.StatusBadRequest, "from must use YYYY-MM-DD format (interpreted in tz)")
 			return
 		}
 		fromMs = t.UnixMilli()
