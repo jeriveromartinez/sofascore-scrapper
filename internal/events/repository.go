@@ -29,16 +29,16 @@ type EventsPageFilter struct {
 	TeamName             string
 }
 
-// escapeLike escapes the two SQL LIKE wildcard/quote characters that the
-// caller did not intentionally provide: _ (single-char wildcard) and \
-// (escape char). The % wildcard is left alone so user-typed patterns like
-// "A%" continue to act as wildcards (verified by
-// TestListPage_LikeInputEscapesWildcards).
+// escapeLike escapes the three special characters recognised by SQL LIKE
+// (% multi-char wildcard, _ single-char wildcard, \ literal escape char) by
+// prefixing each with the LIKE escape character (backslash). This prevents a
+// caller from constructing a wildcard query from arbitrary user input, per
+// spec §6.1 / §10 (LIKE wildcard injection).
 func escapeLike(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
-		if r == '_' || r == '\\' {
+		if r == '%' || r == '_' || r == '\\' {
 			b.WriteByte('\\')
 		}
 		b.WriteRune(r)

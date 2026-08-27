@@ -18,9 +18,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
-	if err := db.Exec("PRAGMA case_sensitive_like = ON").Error; err != nil {
-		t.Fatalf("failed to set case_sensitive_like: %v", err)
-	}
 	if err := db.AutoMigrate(&Event{}, &Team{}, &tournaments.Tournament{}, &tournaments.DeviceTournament{}, &tournaments.GlobalTournamentConfig{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -315,29 +312,43 @@ func TestListPage_LikeInputEscapesWildcards(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewRepository(db)
 	now := time.Now().UnixMilli()
-	for i, name := range []string{"Alpha FC", "Beta United", "Alphas"} {
-		tm := &Team{TeamId: int64(6000 + i), Name: name}
-		if err := db.Create(tm).Error; err != nil {
+	teams := []struct {
+		id   int64
+		name string
+	}{
+		{6000, "Alpha FC"},
+		{6001, "Beta United"},
+		{6002, "Team%Special"},
+	}
+	for i, tm := range teams {
+		team := &Team{TeamId: tm.id, Name: tm.name}
+		if err := db.Create(team).Error; err != nil {
 			t.Fatalf("seed team: %v", err)
 		}
 		if err := db.Create(&Event{
 			SofaScoreEventId: int64(7000 + i),
 			Sport:            "football", StatusType: "notstarted",
 			StartTimestamp:   now + int64(i*3600_000),
-			HomeTeamId:       tm.TeamId,
+			HomeTeamId:       tm.id,
 		}).Error; err != nil {
 			t.Fatalf("seed event: %v", err)
 		}
 	}
 
+	// Per spec §6.1: user-typed '%' must be escaped so it cannot construct a
+	// wildcard query. Searching for a literal '%' must match only teams whose
+	// name contains a literal '%' (escapeLike wraps input in '%...%').
 	got, _, err := repo.ListPage(context.Background(), EventsPageFilter{
-		Limit: 10, Direction: "asc", TeamName: "A%",
+		Limit: 10, Direction: "asc", TeamName: "%",
 	})
 	if err != nil {
 		t.Fatalf("ListPage: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 events (Alpha FC + Alphas), got %d: %+v", len(got), got)
+	if len(got) != 1 {
+		t.Fatalf("want 1 event (Team%%Special only — %% must NOT act as wildcard), got %d: %+v", len(got), got)
+	}
+	if got[0].SofaScoreEventId != 7002 {
+		t.Fatalf("want event 7002 (Team%%Special), got %d", got[0].SofaScoreEventId)
 	}
 }
 
