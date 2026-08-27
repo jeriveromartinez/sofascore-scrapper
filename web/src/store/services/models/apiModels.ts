@@ -53,6 +53,16 @@ export interface EventsQuery {
   limit?: number;
 }
 
+export interface EventsPageFilters {
+  dir?: "asc" | "desc";
+  from?: string;
+  tz?: string;
+  sport?: string;
+  status?: string;
+  league?: string;
+  team?: string;
+}
+
 export type Device = ProtoDevice;
 export type RegisterDevicePayload = DeviceRegisterRequest;
 export type PlaybackLog = ProtoPlaybackLog;
