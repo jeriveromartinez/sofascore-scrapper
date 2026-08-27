@@ -11,7 +11,7 @@ describe("EventsApiService.getEventPage", () => {
       return { data: [], page: { nextCursor: "", hasMore: false } };
     };
     await svc.getEventPage(undefined, 10, { dir: "desc" });
-    expect(captured[0]).toContain("dir=desc");
+    expect(captured[0]).toContain("direction=desc");
     expect(captured[0]).toContain("limit=10");
   });
 
@@ -43,7 +43,7 @@ describe("EventsApiService.getEventPage filter serialization", () => {
     await svc.getEventPage(undefined, 20, filters);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const url = fetchSpy.mock.calls[0][0] as string;
-    expect(url).toContain("dir=desc");
+    expect(url).toContain("direction=desc");
     expect(url).toContain("from=2026-08-26");
     expect(url).toContain("tz=America%2FSanto_Domingo");
     expect(url).toContain("sport=football");

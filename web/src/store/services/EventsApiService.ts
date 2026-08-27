@@ -36,7 +36,7 @@ export class EventsApiService extends BaseApiService {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
-    if (filters.dir) params.set("dir", filters.dir);
+    if (filters.dir) params.set("direction", filters.dir);
     if (filters.from) params.set("from", filters.from);
     if (filters.tz) params.set("tz", filters.tz);
     if (filters.sport) params.set("sport", filters.sport);
