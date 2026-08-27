@@ -17,7 +17,7 @@ const localFallbackMaxKeys = 10_000
 
 var (
 	RateLimitAuth      = redisplatform.RateLimitPolicy{Limit: 10, Window: time.Minute}
-	RateLimitAdmin     = redisplatform.RateLimitPolicy{Limit: 300, Window: time.Minute}
+	RateLimitAdmin     = redisplatform.RateLimitPolicy{Limit: 600, Window: time.Minute}
 	RateLimitDeviceReg = redisplatform.RateLimitPolicy{Limit: 20, Window: time.Minute}
 	RateLimitAppRead   = redisplatform.RateLimitPolicy{Limit: 120, Window: time.Minute}
 	RateLimitPlayback  = redisplatform.RateLimitPolicy{Limit: 30, Window: time.Minute}
