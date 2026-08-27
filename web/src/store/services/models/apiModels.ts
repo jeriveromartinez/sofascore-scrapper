@@ -54,7 +54,7 @@ export interface EventsQuery {
 }
 
 export interface EventsPageFilters {
-  dir?: "asc" | "desc";
+  direction?: "asc" | "desc";
   from?: string;
   tz?: string;
   sport?: string;

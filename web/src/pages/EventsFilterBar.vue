@@ -22,7 +22,7 @@ function commit(patch: Partial<EventsPageFilters>): void {
 }
 
 function toggleDir(): void {
-  commit({ dir: props.modelValue.dir === "asc" ? "desc" : "asc" });
+  commit({ direction: props.modelValue.direction === "asc" ? "desc" : "asc" });
 }
 
 function debouncedText(field: "league" | "team", value: string): void {
@@ -40,7 +40,7 @@ function debouncedText(field: "league" | "team", value: string): void {
 watch(leagueInput, (v) => debouncedText("league", v));
 watch(teamInput, (v) => debouncedText("team", v));
 
-const isAsc = computed(() => props.modelValue.dir !== "desc");
+const isAsc = computed(() => props.modelValue.direction !== "desc");
 </script>
 
 <template>

@@ -26,7 +26,7 @@ function todayInBrowserTZ(): string {
 }
 
 const filters = ref<EventsPageFilters>({
-  dir: "asc",
+  direction: "asc",
   from: todayInBrowserTZ(),
   tz: detectBrowserTZ(),
 });
