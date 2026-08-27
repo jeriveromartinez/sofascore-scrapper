@@ -165,3 +165,75 @@ func TestHandleGetEventsPage_RejectsInvalidDirection(t *testing.T) {
 		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
 	}
 }
+
+func TestHandleGetEventsPage_DefaultsFromToTodayUTC(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	now := time.Now()
+	if err := db.Create(&[]Event{
+		{SofaScoreEventId: 4000, StartTimestamp: now.Add(-25 * time.Hour).UnixMilli(), Sport: "football", StatusType: "notstarted"},
+		{SofaScoreEventId: 4001, StartTimestamp: now.Add(time.Hour).UnixMilli(), Sport: "football", StatusType: "notstarted"},
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?limit=10")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 4001 {
+		t.Fatalf("want only the future event (id 4001), got %d events", len(response.Data))
+	}
+}
+
+func TestHandleGetEventsPage_InvalidTZ_400(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?tz=Mars/Olympus_Mons&limit=10")
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "tz") {
+		t.Errorf("error should mention 'tz', got %s", recorder.Body.String())
+	}
+}
+
+func TestHandleGetEventsPage_InvalidStatus_400(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?status=paused&limit=10")
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d", recorder.Code)
+	}
+}
+
+func TestHandleGetEventsPage_MalformedFrom_400(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?from=not-a-date&limit=10")
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d", recorder.Code)
+	}
+}
+
+func TestHandleGetEventsPage_FromInNonUTCBoundary(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	anchor := time.Date(2026, 8, 26, 3, 30, 0, 0, time.UTC)
+	if err := db.Create(&Event{
+		SofaScoreEventId: 5000, StartTimestamp: anchor.Add(-30 * time.Minute).UnixMilli(),
+		Sport: "football", StatusType: "notstarted",
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := db.Create(&Event{
+		SofaScoreEventId: 5001, StartTimestamp: anchor.Add(time.Hour).UnixMilli(),
+		Sport: "football", StatusType: "notstarted",
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(db),
+		"/events/page?tz=America/Santo_Domingo&limit=10")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
+	}
+	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 5001 {
+		t.Fatalf("want only event 5001 (post-midnight in TZ), got %d events", len(response.Data))
+	}
+}

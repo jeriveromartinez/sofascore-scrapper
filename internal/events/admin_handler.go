@@ -3,6 +3,7 @@ package events
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,23 +33,51 @@ func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerD
 const defaultPageLimit = 20
 
 func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
-	cursorRaw := c.Query("cursor")
-	limitStr := c.Query("limit")
 	direction := c.DefaultQuery("direction", "asc")
 	if direction != "asc" && direction != "desc" {
 		server.RespondError(c, http.StatusBadRequest, "direction must be 'asc' or 'desc'")
 		return
 	}
+
 	limit := defaultPageLimit
-	if limitStr != "" {
+	if limitStr := c.Query("limit"); limitStr != "" {
 		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 100 {
 			limit = parsed
 		}
 	}
 
-	var startTimestamp int64
-	var id uint
-	if cursorRaw != "" {
+	tz := c.DefaultQuery("tz", "UTC")
+	if _, err := time.LoadLocation(tz); err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid tz: must be a valid IANA timezone (e.g. UTC, America/Santo_Domingo)")
+		return
+	}
+
+	var fromMs int64
+	if raw := c.Query("from"); raw != "" {
+		t, err := time.ParseInLocation("2006-01-02", raw, time.UTC)
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "from must use YYYY-MM-DD format (UTC)")
+			return
+		}
+		fromMs = t.UnixMilli()
+	} else {
+		computed, err := startOfTodayMs(tz)
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid tz: must be a valid IANA timezone")
+			return
+		}
+		fromMs = computed
+	}
+
+	status, ok := parseEventStatus(c.Query("status"))
+	if !ok {
+		server.RespondError(c, http.StatusBadRequest, "status must be one of: inprogress, notstarted, finished")
+		return
+	}
+
+	var cursorStartTimestamp int64
+	var cursorID uint
+	if cursorRaw := c.Query("cursor"); cursorRaw != "" {
 		keys, err := pagination.Decode(cursorRaw, 2)
 		if err != nil {
 			server.RespondError(c, http.StatusBadRequest, "invalid cursor")
@@ -59,21 +88,38 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 			server.RespondError(c, http.StatusBadRequest, "invalid cursor: bad timestamp")
 			return
 		}
-		startTimestamp = parsedTS
+		cursorStartTimestamp = parsedTS
 		parsedID, err := server.ParseID(keys[1])
 		if err != nil {
 			server.RespondError(c, http.StatusBadRequest, "invalid cursor: bad id")
 			return
 		}
-		id = parsedID
+		cursorID = parsedID
 	}
 
-	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), EventsPageFilter{
-		CursorStartTimestamp: startTimestamp,
-		CursorID:             id,
+	sport := strings.TrimSpace(c.Query("sport"))
+	league := strings.TrimSpace(c.Query("league"))
+	team := strings.TrimSpace(c.Query("team"))
+	if len(league) < 2 {
+		league = ""
+	}
+	if len(team) < 2 {
+		team = ""
+	}
+
+	filter := EventsPageFilter{
+		CursorStartTimestamp: cursorStartTimestamp,
+		CursorID:             cursorID,
 		Limit:                limit,
 		Direction:            direction,
-	})
+		FromTimestampMs:      fromMs,
+		Sport:                sport,
+		Status:               status,
+		LeagueName:           league,
+		TeamName:             team,
+	}
+
+	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), filter)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -99,6 +145,31 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 			HasMore:    hasMore,
 		},
 	})
+}
+
+func startOfTodayMs(tz string) (int64, error) {
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().In(loc)
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).UnixMilli(), nil
+}
+
+var validEventStatuses = map[string]struct{}{
+	"inprogress": {},
+	"notstarted": {},
+	"finished":   {},
+}
+
+func parseEventStatus(raw string) (string, bool) {
+	if raw == "" {
+		return "", true
+	}
+	if _, ok := validEventStatuses[raw]; !ok {
+		return "", false
+	}
+	return raw, true
 }
 
 func (h *AdminHandler) handleGetEvents(c *gin.Context) {
