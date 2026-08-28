@@ -121,7 +121,11 @@ func (h *AdminHandler) handleGetPlayback(c *gin.Context) {
 		return
 	}
 
-	total := h.repo.TotalCount()
+	total, err := h.repo.TotalCount(c.Request.Context())
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	server.RespondProto(c, http.StatusOK, PlaybackListToProto(logs, total))
 }
