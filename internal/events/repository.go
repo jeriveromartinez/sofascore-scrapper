@@ -125,45 +125,6 @@ func (r *Repository) upsertTeam(ctx context.Context, team *Team) error {
 	return nil
 }
 
-func (r *Repository) Upsert(ctx context.Context, events []Event, sport string) error {
-	now := time.Now().Unix()
-	for i := range events {
-		event := &events[i]
-		event.ScrapedAt = now
-		event.Sport = sport
-
-		if event.HomeTeamModel != nil {
-			if err := r.upsertTeam(ctx, event.HomeTeamModel); err != nil {
-				return err
-			}
-		}
-
-		if event.AwayTeamModel != nil {
-			if err := r.upsertTeam(ctx, event.AwayTeamModel); err != nil {
-				return err
-			}
-		}
-
-		if event.League != nil {
-			r.db.WithContext(nil).FirstOrCreate(event.League, tournaments.Tournament{Slug: event.League.Slug})
-		}
-
-		result := r.db.WithContext(nil).Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "sofa_score_event_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"sport", "home_score", "away_score",
-				"home_team_id", "away_team_id",
-				"start_timestamp", "current_period_start_timestamp",
-				"slug", "league_id", "status_type", "scraped_at",
-			}),
-		}).Create(event)
-		if result.Error != nil {
-			return result.Error
-		}
-	}
-	return nil
-}
-
 func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, batchSize int) error {
 	if batchSize <= 0 {
 		batchSize = 500

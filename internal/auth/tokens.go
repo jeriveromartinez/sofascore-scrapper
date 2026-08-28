@@ -3,6 +3,8 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -32,11 +34,24 @@ type TokenService struct {
 	now    func() time.Time
 }
 
+// MinJWTSecretLength is the minimum acceptable length for JWT_SECRET.
+// 32 bytes is the project policy (see docs/operations/runbook.md) and
+// matches the OWASP recommendation for HS256 signing keys.
+const MinJWTSecretLength = 32
+
+// ErrJWTSecretTooShort is returned by NewTokenService when the
+// supplied secret is below MinJWTSecretLength.
+var ErrJWTSecretTooShort = errors.New("JWT secret is too short")
+
 func NewTokenService(secret string) (*TokenService, error) {
-	if strings.TrimSpace(secret) == "" {
+	trimmed := strings.TrimSpace(secret)
+	if trimmed == "" {
 		return nil, config.ErrJWTSecretRequired
 	}
-	return &TokenService{secret: []byte(secret), now: time.Now}, nil
+	if len(trimmed) < MinJWTSecretLength {
+		return nil, fmt.Errorf("%w: must be at least %d characters (got %d)", ErrJWTSecretTooShort, MinJWTSecretLength, len(trimmed))
+	}
+	return &TokenService{secret: []byte(trimmed), now: time.Now}, nil
 }
 
 func (ts *TokenService) GenerateAccessToken(userID uint, username string) (string, error) {

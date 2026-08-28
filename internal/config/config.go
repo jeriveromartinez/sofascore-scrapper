@@ -9,7 +9,14 @@ import (
 	"time"
 )
 
-var ErrJWTSecretRequired = errors.New("JWT_SECRET is required")
+var (
+	ErrJWTSecretRequired = errors.New("JWT_SECRET is required")
+	ErrJWTSecretTooShort  = errors.New("JWT_SECRET is too short")
+)
+
+// MinJWTSecretLength is the minimum acceptable length for JWT_SECRET.
+// 32 characters is the project policy (see docs/operations/runbook.md).
+const MinJWTSecretLength = 32
 
 type Database struct {
 	Host            string
@@ -55,6 +62,9 @@ func Load() (Config, error) {
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	if secret == "" {
 		return Config{}, ErrJWTSecretRequired
+	}
+	if len(secret) < MinJWTSecretLength {
+		return Config{}, fmt.Errorf("%w: must be at least %d characters (got %d)", ErrJWTSecretTooShort, MinJWTSecretLength, len(secret))
 	}
 
 	return Config{

@@ -17,7 +17,7 @@ import (
 )
 
 func TestRouterIgnoresForwardedForByDefault(t *testing.T) {
-	router := newClientIPTestRouter(t, config.Config{JWTSecret: "test-secret"})
+	router := newClientIPTestRouter(t, config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"})
 	req := httptest.NewRequest(http.MethodGet, "/test/client-ip", nil)
 	req.RemoteAddr = "203.0.113.10:1234"
 	req.Header.Set("X-Forwarded-For", "198.51.100.25")
@@ -34,7 +34,7 @@ func TestRouterIgnoresForwardedForByDefault(t *testing.T) {
 }
 
 func TestRouterUsesForwardedForOnlyFromTrustedProxy(t *testing.T) {
-	cfg := config.Config{JWTSecret: "test-secret"}
+	cfg := config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"}
 	cfg.HTTP.TrustedProxies = []string{"203.0.113.10"}
 	router := newClientIPTestRouter(t, cfg)
 
@@ -76,7 +76,7 @@ func newClientIPTestRouter(t *testing.T, cfg config.Config) *gin.Engine {
 
 func newTestRouter(t *testing.T, cfg config.Config) *gin.Engine {
 	t.Helper()
-	tokens, err := auth.NewTokenService("test-secret")
+	tokens, err := auth.NewTokenService("this-is-a-test-secret-with-enough-length")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func newTestRouter(t *testing.T, cfg config.Config) *gin.Engine {
 }
 
 func TestCrashReportInheritsOneMiBBodyLimit(t *testing.T) {
-	router := newTestRouter(t, config.Config{JWTSecret: "test-secret"})
+	router := newTestRouter(t, config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"})
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/app/v1/crash-report",
@@ -106,7 +106,7 @@ func TestCrashReportInheritsAppIPRateLimit(t *testing.T) {
 	server.RateLimitAppRead.Window = time.Minute
 	t.Cleanup(func() { server.RateLimitAppRead = originalPolicy })
 
-	router := newTestRouter(t, config.Config{JWTSecret: "test-secret"})
+	router := newTestRouter(t, config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"})
 	request := func() *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/app/v1/crash-report", strings.NewReader("{"))
 		req.RemoteAddr = "203.0.113.20:1234"
@@ -125,7 +125,7 @@ func TestCrashReportInheritsAppIPRateLimit(t *testing.T) {
 }
 
 func TestAdminRateLimitRunsBeforeProtectedHandler(t *testing.T) {
-	tokens, err := auth.NewTokenService("test-secret")
+	tokens, err := auth.NewTokenService("this-is-a-test-secret-with-enough-length")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestAdminRateLimitRunsBeforeProtectedHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	router := NewRouter(nil, nil, config.Config{JWTSecret: "test-secret"}, tokens, nil)
+	router := NewRouter(nil, nil, config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"}, tokens, nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/web/v1/apk/uploads", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -155,11 +155,11 @@ func TestAdminRateLimitRunsBeforeProtectedHandler(t *testing.T) {
 }
 
 func TestRouteCompatibility(t *testing.T) {
-	tokens, err := auth.NewTokenService("test-secret")
+	tokens, err := auth.NewTokenService("this-is-a-test-secret-with-enough-length")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Config{JWTSecret: "test-secret"}
+	cfg := config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"}
 	router := NewRouter(nil, nil, cfg, tokens, nil)
 	got := make(map[string]bool)
 	for _, route := range router.Routes() {

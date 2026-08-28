@@ -119,6 +119,10 @@ func (h *Handler) handleCreate(c *gin.Context) {
 		server.RespondError(c, http.StatusBadRequest, "email and password are required")
 		return
 	}
+	if err := ValidatePassword(req.Password); err != nil {
+		server.RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	user, err := h.repo.Create(req.Email, req.Password)
 	if err != nil {
@@ -140,6 +144,15 @@ func (h *Handler) handleUpdate(c *gin.Context) {
 	if err := server.ParseProtoBody(c, &req); err != nil || req.Email == "" {
 		server.RespondError(c, http.StatusBadRequest, "email is required")
 		return
+	}
+	// Only validate the password if the caller is actually changing it.
+	// An admin updating only the email should not be forced to re-submit
+	// a strong password.
+	if req.Password != "" {
+		if err := ValidatePassword(req.Password); err != nil {
+			server.RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	user, err := h.repo.Update(id, req.Email, req.Password)
