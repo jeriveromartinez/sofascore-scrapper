@@ -1,0 +1,88 @@
+groups:
+  - name: sofascore-app
+    interval: 30s
+    rules:
+      # Health probe: /health/ready must return 200. The probe check is
+      # performed by Prometheus via blackbox_exporter or a synthetic
+      # scrape; we publish the result as `probe_success`. If you do
+      # not run blackbox_exporter, replace this expression with
+      # `up{job="sofascore-backends"} == 0`.
+      - alert: sofascore_health_probe_failure
+        expr: probe_success{instance=~".*sofascore.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: sofascore-scrapper
+        annotations:
+          summary: "Health probe failing for sofascore-scrapper"
+          description: |
+            The /health/ready probe for {{ $labels.instance }} has been
+            failing for 2 minutes. The readiness probe in
+            internal/server/health.go checks both MariaDB and Redis
+            connectivity. See docs/operations/runbook.md,
+            "Alert: sofascore_health_probe_failure".
+
+      # Scrape failure rate. The scraper publishes requests and errors
+      # via the `scrape_requests_total` counter; a healthy run has the
+      # error ratio below 5% over a 5-minute window.
+      - alert: sofascore_scrape_failure_rate
+        expr: |
+          (
+            sum(rate(scrape_requests_total{status="error"}[5m]))
+            /
+            sum(rate(scrape_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: sofascore-scrapper
+        annotations:
+          summary: "SofaScore scrape error rate above 5% for 5 minutes"
+          description: |
+            The scraper's error rate is
+            {{ $value | humanizePercentage }} over the last 5 minutes.
+            See docs/operations/runbook.md,
+            "Alert: sofascore_scrape_failure_rate".
+
+      # Goroutine leak: go_goroutines is published by the default
+      # Go collector. A steadily increasing trend without a return to
+      # baseline indicates a leak.
+      - alert: sofascore_goroutine_leak_high
+        expr: |
+          deriv(go_goroutines[10m]) > 5
+          and
+          go_goroutines > 200
+        for: 15m
+        labels:
+          severity: warning
+          service: sofascore-scrapper
+        annotations:
+          summary: "Goroutine count trending up for 15 minutes"
+          description: |
+            The Go process on {{ $labels.instance }} is gaining more than
+            5 goroutines per 10 minutes and is now above 200 in total.
+            See docs/operations/runbook.md,
+            "Alert: sofascore_goroutine_leak_high".
+
+      # Connection pool exhaustion: sql_in_use_connections equals
+      # sql_open_connections and the application is also waiting for
+      # more connections, which means new queries are blocking.
+      - alert: sofascore_db_connection_pool_exhausted
+        expr: |
+          sql_in_use_connections >= sql_open_connections
+          and
+          sql_open_connections > 0
+          and
+          increase(sql_wait_count_total[2m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: sofascore-scrapper
+        annotations:
+          summary: "DB connection pool exhausted on {{ $labels.instance }}"
+          description: |
+            All SQL connections are in use and at least one waiter has
+            accumulated in the last 2 minutes. The DB is the bottleneck
+            or a long-running query is blocking the pool. See
+            docs/operations/runbook.md,
+            "Alert: sofascore_db_connection_pool_exhausted".
