@@ -200,14 +200,21 @@ func (c *Client) loadCookies(ctx context.Context, pubReferer string) error {
 	return nil
 }
 
-func (c *Client) refreshCookies(ctx context.Context) {
+// refreshCookies resets the cookie jar and re-fetches the home page.
+// It returns the error from loadCookies (instead of swallowing it)
+// so the caller can log a structured warning — operators otherwise
+// have no visibility into a transient 403/5xx that breaks all
+// downstream API calls. On success, cookieLoaded is set to true;
+// on failure it stays false so the next request retries the load.
+func (c *Client) refreshCookies(ctx context.Context) error {
 	c.cookieMu.Lock()
 	defer c.cookieMu.Unlock()
 
 	if err := c.loadCookies(ctx, ""); err != nil {
-		return
+		return err
 	}
 	c.cookieLoaded.Store(true)
+	return nil
 }
 
 func (c *Client) backoffDuration(attempt int) time.Duration {
@@ -330,7 +337,12 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 		case http.StatusUnauthorized:
 			if !refreshedCookie {
 				refreshedCookie = true
-				c.refreshCookies(ctx)
+				if refreshErr := c.refreshCookies(ctx); refreshErr != nil {
+					// The cookie refresh failed. Log it so operators
+					// can see the transient failure; the retry loop
+					// will try one more time anyway.
+					return nil, fmt.Errorf("scraper: cookie refresh failed: %w", refreshErr)
+				}
 				continue
 			}
 			return nil, fmt.Errorf("scraper: HTTP 401")
