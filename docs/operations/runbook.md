@@ -82,6 +82,18 @@
 
 ## Alert Response
 
+The alert rules referenced below ship with the repository at
+[`deployments/prometheus/alerts.yml`](../prometheus/alerts.yml) and are
+loaded by the Prometheus container in `deployments/docker/compose.multi.yml`
+via the `rule_files` directive. Operators can validate the rules
+locally with:
+
+```bash
+docker run --rm -v "$PWD/deployments/prometheus:/rules" \
+  prom/prometheus:v3.6.0 \
+  promtool check rules /rules/alerts.yml
+```
+
 ### Alert: `sofascore_health_probe_failure`
 
 **Trigger:** `/health/ready` returns non-200.
