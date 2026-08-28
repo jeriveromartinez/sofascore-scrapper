@@ -48,6 +48,7 @@ type HTTP struct {
 type Config struct {
 	APIAddr           string
 	PprofAddr         string
+	PprofEnabled      bool
 	JWTSecret         string
 	APKStoragePath    string
 	ImageStoragePath  string
@@ -70,6 +71,7 @@ func Load() (Config, error) {
 	return Config{
 		APIAddr:           getEnv("API_ADDR", ":8080"),
 		PprofAddr:         getEnv("PPROF_ADDR", ""),
+		PprofEnabled:      getBool("ENABLE_PPROF", false),
 		JWTSecret:         secret,
 		APKStoragePath:    getEnv("APK_STORAGE_PATH", "./apk_storage"),
 		ImageStoragePath:  getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
@@ -143,6 +145,24 @@ func getInt(key string, fallback int) int {
 		return fallback
 	}
 	return i
+}
+
+// getBool reads a boolean env var. Accepts the same set as
+// strconv.ParseBool ("1", "t", "T", "TRUE", "true", "True", "0",
+// "f", "F", "FALSE", "false", "False"). Empty string returns the
+// fallback; an invalid value falls back to fallback and writes a
+// warning to stderr.
+func getBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: invalid boolean for %s=%q, using default %v: %v\n", key, v, fallback, err)
+		return fallback
+	}
+	return b
 }
 
 func (c Config) Validate() error {

@@ -163,6 +163,61 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("JWT_SECRET", "this-is-a-test-secret-with-enough-length")
 }
 
+func TestPprofEnabledDefaultsToFalse(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ENABLE_PPROF", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PprofEnabled {
+		t.Fatal("PprofEnabled should default to false (opt-in)")
+	}
+}
+
+func TestPprofEnabledTrue(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ENABLE_PPROF", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.PprofEnabled {
+		t.Fatal("PprofEnabled should be true when ENABLE_PPROF=true")
+	}
+}
+
+func TestPprofEnabledFalseExplicit(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ENABLE_PPROF", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PprofEnabled {
+		t.Fatal("PprofEnabled should be false when ENABLE_PPROF=false")
+	}
+}
+
+func TestPprofAddrDoesNotImplyEnabled(t *testing.T) {
+	// Setting PPROF_ADDR without ENABLE_PPROF must NOT enable pprof.
+	// This is the core fix: an operator who copies a stale PPROF_ADDR
+	// line into a new .env must not silently expose /debug/pprof/*.
+	setRequiredEnv(t)
+	t.Setenv("PPROF_ADDR", ":6060")
+	t.Setenv("ENABLE_PPROF", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PprofAddr != ":6060" {
+		t.Fatalf("PprofAddr=%q, want :6060", cfg.PprofAddr)
+	}
+	if cfg.PprofEnabled {
+		t.Fatal("PprofEnabled should be false; setting PPROF_ADDR alone must not enable pprof")
+	}
+}
+
 func TestDatabasePoolDefaults(t *testing.T) {
 	setRequiredEnv(t)
 	cfg, err := Load()

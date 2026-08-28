@@ -122,7 +122,7 @@ docker run --rm -v "$PWD/deployments/prometheus:/rules" \
 **Trigger:** Goroutine count steadily increases without returning to baseline.
 
 **Response:**
-1. Connect to pprof endpoint (if enabled): `go tool pprof http://$HOST:6060/debug/pprof/goroutine`
+1. Connect to pprof endpoint (if enabled — requires `ENABLE_PPROF=true` AND `PPROF_ADDR` to be set; pprof is OFF by default): `go tool pprof http://$HOST:$PPROF_PORT/debug/pprof/goroutine`
 2. Identify blocking goroutines and leaked goroutines.
 3. Check Redis lock renewals — a hung lock renewer can leak goroutines.
 4. If necessary, perform a rolling restart of affected instances.
