@@ -486,7 +486,7 @@ func createTestEventWithLeague(repo *Repository, sofaID int64, leagueID uint, st
 		Slug:                        "test-event",
 		LeagueId:                    leagueID,
 		StatusType:                  statusType,
-		HomeTeamModel:               &tm,
 	}
-	return repo.Upsert(context.Background(), []Event{event}, "football")
+	batch := ScrapeBatch{Teams: []Team{tm}, Events: []Event{event}}
+	return repo.UpsertScrapeBatch(context.Background(), batch, 500)
 }
