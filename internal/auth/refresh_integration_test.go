@@ -4,6 +4,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -75,7 +76,7 @@ func TestRotateRefreshToken_ConcurrentOnlyOneSucceeds(t *testing.T) {
 	for err := range results {
 		if err == nil {
 			successCount++
-		} else if err == ErrInvalidRefreshToken {
+		} else if errors.Is(err, ErrInvalidRefreshToken) {
 			failCount++
 		}
 	}
@@ -121,7 +122,7 @@ func TestRotateRefreshToken_ZeroRowsAffectedReturnsErrInvalidRefreshToken(t *tes
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
 	err := repo.RotateRefreshToken(context.Background(), userID, oldID, newID, expiresAt)
-	if err != ErrInvalidRefreshToken {
+	if !errors.Is(err, ErrInvalidRefreshToken) {
 		t.Fatalf("expected ErrInvalidRefreshToken, got %v", err)
 	}
 }
@@ -144,7 +145,7 @@ func TestRotateRefreshToken_AlreadyRevokedReturnsErrInvalidRefreshToken(t *testi
 	}
 
 	err = repo.RotateRefreshToken(context.Background(), userID, oldID, newID, expiresAt)
-	if err != ErrInvalidRefreshToken {
+	if !errors.Is(err, ErrInvalidRefreshToken) {
 		t.Fatalf("expected ErrInvalidRefreshToken for revoked token, got %v", err)
 	}
 }
@@ -168,7 +169,7 @@ func TestRotateRefreshToken_ExpiredTokenReturnsErrInvalidRefreshToken(t *testing
 	}
 
 	err = repo.RotateRefreshToken(context.Background(), userID, oldID, newID, expiresAt)
-	if err != ErrInvalidRefreshToken {
+	if !errors.Is(err, ErrInvalidRefreshToken) {
 		t.Fatalf("expected ErrInvalidRefreshToken for expired token, got %v", err)
 	}
 }

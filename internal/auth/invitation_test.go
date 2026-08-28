@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"os"
 	"sync"
 	"testing"
@@ -96,7 +97,7 @@ func TestConsumeInvitationConcurrentOnlyOneSucceeds(t *testing.T) {
 	for _, err := range results {
 		if err == nil {
 			successCount++
-		} else if err == ErrInvalidInvitation {
+		} else if errors.Is(err, ErrInvalidInvitation) {
 			failCount++
 		}
 	}

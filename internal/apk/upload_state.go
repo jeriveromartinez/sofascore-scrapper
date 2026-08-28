@@ -3,6 +3,7 @@ package apk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -296,7 +297,7 @@ func (s *UploadStateStore) Get(ctx context.Context, id uuid.UUID) (*UploadSessio
 	metaKey := fmt.Sprintf(uploadMetaKeyFmt, id.String())
 	raw, err := s.client.Get(ctx, metaKey).Result()
 	if err != nil {
-		if err == goredis.Nil {
+		if errors.Is(err, goredis.Nil) {
 			return nil, fmt.Errorf("upload not found")
 		}
 		return nil, fmt.Errorf("get upload: %w", err)

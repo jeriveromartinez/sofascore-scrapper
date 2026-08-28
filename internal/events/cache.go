@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -37,7 +38,7 @@ func (c *redisCache) Get(ctx context.Context, key string) ([]byte, bool, error) 
 		return nil, false, nil
 	}
 	val, err := c.client.Get(ctx, key).Bytes()
-	if err == goredis.Nil {
+	if errors.Is(err, goredis.Nil) {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -73,7 +74,7 @@ func (e *EpochStore) Get(ctx context.Context) (int64, error) {
 		return 0, nil
 	}
 	val, err := e.client.Get(ctx, epochKey).Result()
-	if err == goredis.Nil {
+	if errors.Is(err, goredis.Nil) {
 		return 0, nil
 	}
 	if err != nil {
