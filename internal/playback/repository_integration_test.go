@@ -174,3 +174,45 @@ func TestStartInsertFailureRollsBackEverything(t *testing.T) {
 		t.Errorf("device last_seen was updated despite cancelled context, got %d", updatedDev.LastSeen)
 	}
 }
+
+// TestTotalCountReturnsErrorOnCancelledContext verifies that
+// TotalCount propagates the request context. The previous
+// implementation discarded the gorm error via `_ =`, so a
+// cancelled context would silently return a (stale) zero.
+func TestTotalCountReturnsErrorOnCancelledContext(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepository(db)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	count, err := repo.TotalCount(ctx)
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
+	}
+	if count != 0 {
+		t.Errorf("count = %d, want 0 on error", count)
+	}
+}
+
+// TestTotalCountReturnsActualCount is the happy-path counterpart:
+// with an open context the function must return the persisted
+// count and no error.
+func TestTotalCountReturnsActualCount(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepository(db)
+
+	dev := devices.Device{Token: "totals"}
+	db.Create(&dev)
+	for i := 0; i < 5; i++ {
+		db.Create(&PlaybackLog{DeviceID: dev.ID, Content: "ch", StartedAt: int64(i * 100)})
+	}
+
+	count, err := repo.TotalCount(context.Background())
+	if err != nil {
+		t.Fatalf("TotalCount: %v", err)
+	}
+	if count != 5 {
+		t.Errorf("count = %d, want 5", count)
+	}
+}

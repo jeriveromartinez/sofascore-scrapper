@@ -90,6 +90,21 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
     return clampInt(route.query.page, 1, Number.MAX_SAFE_INTEGER, 1);
   }
 
+  // Read filter values from the current URL query (excluding page and
+  // size). Used by setFilters to compute the cache key for the
+  // PREVIOUS filter set — the caller updates its local filters ref
+  // before invoking setFilters, so getFilters() no longer reflects
+  // the old value. Also used by the URL watcher to detect
+  // filter-only changes (deep-link, back/forward).
+  function readFiltersFromQuery(): Record<string, unknown> {
+    const filters: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(route.query)) {
+      if (k === "page" || k === "size") continue;
+      if (typeof v === "string") filters[k] = v;
+    }
+    return filters;
+  }
+
   async function writeQuery(page: number, size: number, filters: Record<string, unknown>): Promise<void> {
     const next: Record<string, string> = {};
     for (const [k, v] of Object.entries(route.query)) {
@@ -211,7 +226,12 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
   }
 
   async function setFilters(newFilters: Record<string, unknown>): Promise<void> {
-    clearCacheForFilterSet(stableHash(getFilters()));
+    // The caller (e.g. events.vue:48-50) updates its local filters
+    // ref BEFORE invoking setFilters, so getFilters() now returns the
+    // NEW filter set. The cache we need to clear belongs to the OLD
+    // filter set, which is still in the URL.
+    const oldFilters = readFiltersFromQuery();
+    clearCacheForFilterSet(stableHash(oldFilters));
     state.page = 1;
     state.hasPrev = false;
     state.hasNext = false;
@@ -225,7 +245,10 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
       if (route.fullPath === lastLoadedFullPath) return;
       const newPage = syncPageFromQuery();
       const newSize = syncSizeFromQuery();
-      if (newPage !== state.page || newSize !== state.size) {
+      const urlFilters = readFiltersFromQuery();
+      const currentFilters = getFilters();
+      const filtersChanged = stableHash(urlFilters) !== stableHash(currentFilters);
+      if (newPage !== state.page || newSize !== state.size || filtersChanged) {
         void loadPage(newPage);
       }
     },

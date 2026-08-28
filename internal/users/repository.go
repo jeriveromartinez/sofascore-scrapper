@@ -56,6 +56,13 @@ func (r *Repository) Create(email, password string) (*User, error) {
 	return user, result.Error
 }
 
+// UpdatePassword overwrites the stored bcrypt hash for a user. It is
+// the storage-layer entry point used by the auth package's lazy-rehash
+// on login (when the existing hash is below the current cost).
+func (r *Repository) UpdatePassword(id uint, hash string) error {
+	return r.db.Model(&User{}).Where("id = ?", id).Update("password", hash).Error
+}
+
 func (r *Repository) GetByEmail(email string) (*User, error) {
 	var user User
 	result := r.db.Where("email = ?", email).First(&user)
@@ -137,8 +144,15 @@ func (r *Repository) Delete(id uint) error {
 	})
 }
 
+// bcryptCost is the work factor for new password hashes stored via
+// the user repository. Mirrors auth.bcryptCost (12) so that new
+// accounts land directly at the current cost and do not require a
+// lazy rehash on first login. Keep in sync with
+// internal/auth/password.go's bcryptCost.
+const bcryptCost = 12
+
 func hashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		return "", err
 	}
