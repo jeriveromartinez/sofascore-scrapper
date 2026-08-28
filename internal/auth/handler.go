@@ -199,12 +199,13 @@ func (h *AuthHandler) handleLogout(c *gin.Context) {
 		return
 	}
 
-	refreshToken := c.GetHeader("X-Refresh-Token")
-	if refreshToken != "" {
+	// Targeted logout: caller must present a refresh token in the
+	// X-Refresh-Token header. We only revoke the specific token that
+	// matches the authenticated user.
+	if refreshToken := c.GetHeader("X-Refresh-Token"); refreshToken != "" {
 		claims, err := h.tokens.ParseRefreshToken(refreshToken)
 		if err == nil {
-			refreshUserID, userErr := claims.UserID()
-			if userErr == nil && refreshUserID == userID {
+			if refreshUserID, userErr := claims.UserID(); userErr == nil && refreshUserID == userID {
 				if err := h.authRepo.RevokeRefreshToken(userID, claims.ID); err != nil {
 					server.RespondError(c, http.StatusInternalServerError, "logout failed")
 					return
@@ -213,6 +214,20 @@ func (h *AuthHandler) handleLogout(c *gin.Context) {
 				return
 			}
 		}
+		// Header was present but unparseable, or did not match the
+		// authenticated user — fall through to the 400 branch instead of
+		// silently cascading into revoke-all. A stale tab without a
+		// refresh token must not be able to wipe every other active
+		// session for the same account.
+		server.RespondError(c, http.StatusBadRequest, "missing or invalid X-Refresh-Token; pass ?all=true to revoke every session")
+		return
+	}
+
+	// Bulk logout: explicit opt-in via ?all=true revokes every active
+	// session for the user. Without this flag, refuse rather than guess.
+	if c.Query("all") != "true" {
+		server.RespondError(c, http.StatusBadRequest, "missing or invalid X-Refresh-Token; pass ?all=true to revoke every session")
+		return
 	}
 
 	if err := h.authRepo.RevokeAllRefreshTokens(userID); err != nil {
