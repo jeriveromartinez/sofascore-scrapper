@@ -5,6 +5,7 @@ import { useCursorPagination } from "../composables/useCursorPagination";
 import DomainFormModal from "./DomainFormModal.vue";
 import { domainsApiService, usersApiService } from "../store/services";
 import type { Domain, DomainPageResponse, User } from "../store/services/models";
+import PaginationControls from "../components/PaginationControls.vue";
 
 const modalRef = ref<InstanceType<typeof DomainFormModal> | null>(null);
 const users = ref<User[]>([]);
@@ -151,22 +152,11 @@ onMounted(async () => {
           </tbody>
         </table>
 
-        <div class="d-flex justify-content-between align-items-center mt-3">
-          <button
-            class="btn btn-outline-secondary"
-            :disabled="!pagination.state.hasPrev || pagination.state.loading"
-            @click="pagination.goPrev()"
-          >
-            Anterior
-          </button>
-          <button
-            class="btn btn-outline-secondary"
-            :disabled="!pagination.state.hasNext || pagination.state.loading"
-            @click="pagination.goNext()"
-          >
-            Siguiente
-          </button>
-        </div>
+        <PaginationControls
+          :state="pagination.state"
+          @prev="pagination.goPrev()"
+          @next="pagination.goNext()"
+        />
       </div>
 
       <div v-else-if="!pagination.state.loading" class="text-center text-muted">

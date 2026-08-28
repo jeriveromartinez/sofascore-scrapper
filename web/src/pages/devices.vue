@@ -4,6 +4,7 @@ import { useCursorPagination } from "../composables/useCursorPagination";
 import { devicesApiService } from "../store/services";
 import type { Device, DevicePageResponse } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
+import PaginationControls from "../components/PaginationControls.vue";
 
 const pagination = useCursorPagination<Device>({
   routeName: "Devices",
@@ -74,24 +75,11 @@ onMounted(() => pagination.loadPage());
         v-if="pagination.state.data.length > 0"
         class="d-flex gap-2 mt-3 align-items-center justify-content-between"
       >
-        <div class="d-flex gap-2">
-          <button
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="!pagination.state.hasPrev || pagination.state.loading"
-            @click="pagination.goPrev()"
-          >
-            <span class="d-none d-sm-inline">Anterior</span>
-            <span class="d-inline d-sm-none">&lt;</span>
-          </button>
-          <button
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="!pagination.state.hasNext || pagination.state.loading"
-            @click="pagination.goNext()"
-          >
-            <span class="d-none d-sm-inline">Siguiente</span>
-            <span class="d-inline d-sm-none">&gt;</span>
-          </button>
-        </div>
+        <PaginationControls
+          :state="pagination.state"
+          @prev="pagination.goPrev()"
+          @next="pagination.goNext()"
+        />
       </div>
     </div>
   </div>

@@ -8,6 +8,7 @@ import type {
   ApkPageResponse,
   ApkVersionInfo,
 } from "../../store/services/models";
+import PaginationControls from "../../components/PaginationControls.vue";
 
 const editModal = ref<typeof apkEditUrlModal>();
 
@@ -123,20 +124,11 @@ onMounted(() => pagination.loadPage());
           </table>
 
           <div class="d-flex justify-content-between align-items-center mt-3">
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              :disabled="!pagination.state.hasPrev || pagination.state.loading"
-              @click="pagination.goPrev()"
-            >
-              Anterior
-            </button>
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              :disabled="!pagination.state.hasNext || pagination.state.loading"
-              @click="pagination.goNext()"
-            >
-              Siguiente
-            </button>
+            <PaginationControls
+              :state="pagination.state"
+              @prev="pagination.goPrev()"
+              @next="pagination.goNext()"
+            />
           </div>
         </div>
         <p
