@@ -59,10 +59,16 @@ func (r *Repository) GetList(page, limit int) ([]*PlaybackLog, error) {
 	return logs, result.Error
 }
 
-func (r *Repository) TotalCount() int64 {
+// TotalCount returns the total number of playback log rows. The
+// previous implementation discarded the gorm error with `_ =` and
+// took no context — a cancelled context would silently return a
+// stale zero. This version propagates both.
+func (r *Repository) TotalCount(ctx context.Context) (int64, error) {
 	var count int64
-	_ = r.db.Model(&PlaybackLog{}).Count(&count)
-	return count
+	if err := r.db.WithContext(ctx).Model(&PlaybackLog{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (r *Repository) ListPage(ctx context.Context, createdAtStr string, id uint, limit int) ([]PlaybackLog, bool, error) {

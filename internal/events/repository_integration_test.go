@@ -38,95 +38,15 @@ func createTestEvent(repo *Repository, sofaID int64, statusType string, startTs 
 		Slug:                        "test-event",
 		LeagueId:                    1,
 		StatusType:                  statusType,
-		HomeTeamModel:               &tm,
 	}
-	return repo.Upsert(context.Background(), []Event{event}, "football")
+	batch := ScrapeBatch{Teams: []Team{tm}, Events: []Event{event}}
+	return repo.UpsertScrapeBatch(context.Background(), batch, 500)
 }
 
-func TestUpsert_CreatesNewEvent(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewRepository(db)
-
-	err := createTestEvent(repo, 1, "inprogress", 1710000000000, 1710000000000)
-	if err != nil {
-		t.Fatalf("Upsert failed: %v", err)
-	}
-
-	var count int64
-	db.Model(&Event{}).Where("sofa_score_event_id = ?", 1).Count(&count)
-	if count != 1 {
-		t.Errorf("expected 1 event, got %d", count)
-	}
-}
-
-func TestUpsert_UpdatesMutableColumns(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewRepository(db)
-
-	createTestEvent(repo, 1, "notstarted", 1710000000000, 0)
-	oldScraped := int64(0)
-	db.Model(&Event{}).Where("sofa_score_event_id = ?", 1).Pluck("scraped_at", &oldScraped)
-
-	time.Sleep(time.Second)
-
-	homeTeam := Team{TeamId: 999, Name: "Team Updated"}
-	awayTeam := Team{TeamId: 888, Name: "Away Updated"}
-	updatedEvent := Event{
-		SofaScoreEventId:            1,
-		Sport:                       "basketball",
-		HomeScore:                   10,
-		HomeTeamId:                  999,
-		AwayScore:                   5,
-		AwayTeamId:                  888,
-		StartTimestamp:              1720000000000,
-		CurrentPeriodStartTimestamp: 1720000000000,
-		Slug:                        "updated-slug",
-		LeagueId:                    2,
-		StatusType:                  "finished",
-		HomeTeamModel:               &homeTeam,
-		AwayTeamModel:               &awayTeam,
-	}
-	if err := repo.Upsert(context.Background(), []Event{updatedEvent}, "basketball"); err != nil {
-		t.Fatalf("Upsert failed: %v", err)
-	}
-
-	var event Event
-	db.Where("sofa_score_event_id = ?", 1).First(&event)
-
-	if event.Sport != "basketball" {
-		t.Errorf("sport: want basketball, got %s", event.Sport)
-	}
-	if event.HomeScore != 10 {
-		t.Errorf("home_score: want 10, got %d", event.HomeScore)
-	}
-	if event.AwayScore != 5 {
-		t.Errorf("away_score: want 5, got %d", event.AwayScore)
-	}
-	if event.HomeTeamId != 999 {
-		t.Errorf("home_team_id: want 999, got %d", event.HomeTeamId)
-	}
-	if event.AwayTeamId != 888 {
-		t.Errorf("away_team_id: want 888, got %d", event.AwayTeamId)
-	}
-	if event.StartTimestamp != 1720000000000 {
-		t.Errorf("start_timestamp: want 1720000000000, got %d", event.StartTimestamp)
-	}
-	if event.CurrentPeriodStartTimestamp != 1720000000000 {
-		t.Errorf("current_period_start_timestamp: want 1720000000000, got %d", event.CurrentPeriodStartTimestamp)
-	}
-	if event.Slug != "updated-slug" {
-		t.Errorf("slug: want updated-slug, got %s", event.Slug)
-	}
-	if event.LeagueId != 2 {
-		t.Errorf("league_id: want 2, got %d", event.LeagueId)
-	}
-	if event.StatusType != "finished" {
-		t.Errorf("status_type: want finished, got %s", event.StatusType)
-	}
-	if event.ScrapedAt == 0 {
-		t.Errorf("scraped_at should be set")
-	}
-}
+// Note: TestUpsert_CreatesNewEvent and TestUpsert_UpdatesMutableColumns
+// were removed in #52 — they tested the dead Upsert method which has
+// been replaced by UpsertScrapeBatch (which is the production path and
+// has its own dedicated tests in batch_integration_test.go).
 
 func TestGetCurrentAndUpcoming_ExcludesFinished(t *testing.T) {
 	db := setupTestDB(t)
@@ -211,18 +131,9 @@ func TestGetCurrentAndUpcoming_UpcomingByStatusTypeAndStartTimestamp(t *testing.
 	}
 }
 
-func TestUpsert_ErrorReturned(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewRepository(db)
-
-	event := Event{SofaScoreEventId: 1, Sport: "football"}
-	if err := repo.Upsert(context.Background(), []Event{event}, "football"); err != nil {
-		t.Fatalf("first Upsert should succeed: %v", err)
-	}
-	if err := repo.Upsert(context.Background(), []Event{event}, "football"); err != nil {
-		t.Errorf("upsert with conflict should not error: %v", err)
-	}
-}
+// Note: TestUpsert_ErrorReturned was removed in #52 — it tested the
+// dead Upsert method. The replacement path is UpsertScrapeBatch
+// (covered by batch_integration_test.go).
 
 func TestListPage_SportFilter(t *testing.T) {
 	db := setupTestDB(t)
@@ -352,31 +263,7 @@ func TestListPage_LikeInputEscapesWildcards(t *testing.T) {
 	}
 }
 
-func TestUpsertPersistsLocalLogoURLs(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewRepository(db)
-	repo.scheduleLogo = func(_ *gorm.DB, _ int64, _ string) {}
-
-	const remoteURL = "https://img.sofascore.com/api/v1/team/10/image"
-	home := &Team{TeamId: 10, Name: "Home", LogoUrl: remoteURL}
-	away := &Team{TeamId: 20, Name: "Away", LogoUrl: remoteURL}
-	event := Event{
-		SofaScoreEventId: 1,
-		HomeTeamId:       10,
-		AwayTeamId:       20,
-		HomeTeamModel:    home,
-		AwayTeamModel:    away,
-		StatusType:       "notstarted",
-	}
-	if err := repo.Upsert(context.Background(), []Event{event}, "football"); err != nil {
-		t.Fatalf("Upsert: %v", err)
-	}
-
-	var teams []Team
-	if err := db.Order("team_id").Find(&teams).Error; err != nil {
-		t.Fatalf("load teams: %v", err)
-	}
-	if len(teams) != 2 || teams[0].LogoUrl != "/teams/logo/10" || teams[1].LogoUrl != "/teams/logo/20" {
-		t.Fatalf("persisted teams = %#v", teams)
-	}
-}
+// Note: TestUpsertPersistsLocalLogoURLs was removed in #52 — it tested
+// the dead Upsert method. The replacement path is UpsertScrapeBatch
+// (covered by TestUpsertScrapeBatch_PersistsLocalLogoURLAndSchedulesRemoteSource
+// in batch_integration_test.go).

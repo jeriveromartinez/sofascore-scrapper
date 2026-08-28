@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,6 +35,10 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 	var req pb.AuthRequest
 	if err := server.ParseProtoBody(c, &req); err != nil || req.Email == "" || req.Password == "" {
 		server.RespondError(c, http.StatusBadRequest, "email and password are required")
+		return
+	}
+	if err := ValidatePassword(req.Password); err != nil {
+		server.RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if req.InvitationToken == "" {
@@ -104,10 +110,31 @@ func (h *AuthHandler) handleLogin(c *gin.Context) {
 		server.RespondError(c, http.StatusBadRequest, "email and password are required")
 		return
 	}
-	user, err := h.userRepo.GetByEmail(req.Email)
-	if err != nil || !CheckPassword(user.Password, req.Password) {
+	// Normalize: trim surrounding whitespace from the email before
+	// lookup. Password normalization is handled inside bcrypt and
+	// the validator (which already trims).
+	email := strings.TrimSpace(req.Email)
+	user, err := h.userRepo.GetByEmail(email)
+	if err != nil {
 		server.RespondError(c, http.StatusUnauthorized, "invalid credentials")
 		return
+	}
+	// Lazy rehash: VerifyAndUpgrade re-hashes the stored password at
+	// the current bcrypt cost (12) when the existing hash is below it.
+	// The login is rejected only when the bcrypt comparison fails;
+	// the upgrade is best-effort and logged.
+	upgradedHash, verifyErr := VerifyAndUpgrade(user.Password, req.Password)
+	if verifyErr != nil {
+		server.RespondError(c, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	if upgradedHash != "" {
+		if updateErr := h.userRepo.UpdatePassword(user.ID, upgradedHash); updateErr != nil {
+			slog.Default().Warn("auth: failed to upgrade password hash on login",
+				slog.Uint64("user_id", uint64(user.ID)),
+				slog.String("err", updateErr.Error()),
+			)
+		}
 	}
 	response, err := h.buildAuthResponse(user.ID, user.Email)
 	if err != nil {
