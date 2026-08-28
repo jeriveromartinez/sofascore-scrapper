@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -313,25 +314,39 @@ func (s *UploadService) ReconcilePublications(ctx context.Context) error {
 	}
 
 	for _, pub := range pubs {
+		// Parse once. A malformed upload_id (corrupted row, partial
+		// migration, manual insert) would otherwise reach MustParse
+		// and panic, taking the whole process down on the next tick.
+		uploadID, err := uuid.Parse(pub.UploadID)
+		if err != nil {
+			slog.Default().Warn("reconcile: invalid upload_id, marking publication failed",
+				slog.Uint64("publication_id", uint64(pub.ID)),
+				slog.String("upload_id", pub.UploadID),
+				slog.String("status", pub.Status),
+				slog.String("err", err.Error()),
+			)
+			s.db.Model(&pub).Update("status", "failed")
+			continue
+		}
+
 		switch pub.Status {
 		case "published":
 			if pub.FinalPath != "" {
-				if _, err := os.Stat(pub.FinalPath); os.IsNotExist(err) {
+				if _, statErr := os.Stat(pub.FinalPath); os.IsNotExist(statErr) {
 					s.db.Model(&pub).Update("status", "failed")
 					continue
 				}
 			}
-			_, err := s.store.Get(ctx, uuid.MustParse(pub.UploadID))
-			if err != nil {
+			if _, err := s.store.Get(ctx, uploadID); err != nil {
 				continue
 			}
-			s.store.Complete(context.Background(), uuid.MustParse(pub.UploadID))
+			s.store.Complete(context.Background(), uploadID)
 		case "assembling":
 			s.db.Model(&pub).Update("status", "failed")
 			if pub.TempPath != "" {
 				os.Remove(pub.TempPath)
 			}
-			s.store.Abort(context.Background(), uuid.MustParse(pub.UploadID))
+			s.store.Abort(context.Background(), uploadID)
 			s.chunkStore.RemoveChunks(pub.UploadID)
 		}
 	}
