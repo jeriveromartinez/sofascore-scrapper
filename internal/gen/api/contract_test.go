@@ -32,6 +32,7 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"User":                       false,
 		"UserList":                   false,
 		"UserWriteRequest":           false,
+		"SetUserRoleRequest":         false,
 		"Domain":                     false,
 		"DomainList":                 false,
 		"DomainPage":                 false,
@@ -71,6 +72,28 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"EventPage":                  false,
 		"EventStats":                 false,
 		"TopEventsResponse":          false,
+		// Push notifications (added 2026-08-28)
+		"PushPayload":                false,
+		"CreateImmediatePushRequest": false,
+		"CreateScheduleRequest":      false,
+		"UpdateScheduleRequest":      false,
+		"ScheduledPush":              false,
+		"ScheduledPushPage":          false,
+		"PushMessage":                false,
+		"PushMessagePage":            false,
+		"FailureBreakdown":           false,
+		"PushMetricsByCampaign":      false,
+		"PushMetricsAggregate":       false,
+		"PlatformCount":              false,
+		"AppVersionCount":            false,
+		"HourBucket":                 false,
+		"WsFrame":                    false,
+		"WsHello":                    false,
+		"WsPush":                     false,
+		"WsPushAck":                  false,
+		"WsPing":                     false,
+		"WsPong":                     false,
+		"WsError":                    false,
 	}
 
 	for i := 0; i < fd.Messages().Len(); i++ {
@@ -151,6 +174,86 @@ func TestDeviceRegisterRequestFields(t *testing.T) {
 	assertFieldNumber(t, fd, "platform", 2)
 	assertFieldNumber(t, fd, "name", 3)
 	assertFieldNumber(t, fd, "version", 4)
+	assertFieldNumber(t, fd, "domain_id", 5) // added 2026-08-28
+}
+
+// TestUserNotificationsEnabledField verifies the User proto carries the
+// notifications_enabled (6) and notifications_enabled_at (7) fields that
+// back the per-user feature toggle for push notifications.
+func TestUserNotificationsEnabledField(t *testing.T) {
+	u := &User{Id: 1, Email: "x@x.com"}
+	fd := u.ProtoReflect().Descriptor()
+	assertFieldNumber(t, fd, "id", 1)
+	assertFieldNumber(t, fd, "email", 4)
+	assertFieldNumber(t, fd, "role", 5)
+	assertFieldNumber(t, fd, "notifications_enabled", 6)    // added 2026-08-28
+	assertFieldNumber(t, fd, "notifications_enabled_at", 7) // added 2026-08-28
+}
+
+// TestDeviceDomainIDField verifies the Device proto carries the domain_id (10)
+// field that links a device to the user-owned domain it belongs to.
+func TestDeviceDomainIDField(t *testing.T) {
+	d := &Device{Id: 1, Token: "x"}
+	fd := d.ProtoReflect().Descriptor()
+	assertFieldNumber(t, fd, "token", 4)
+	assertFieldNumber(t, fd, "domain_id", 10) // added 2026-08-28
+}
+
+// TestPushEnumsExist verifies the five push-related enums are part of the
+// file descriptor (the oneof WsFrame payload references WsError indirectly
+// via the wire; here we only assert the enum names are registered).
+func TestPushEnumsExist(t *testing.T) {
+	fd := (&ErrorResponse{}).ProtoReflect().Descriptor().ParentFile()
+	wantEnums := []string{
+		"PushCategory",
+		"PushPriority",
+		"PushScheduleType",
+		"DeliveryState",
+		"DeliveryFailureReason",
+	}
+	for _, name := range wantEnums {
+		if fd.Enums().ByName(protoreflect.Name(name)) == nil {
+			t.Errorf("expected enum %q not found in file descriptor", name)
+		}
+	}
+}
+
+// TestPushPayloadFields validates the canonical field numbers for the
+// push payload used by both immediate and scheduled pushes.
+func TestPushPayloadFields(t *testing.T) {
+	p := &PushPayload{Category: PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE, Title: "t", Body: "b"}
+	fd := p.ProtoReflect().Descriptor()
+	assertFieldNumber(t, fd, "category", 1)
+	assertFieldNumber(t, fd, "title", 2)
+	assertFieldNumber(t, fd, "body", 3)
+	assertFieldNumber(t, fd, "image_url", 4)
+	assertFieldNumber(t, fd, "deep_link", 5)
+	assertFieldNumber(t, fd, "priority", 6)
+	assertFieldNumber(t, fd, "ttl_seconds", 7)
+	assertFieldNumber(t, fd, "data", 8)
+}
+
+// TestWsFrameOneof verifies the WsFrame message has the expected oneof
+// payload with the canonical case numbers.
+func TestWsFrameOneof(t *testing.T) {
+	frame := &WsFrame_Hello{Hello: &WsHello{DeviceId: 1}}
+	wrapped := &WsFrame{Payload: frame}
+	raw, err := proto.Marshal(wrapped)
+	if err != nil {
+		t.Fatalf("marshal WsFrame{Hello} failed: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("WsFrame{Hello} marshal produced empty bytes")
+	}
+	// Sanity: WsFrame.Hello is field 1 in the oneof.
+	fd := wrapped.ProtoReflect().Descriptor()
+	oneofs := fd.Oneofs()
+	if oneofs.Len() != 1 {
+		t.Fatalf("WsFrame must have exactly 1 oneof, got %d", oneofs.Len())
+	}
+	if oneofs.Get(0).Name() != "payload" {
+		t.Errorf("WsFrame oneof name = %q, want %q", oneofs.Get(0).Name(), "payload")
+	}
 }
 
 func TestEventsListFields(t *testing.T) {

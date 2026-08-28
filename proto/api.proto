@@ -48,6 +48,13 @@ message User {
   string updated_at = 3;
   string email = 4;
   string role = 5;
+  // Push notifications per-user feature toggle (added 2026-08-28).
+  // When false, the user cannot send pushes; the web dashboard hides the
+  // push section and REST endpoints return 403.
+  bool notifications_enabled = 6;
+  // RFC3339 timestamp of when notifications_enabled was last flipped to true;
+  // empty string if the feature was never activated. Auditing only.
+  string notifications_enabled_at = 7;
 }
 
 message UserList {
@@ -105,6 +112,11 @@ message DeviceRegisterRequest {
   string platform = 2;
   string name = 3;
   string version = 4;
+  // Optional domain assignment (added 2026-08-28). When non-zero, the
+  // backend sets devices.domain_id to this value (validating that the
+  // domain exists; per-user ownership is not enforced at register time
+  // because the Flutter app does not authenticate as a user).
+  uint32 domain_id = 5;
 }
 
 message Device {
@@ -117,6 +129,11 @@ message Device {
   int64 last_seen = 7;
   string version = 8;
   string iptv_url = 9;
+  // Domain the device is associated with (added 2026-08-28). Drives the
+  // push audience filter: a push to domain X only reaches devices whose
+  // domain_id == X. 0 means "unassigned"; such devices are excluded from
+  // push delivery.
+  uint32 domain_id = 10;
 }
 
 message DeviceList {
@@ -408,4 +425,225 @@ message UploadCompleteResponse {
   string download_token = 10;
   string download_url = 11;
   string created_at = 12;
+}
+
+// ========== Push Notifications (added 2026-08-28) ==========
+//
+// Wire format reference: docs/superpowers/specs/2026-08-28-push-notifications-websocket-design.md
+
+// PushCategory is the type of event a push message represents. The
+// category drives how the Flutter client renders the notification and
+// which user-visible icon/chime to use.
+enum PushCategory {
+  PUSH_CATEGORY_UNSPECIFIED = 0;
+  PUSH_CATEGORY_EVENT_ALERT = 1;     // live score change, match start, etc.
+  PUSH_CATEGORY_APK_UPDATE = 2;      // new app version available
+  PUSH_CATEGORY_ADMIN_MESSAGE = 3;   // free-form message from the operator
+  PUSH_CATEGORY_SCHEDULED = 4;       // delivered from a scheduled_push
+}
+
+// PushPriority hints the client how to render the notification. HIGH may
+// bypass Do Not Disturb on capable devices.
+enum PushPriority {
+  PUSH_PRIORITY_UNSPECIFIED = 0;
+  PUSH_PRIORITY_NORMAL = 1;
+  PUSH_PRIORITY_HIGH = 2;
+}
+
+// PushScheduleType discriminates between a one_shot timestamp and a
+// recurring cron expression in ScheduledPush.
+enum PushScheduleType {
+  PUSH_SCHEDULE_TYPE_UNSPECIFIED = 0;
+  PUSH_SCHEDULE_TYPE_ONE_SHOT = 1;
+  PUSH_SCHEDULE_TYPE_RECURRING = 2;
+}
+
+// DeliveryState is the lifecycle of a single (push, device) attempt.
+enum DeliveryState {
+  DELIVERY_STATE_UNSPECIFIED = 0;
+  DELIVERY_STATE_SENT = 1;           // WriteMessage OK, waiting for ack
+  DELIVERY_STATE_DELIVERED = 2;      // client acked
+  DELIVERY_STATE_FAILED = 3;         // timeout, disconnect, or error
+}
+
+// DeliveryFailureReason explains why a delivery attempt did not succeed.
+// Populated only when state == DELIVERY_STATE_FAILED.
+enum DeliveryFailureReason {
+  DELIVERY_FAILURE_REASON_UNSPECIFIED = 0;
+  DELIVERY_FAILURE_REASON_DEVICE_OFFLINE = 1;     // no live WS connection
+  DELIVERY_FAILURE_REASON_SEND_TIMEOUT = 2;       // ack not received in N seconds
+  DELIVERY_FAILURE_REASON_WS_DISCONNECTED = 3;    // socket died mid-write
+  DELIVERY_FAILURE_REASON_DOMAIN_MISMATCH = 4;    // device.domain_id != push audience
+  DELIVERY_FAILURE_REASON_EXPIRED_TOKEN = 5;      // device token revoked
+  DELIVERY_FAILURE_REASON_INTERNAL_ERROR = 6;
+}
+
+// PushPayload is the user-authored content carried by both immediate and
+// scheduled pushes. All fields are stored denormalized on push_messages
+// (and scheduled_pushes) so we never need to join at delivery time.
+message PushPayload {
+  PushCategory category = 1;
+  string title = 2;
+  string body = 3;
+  string image_url = 4;
+  string deep_link = 5;
+  PushPriority priority = 6;
+  int32 ttl_seconds = 7;                       // 0 = no TTL
+  map<string, string> data = 8;                // free-form metadata
+}
+
+message CreateImmediatePushRequest {
+  repeated uint32 domain_ids = 1;              // one or many, all must belong to caller
+  PushPayload payload = 2;
+}
+
+message CreateScheduleRequest {
+  repeated uint32 domain_ids = 1;
+  PushPayload payload = 2;
+  PushScheduleType schedule_type = 3;
+  string run_at = 4;                           // RFC3339; required when schedule_type == ONE_SHOT
+  string cron_expr = 5;                        // 5-field cron; required when schedule_type == RECURRING
+}
+
+// UpdateScheduleRequest intentionally omits cron_expr and run_at. Those
+// fields are immutable after create; if the operator needs to change the
+// schedule, the existing schedule is deleted and a new one is created.
+// This avoids races with the scheduler runner that already calculated
+// next_fire_at from the old expression.
+message UpdateScheduleRequest {
+  uint32 id = 1;
+  bool is_active = 2;
+  PushPayload payload = 3;
+}
+
+message ScheduledPush {
+  uint32 id = 1;
+  string created_at = 2;
+  string updated_at = 3;
+  uint32 user_id = 4;
+  PushScheduleType schedule_type = 5;
+  string run_at = 6;                           // populated for one_shot
+  string cron_expr = 7;                        // populated for recurring
+  string next_fire_at = 8;
+  string last_fired_at = 9;                    // empty if never fired
+  bool is_active = 10;
+  repeated uint32 domain_ids = 11;
+  PushPayload payload = 12;
+}
+
+message ScheduledPushPage {
+  repeated ScheduledPush data = 1;
+  CursorPageInfo page = 2;
+}
+
+message PushMessage {
+  uint32 id = 1;
+  string created_at = 2;
+  uint32 user_id = 3;
+  PushCategory category = 4;
+  string title = 5;
+  string body = 6;
+  string image_url = 7;
+  string deep_link = 8;
+  PushPriority priority = 9;
+  int32 ttl_seconds = 10;
+  map<string, string> data = 11;
+  string source = 12;                          // "immediate" | "scheduled"
+  uint32 scheduled_id = 13;                    // 0 when source == "immediate"
+  repeated uint32 domain_ids = 14;
+}
+
+message PushMessagePage {
+  repeated PushMessage data = 1;
+  CursorPageInfo page = 2;
+}
+
+// Per-campaign metrics returned by GET /pushes/{id}.
+message FailureBreakdown {
+  DeliveryFailureReason reason = 1;
+  int64 count = 2;
+}
+
+message PushMetricsByCampaign {
+  uint32 push_id = 1;
+  int64 targets_total = 2;
+  int64 delivered = 3;
+  int64 not_delivered = 4;
+  double delivery_rate = 5;                    // delivered / targets_total
+  int64 latency_p50_ms = 6;
+  int64 latency_p95_ms = 7;
+  repeated FailureBreakdown failures_by_reason = 8;
+}
+
+// Aggregated metrics returned by GET /pushes/metrics/aggregate.
+message PlatformCount   { string platform = 1; int64 count = 2; }
+message AppVersionCount { string version = 1; int64 count = 2; }
+message HourBucket      { int32 hour = 1; int64 count = 2; }
+
+message PushMetricsAggregate {
+  int64 messages_sent_total = 1;
+  int64 messages_delivered_total = 2;
+  double delivery_rate_total = 3;
+  int64 active_schedules = 4;
+  int64 scheduled_fires_24h = 5;
+  int64 scheduled_fires_7d = 6;
+  int64 scheduled_fires_30d = 7;
+  int64 scheduled_failures_24h = 8;
+  int64 scheduled_failures_7d = 9;
+  int64 scheduled_failures_30d = 10;
+  int64 audience_size = 11;                    // devices currently connected via WS
+  int64 audience_peak_today = 12;
+  repeated PlatformCount top_platforms = 13;
+  repeated AppVersionCount top_app_versions = 14;
+  repeated HourBucket hourly_histogram_30d = 15;
+  string last_push_at = 16;                    // RFC3339; empty if never
+}
+
+// ========== WebSocket frames (added 2026-08-28) ==========
+//
+// WsFrame is the single envelope used on the WebSocket connection. Every
+// frame is a proto-encoded WsFrame; the receiver dispatches based on
+// which oneof case is set. This keeps the wire format uniform and lets
+// the client/server stay forward-compatible with new frame types.
+message WsFrame {
+  oneof payload {
+    WsHello   hello    = 1;   // server -> client on connect
+    WsPush    push     = 2;   // server -> client: a push delivery
+    WsPushAck push_ack = 3;   // client -> server: confirms a push
+    WsPing    ping     = 4;   // bidirectional keepalive
+    WsPong    pong     = 5;
+    WsError   error    = 6;   // server -> client: terminal error before close
+  }
+}
+
+message WsHello {
+  uint64 device_id = 1;
+  int64 server_time = 2;                       // unix seconds
+}
+
+message WsPush {
+  uint64 push_id = 1;                          // = push_messages.id
+  uint64 message_id = 2;                       // unique per attempt; client must echo in ack
+  PushCategory category = 3;
+  string title = 4;
+  string body = 5;
+  string image_url = 6;
+  string deep_link = 7;
+  PushPriority priority = 8;
+  int32 ttl_seconds = 9;
+  map<string, string> data = 10;
+  int64 sent_at = 11;                          // unix milliseconds; client uses for latency
+}
+
+message WsPushAck {
+  uint64 message_id = 1;                       // echoes WsPush.message_id
+  int64 acked_at = 2;                          // unix milliseconds
+}
+
+message WsPing { int64 sent_at = 1; }          // unix milliseconds
+message WsPong { int64 sent_at = 1; }
+
+message WsError {
+  string code = 1;                             // invalid_token | domain_mismatch | rate_limited | internal
+  string message = 2;
 }
