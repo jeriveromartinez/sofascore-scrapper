@@ -309,12 +309,18 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 			}
 			continue
 		}
-		defer resp.Body.Close()
 
+		// Read the response body fully and close it before branching on
+		// status. Deferring Body.Close() inside the retry loop leaks one
+		// open body per attempt until doRequest returns; under sustained
+		// 5xx storms this exhausts file descriptors.
 		limited := io.LimitReader(resp.Body, c.responseMaxBytes)
-		body, err := io.ReadAll(limited)
-		if err != nil {
-			return nil, err
+		body, readErr := io.ReadAll(limited)
+		// Drain remaining bytes so the underlying connection can be reused.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, readErr
 		}
 
 		switch resp.StatusCode {
