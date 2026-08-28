@@ -3,6 +3,7 @@
 package reporting
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestGetTopEvents_NumericContentOnly(t *testing.T) {
 	createPlaybackLog(db, "not-a-number", 3)
 	createPlaybackLog(db, "67890", 4)
 
-	stats, err := repo.GetTopEvents(100)
+	stats, err := repo.GetTopEvents(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("GetTopEvents failed: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestGetTopEvents_DeterministicOrdering(t *testing.T) {
 	createPlaybackLog(db, "100", 4)
 	createPlaybackLog(db, "300", 5)
 
-	stats, err := repo.GetTopEvents(100)
+	stats, err := repo.GetTopEvents(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("GetTopEvents failed: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestGetTopEvents_CapAt100(t *testing.T) {
 		createPlaybackLog(db, fmt.Sprintf("%d", i), uint(i))
 	}
 
-	stats, err := repo.GetTopEvents(200)
+	stats, err := repo.GetTopEvents(context.Background(), 200)
 	if err != nil {
 		t.Fatalf("GetTopEvents failed: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestGetTopEvents_ZeroLimitDefaultsTo100(t *testing.T) {
 		createPlaybackLog(db, fmt.Sprintf("%d", i), uint(i))
 	}
 
-	stats, err := repo.GetTopEvents(0)
+	stats, err := repo.GetTopEvents(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("GetTopEvents failed: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestGetTopEvents_ReturnsDBError(t *testing.T) {
 	sqlDB, _ := db.DB()
 	sqlDB.Close()
 
-	_, err := repo.GetTopEvents(10)
+	_, err := repo.GetTopEvents(context.Background(), 10)
 	if err == nil {
 		t.Error("expected error when DB is closed")
 	}
