@@ -7,11 +7,11 @@ import { useAuthStore } from "../store/pinia/authStore";
 const router = useRouter();
 const authStore = useAuthStore();
 
-const goToRoute = (routeName: string) =>
-  router.resolve({ name: routeName }).href;
-
-const isActiveRoute = (routeName: string) =>
-  router.currentRoute.value.name === routeName;
+// Vue Router's RouteRecordRaw.name is `string | undefined | symbol`.
+// We only ever add string names in our route definitions, so the cast
+// is safe; router-link then handles both navigation and active-class
+// tracking, replacing the prior manual helpers.
+const routeName = (name: unknown): string => name as string;
 
 function logout() {
   authStore.logout().finally(() => {
@@ -122,14 +122,19 @@ function logout() {
         class="menu-item"
         v-for="route in adminRoutes"
         :key="route.name"
-        :class="{ active: isActiveRoute(route.name as string) }"
       >
-        <a :href="goToRoute(route.name as string)" class="menu-link">
+        <router-link
+          :to="{ name: routeName(route.name) }"
+          class="menu-link"
+          active-class="active"
+          :data-test="`nav-${routeName(route.name).toLowerCase()}`"
+          :aria-current="$route.name === routeName(route.name) ? 'page' : undefined"
+        >
           <i :class="`menu-icon tf-icons bx ${route.icon}`"></i>
           <div class="text-truncate">
             {{ route.name }}
           </div>
-        </a>
+        </router-link>
       </li>
       <li class="menu-header small text-uppercase">
         <span class="menu-header-text">Usuarios</span>
@@ -138,14 +143,19 @@ function logout() {
         class="menu-item"
         v-for="route in managerRoutes"
         :key="route.name"
-        :class="{ active: isActiveRoute(route.name as string) }"
       >
-        <a :href="goToRoute(route.name as string)" class="menu-link">
+        <router-link
+          :to="{ name: routeName(route.name) }"
+          class="menu-link"
+          active-class="active"
+          :data-test="`nav-${routeName(route.name).toLowerCase()}`"
+          :aria-current="$route.name === routeName(route.name) ? 'page' : undefined"
+        >
           <i :class="`menu-icon tf-icons bx ${route.icon}`"></i>
           <div class="text-truncate">
             {{ route.name }}
           </div>
-        </a>
+        </router-link>
       </li>
       <li class="menu-item mt-auto">
         <button class="menu-link btn btn-link w-100 text-start" @click="logout">
