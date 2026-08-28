@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../../constants";
+import { API_BASE_URL, KEY_USER_LOGIN } from "../../constants";
 import { ErrorResponse, AuthResponse } from "../../proto/api";
 import axios, {
   type AxiosInstance,
@@ -16,6 +16,24 @@ export interface ProtoCodec<T> {
   decode(input: Uint8Array): T;
 }
 
+/**
+ * Typed error thrown by {@link BaseApiService} so callers can distinguish
+ * authentication failures (e.g. refresh-token rejected) from generic HTTP
+ * errors. `isAuthError === true` means the user session is no longer valid
+ * and the caller should redirect to login.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly isAuthError: boolean;
+
+  constructor(message: string, status: number, isAuthError = false) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.isAuthError = isAuthError;
+  }
+}
+
 function redirectToLogin(): void {
   import("../../router").then(({ router }) => {
     router.push({ name: "Login" });
@@ -23,12 +41,29 @@ function redirectToLogin(): void {
 }
 
 export function headerString(headers: unknown, name: string): string {
-  if (!headers || typeof headers !== "object") return "";
-  const value = (headers as Record<string, unknown>)[name];
-  return typeof value === "string" ? value : "";
+  if (!headers) return "";
+  if (typeof (headers as { get?: unknown }).get === "function") {
+    const value = (headers as { get(name: string): unknown }).get(name);
+    return typeof value === "string" ? value : "";
+  }
+  if (typeof headers === "object") {
+    const value = (headers as Record<string, unknown>)[name];
+    return typeof value === "string" ? value : "";
+  }
+  return "";
 }
 
-async function refreshAuth(): Promise<UserAuthModel | null> {
+/**
+ * Exchange the stored refresh token for a fresh access token. On success
+ * the new user is written to the same storage (session vs local) the refresh
+ * token came from, and the Pinia auth store is updated so subsequent reads
+ * see the new token. Returns `null` if the refresh is not possible (no
+ * stored token, network error, or non-200 response).
+ *
+ * Exported for testing; production code should rely on the 401 interceptor
+ * installed by {@link BaseApiService}.
+ */
+export async function refreshAuth(): Promise<UserAuthModel | null> {
   if (refreshPromise) {
     return refreshPromise;
   }
@@ -64,10 +99,19 @@ async function refreshAuth(): Promise<UserAuthModel | null> {
       refreshToken: auth.refreshToken,
     };
 
-    storage.setItem(
-      "user_info",
-      JSON.stringify(nextUser),
-    );
+    const rememberMe = storage === localStorage;
+    storage.setItem(KEY_USER_LOGIN, JSON.stringify(nextUser));
+
+    // Keep the in-memory Pinia store in sync so subsequent reads return
+    // the new token. The store may not be initialized in non-Vue contexts
+    // (e.g. unit tests that haven't mounted the app); tolerate that.
+    try {
+      const { useAuthStore } = await import("../pinia/authStore");
+      useAuthStore().setUser(nextUser, rememberMe);
+    } catch {
+      // Store not available; storage write is the source of truth.
+    }
+
     return nextUser;
   })().finally(() => {
     refreshPromise = null;
@@ -108,7 +152,11 @@ export abstract class BaseApiService {
       if (!nextUser?.token) {
         clearAuthStorage();
         redirectToLogin();
-        return response;
+        // Reject the original 401 with a typed auth error so callers can
+        // distinguish "session is gone" from a regular HTTP error. Returning
+        // `response` here would silently propagate the 401 as if it were a
+        // successful payload, which is the bug this fix targets.
+        throw new ApiError("Authentication failed", 401, true);
       }
 
       config.headers = config.headers ?? {};
