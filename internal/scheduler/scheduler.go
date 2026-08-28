@@ -50,7 +50,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	localCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 
-	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg)
+	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg, s.logger)
 	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg, s.logger)
 
 	<-localCtx.Done()
