@@ -5,6 +5,7 @@ import { eventsApiService } from "../store/services";
 import type { EventPageResponse, EventsPageFilters, SofaScoreEvent } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
 import EventsFilterBar from "./EventsFilterBar.vue";
+import PaginationControls from "../components/PaginationControls.vue";
 
 function detectBrowserTZ(): string {
   try {
@@ -129,22 +130,11 @@ onMounted(() => pagination.loadPage());
           </tbody>
         </table>
 
-        <div class="d-flex justify-content-between align-items-center mt-3">
-          <button
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="!pagination.state.hasPrev || pagination.state.loading"
-            @click="pagination.goPrev()"
-          >
-            Anterior
-          </button>
-          <button
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="!pagination.state.hasNext || pagination.state.loading"
-            @click="pagination.goNext()"
-          >
-            Siguiente
-          </button>
-        </div>
+        <PaginationControls
+          :state="pagination.state"
+          @prev="pagination.goPrev()"
+          @next="pagination.goNext()"
+        />
       </div>
 
       <div v-else-if="!pagination.state.loading" class="text-center text-muted">

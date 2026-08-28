@@ -4,6 +4,7 @@ import { useCursorPagination } from "../composables/useCursorPagination";
 import { playbackApiService } from "../store/services";
 import type { PlaybackLog, PlaybackPageResponse } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
+import PaginationControls from "../components/PaginationControls.vue";
 
 const pagination = useCursorPagination<PlaybackLog>({
   routeName: "Playback",
@@ -74,22 +75,11 @@ onMounted(() => pagination.loadPage());
         v-if="pagination.state.data.length"
         class="d-flex flex-wrap gap-2 mt-3 align-items-center justify-content-between"
       >
-        <div class="d-flex gap-2">
-          <button
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="!pagination.state.hasPrev || pagination.state.loading"
-            @click="pagination.goPrev()"
-          >
-            Anterior
-          </button>
-          <button
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="!pagination.state.hasNext || pagination.state.loading"
-            @click="pagination.goNext()"
-          >
-            Siguiente
-          </button>
-        </div>
+        <PaginationControls
+          :state="pagination.state"
+          @prev="pagination.goPrev()"
+          @next="pagination.goNext()"
+        />
       </div>
     </div>
   </div>

@@ -5,6 +5,7 @@ import { useCursorPagination } from "../composables/useCursorPagination";
 import TournamentFormModal from "./TournamentFormModal.vue";
 import { tournamentsApiService } from "../store/services";
 import type { Tournament, TournamentPageResponse } from "../store/services/models";
+import PaginationControls from "../components/PaginationControls.vue";
 
 const modalRef = ref<InstanceType<typeof TournamentFormModal> | null>(null);
 
@@ -121,22 +122,11 @@ onMounted(() => pagination.loadPage());
           </tbody>
         </table>
 
-        <div class="d-flex justify-content-between align-items-center mt-3">
-          <button
-            class="btn btn-outline-secondary"
-            :disabled="!pagination.state.hasPrev || pagination.state.loading"
-            @click="pagination.goPrev()"
-          >
-            Anterior
-          </button>
-          <button
-            class="btn btn-outline-secondary"
-            :disabled="!pagination.state.hasNext || pagination.state.loading"
-            @click="pagination.goNext()"
-          >
-            Siguiente
-          </button>
-        </div>
+        <PaginationControls
+          :state="pagination.state"
+          @prev="pagination.goPrev()"
+          @next="pagination.goNext()"
+        />
       </div>
 
       <div v-else class="text-center text-muted">
