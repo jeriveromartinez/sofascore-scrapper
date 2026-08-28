@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -55,7 +56,7 @@ func (a *App) shutdown() error {
 }
 
 func normalizeServerClosed(err error) error {
-	if err == http.ErrServerClosed {
+	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
 	return err

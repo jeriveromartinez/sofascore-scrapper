@@ -1,6 +1,7 @@
 package auth
 
 import (
+"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -46,7 +47,7 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 		return
 	}
 	if err := h.invitation.Consume(c.Request.Context(), req.InvitationToken); err != nil {
-		if err == ErrInvalidInvitation || err == ErrInvitationExpired {
+		if errors.Is(err, ErrInvalidInvitation) || errors.Is(err, ErrInvitationExpired) {
 			server.RespondError(c, http.StatusBadRequest, "invalid invitation token")
 			return
 		}
@@ -176,7 +177,7 @@ func (h *AuthHandler) handleRefresh(c *gin.Context) {
 	}
 
 	if err := h.authRepo.RotateRefreshToken(c.Request.Context(), user.ID, claims.ID, newTokenID, expiresAt); err != nil {
-		if err == ErrInvalidRefreshToken {
+		if errors.Is(err, ErrInvalidRefreshToken) {
 			server.RespondError(c, http.StatusUnauthorized, "invalid token")
 			return
 		}

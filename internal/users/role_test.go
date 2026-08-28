@@ -2,6 +2,7 @@ package users
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -34,7 +35,7 @@ func TestSetRoleValidatesAndUpdates(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if _, err := repo.SetRole(u.ID, "superuser"); err != ErrInvalidRole {
+	if _, err := repo.SetRole(u.ID, "superuser"); !errors.Is(err, ErrInvalidRole) {
 		t.Fatalf("expected ErrInvalidRole, got %v", err)
 	}
 
