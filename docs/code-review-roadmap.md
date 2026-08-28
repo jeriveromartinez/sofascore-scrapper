@@ -2,8 +2,12 @@
 
 > Generated: 2026-08-26. Source: full backend + frontend + DevOps code
 > review of `jeriveromartinez/sofascore-scrapper`. Final status
-> update: 2026-08-28.
+> update: 2026-08-28 (post-release).
 > Status legend: ✅ merged | 🟡 PR open (pending merge) | ⏳ deferred
+>
+> **Released as v0.0.4** — see the [GitHub release notes](https://github.com/jeriveromartinez/sofascore-scrapper/releases/tag/v0.0.4)
+> for the operator-facing summary. This document remains the canonical
+> "why each issue is in the state it is" record.
 
 ## Why this doc exists
 
@@ -14,7 +18,8 @@ GitHub as issues #46–#64 (the meta issue). This document is the
 single status view for humans supporting the codebase: it links
 the original plan to the merged PRs, names the rewrites where the
 plan scope did not match the issue body, and lists the items
-intentionally deferred.
+intentionally deferred. The 19 issues were all closed by
+2026-08-28, and the work shipped in tag [v0.0.4](https://github.com/jeriveromartinez/sofascore-scrapper/releases/tag/v0.0.4).
 
 For the source findings and the per-issue triage, see
 [`docs/superpowers/plans/2026-08-26-code-review-remediation.md`](superpowers/plans/2026-08-26-code-review-remediation.md).
@@ -52,7 +57,7 @@ For the per-PR execution log, see
 |-------|-------|----|------------------------|
 | #59 | SECURITY.md + Prometheus alert rules + JWT/DB rotation runbook + Redis appendonly | [#78](https://github.com/jeriveromartinez/sofascore-scrapper/pull/78) | ✅ Issues 1 (SECURITY.md) and 2 (alerts.yml) shipped. The remaining 2 sub-issues (secret rotation runbook section, Redis appendonly) are documentation work; tracked in the PR body. |
 | #60 | TLS doc + nginx security headers + password column + authStore typing + reporting transaction | [#85](https://github.com/jeriveromartinez/sofascore-scrapper/pull/85) | 🟡 Issues 1–4 shipped (nginx headers, password column, authStore typing, TLS doc). Issue 5 (reporting manual transaction refactor) is being addressed as part of the MariaDB work tied to #54. |
-| #61 | Pagination UI duplication extract + `errors.Is` across handlers | [#79](https://github.com/jeriveromartinez/sofascore-scrapper/pull/79), [#81](https://github.com/jeriveromartinez/sofascore-scrapper/pull/81) | ✅ Issue 2 (`errors.Is` audit) shipped. Issue 1 (pagination UI `<PaginationControls>` extract across 6 pages) is a substantial refactor with its own design questions (props shape, where to put the SFC); tracked as a follow-up. |
+| #61 | Pagination UI duplication extract + `errors.Is` across handlers | [#79](https://github.com/jeriveromartinez/sofascore-scrapper/pull/79), [#81](https://github.com/jeriveromartinez/sofascore-scrapper/pull/81), [#88](https://github.com/jeriveromartinez/sofascore-scrapper/pull/88) | ✅ Both sub-issues shipped. Issue 2 (`errors.Is` audit) in #79/#81. Issue 1 (`<PaginationControls>` SFC across 6 pages) in #88. -150 LOC of repetition removed; one shared SFC. |
 | N/A | _See #59 / #60 / #61 above_ | | |
 
 ### Phase 3 — Polish (P3, 2 issues) — 1 shipped, 1 partial
@@ -66,7 +71,7 @@ For the per-PR execution log, see
 
 | Issue | Title | PR | Status |
 |-------|-------|----|--------|
-| #64 | Code review remediation roadmap (tracking) | This PR (closes the issue when merged) | 🟡 |
+| #64 | Code review remediation roadmap (tracking) | [#87](https://github.com/jeriveromartinez/sofascore-scrapper/pull/87) | ✅ |
 
 ## How to verify
 
@@ -82,7 +87,7 @@ go test -race -count=1 ./... -skip 'TestHandleGetEventsPage_FromInNonUTCBoundary
 
 # 3. All Vue tests should pass.
 cd web && yarn test:unit --run
-# Expected: 18 files, 90+ tests pass.
+# Expected: 19 files, 98 tests pass.
 
 # 4. Build + lint clean.
 go build ./... && go vet ./...
@@ -100,7 +105,7 @@ docker run --rm -v "$PWD/deployments/prometheus:/rules" \
 |------|------|-------|
 | MariaDB performance | Functional index on a generated typed column for `playback_logs.content` so the `REGEXP` query uses an index. | Schema migration. |
 | Reporting transaction refactor | `internal/reporting/aggregation_repository.go:18-78` `Begin()` / `defer recover` → `db.Transaction(func(tx *gorm.DB) error { ... })`. | Tracked as part of the MariaDB work. |
-| Pagination UI extract | `<PaginationControls>` SFC across 6 pages. | Substantial refactor with design questions; open as separate issue. |
+| Pagination UI extract | ~~`<PaginationControls>` SFC across 6 pages.~~ | ✅ Shipped in [PR #88](https://github.com/jeriveromartinez/sofascore-scrapper/pull/88). |
 | ConfirmDialog extract | Replace `native confirm()` in `tournaments.vue`, `users.vue`, `domains.vue`. | Substantial; open as separate issue. |
 | Menu toggles (`<a href="javascript:void(0)">`) | Convert to `<button>` in `layout.vue`. | 4 sites; open as separate issue. |
 | axe-core smoke test | Add `@axe-core/playwright` to devDeps; smoke-test every main page. | New dev dependency + e2e job. |
@@ -111,8 +116,8 @@ docker run --rm -v "$PWD/deployments/prometheus:/rules" \
 
 ## Notes for the next review cycle
 
-When this codebase is reviewed again (~6 weeks from 2026-08-28), the
-agent should:
+When this codebase is reviewed again (~6 weeks from 2026-08-28, i.e.
+around 2026-10-09), the agent should:
 
 1. Re-run the same code review brief that produced this document.
 2. Verify the previously-fixed areas have zero regressions (the test
@@ -124,3 +129,19 @@ agent should:
    timezone failure in `internal/events` should be investigated
    independently — it predates this remediation and was not
    introduced by any of the PRs here.
+
+## Release history
+
+| Tag | Date | Headline |
+|-----|------|----------|
+| v0.0.1 | 2026-08-26 | Initial tagged commit |
+| v0.0.2 | 2026-08-26 | (patch) |
+| v0.0.3 | 2026-08-28 | (patch, before code review remediation) |
+| v0.0.4 | 2026-08-28 | **Code review remediation** (this release) — 24 PRs, 19 sub-issues closed, full P0+P1+P2+P3 sweep plus PaginationControls. |
+
+v0.0.4 is the first tagged release that includes any of the 2026-08-26
+code review fixes. Operators upgrading from v0.0.3 must set
+`ENABLE_PPROF=true` to keep pprof working (the previous default of
+silently starting pprof when `PPROF_ADDR` was set is now gated).
+Migration 000009 (`users.password` → `VARCHAR(255)`) is auto-applied
+by the standard migration runner.
