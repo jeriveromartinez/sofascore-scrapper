@@ -1,6 +1,7 @@
 import { BaseApiService } from "./BaseApiService";
 import { AuthRequest, AuthResponse, StatusMessage } from "../../proto/api";
 import { type UserAuthModel, type UserAuthPayload } from "./models";
+import { KEY_USER_LOGIN } from "../../constants";
 
 export class AuthApiService extends BaseApiService {
   constructor() {
@@ -29,8 +30,8 @@ export class AuthApiService extends BaseApiService {
 
   async logout(): Promise<void> {
     const storedUser =
-      sessionStorage.getItem("user_info") ??
-      localStorage.getItem("user_info") ??
+      sessionStorage.getItem(KEY_USER_LOGIN) ??
+      localStorage.getItem(KEY_USER_LOGIN) ??
       "{}";
 
     let refreshToken = "";
