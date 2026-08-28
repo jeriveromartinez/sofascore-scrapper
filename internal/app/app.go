@@ -75,7 +75,7 @@ func New(cfg config.Config) (*App, error) {
 	sched := scheduler.New(slog.Default())
 	logoScheduler := events.NewLogoScheduler()
 
-	pprofSrv := observability.NewPprofServer(cfg.PprofAddr)
+	pprofSrv := observability.NewPprofServer(cfg.PprofAddr, cfg.PprofEnabled)
 
 	app := &App{
 		Scheduler:     sched,

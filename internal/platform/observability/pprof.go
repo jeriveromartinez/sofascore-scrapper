@@ -8,8 +8,15 @@ import (
 	"time"
 )
 
-func NewPprofServer(addr string) *http.Server {
-	if addr == "" {
+// NewPprofServer returns an *http.Server serving /debug/pprof/* on the
+// given addr, or nil if either addr is empty or enabled is false.
+//
+// The enabled flag exists so that an operator who sets PPROF_ADDR out
+// of habit does not silently expose pprof on the network — pprof must
+// be opted in via ENABLE_PPROF=true. The default for that flag is
+// false, so a misconfigured deployment stays closed.
+func NewPprofServer(addr string, enabled bool) *http.Server {
+	if !enabled || addr == "" {
 		return nil
 	}
 
