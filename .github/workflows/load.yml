@@ -11,6 +11,9 @@ on:
           - smoke
           - full
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     name: Load test (smoke)
@@ -19,10 +22,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3
 
       - name: Build test images
         run: docker compose -f deployments/docker/compose.test.yml build
@@ -65,7 +68,7 @@ jobs:
 
       - name: Upload k6 summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: k6-pr-load-summary
           path: k6-pr-load-summary.json
@@ -82,7 +85,7 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install k6
         run: |
@@ -108,7 +111,7 @@ jobs:
 
       - name: Upload k6 summaries
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: k6-full-summaries
           path: k6-*-summary.json
