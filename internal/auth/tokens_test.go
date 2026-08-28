@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -23,8 +24,16 @@ func TestNewTokenService_RejectsWhitespaceSecret(t *testing.T) {
 	}
 }
 
+func TestNewTokenService_RejectsShortSecret(t *testing.T) {
+	// 31 chars: one below the policy minimum.
+	_, err := NewTokenService("short-secret-but-31-chars-len!")
+	if !errors.Is(err, ErrJWTSecretTooShort) {
+		t.Fatalf("err=%v, want ErrJWTSecretTooShort", err)
+	}
+}
+
 func TestNewTokenService_AcceptsValidSecret(t *testing.T) {
-	ts, err := NewTokenService("my-secret-key")
+	ts, err := NewTokenService("my-secret-key-with-enough-length-for-tests")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +43,7 @@ func TestNewTokenService_AcceptsValidSecret(t *testing.T) {
 }
 
 func TestGenerateAndParseAccessToken(t *testing.T) {
-	ts, err := NewTokenService("test-secret")
+	ts, err := NewTokenService("test-secret-with-enough-length-for-suite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +76,7 @@ func TestGenerateAndParseAccessToken(t *testing.T) {
 }
 
 func TestGenerateAndParseRefreshToken(t *testing.T) {
-	ts, err := NewTokenService("test-secret")
+	ts, err := NewTokenService("test-secret-with-enough-length-for-suite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +105,7 @@ func TestGenerateAndParseRefreshToken(t *testing.T) {
 }
 
 func TestGenerateTokenPair(t *testing.T) {
-	ts, err := NewTokenService("test-secret")
+	ts, err := NewTokenService("test-secret-with-enough-length-for-suite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +123,7 @@ func TestGenerateTokenPair(t *testing.T) {
 }
 
 func TestParseAccessToken_RejectsRefreshToken(t *testing.T) {
-	ts, err := NewTokenService("test-secret")
+	ts, err := NewTokenService("test-secret-with-enough-length-for-suite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +140,7 @@ func TestParseAccessToken_RejectsRefreshToken(t *testing.T) {
 }
 
 func TestParseRefreshToken_RejectsAccessToken(t *testing.T) {
-	ts, err := NewTokenService("test-secret")
+	ts, err := NewTokenService("test-secret-with-enough-length-for-suite")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,8 +157,8 @@ func TestParseRefreshToken_RejectsAccessToken(t *testing.T) {
 }
 
 func TestParseToken_RejectsWrongSecret(t *testing.T) {
-	ts1, _ := NewTokenService("secret-a")
-	ts2, _ := NewTokenService("secret-b")
+	ts1, _ := NewTokenService("secret-a-with-enough-length-for-tests")
+	ts2, _ := NewTokenService("secret-b-with-enough-length-for-tests")
 
 	token, err := ts1.GenerateAccessToken(1, "test@test.com")
 	if err != nil {
@@ -171,12 +180,12 @@ func TestParseToken_RejectsHS384(t *testing.T) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS384, claims)
-	signed, err := token.SignedString([]byte("test-secret"))
+	signed, err := token.SignedString([]byte("test-secret-with-enough-length-for-suite"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ts, _ := NewTokenService("test-secret")
+	ts, _ := NewTokenService("test-secret-with-enough-length-for-suite")
 	_, err = ts.ParseAccessToken(signed)
 	if err == nil {
 		t.Fatal("expected HS384 token to be rejected")
@@ -192,12 +201,12 @@ func TestParseToken_RejectsHS512(t *testing.T) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
-	signed, err := token.SignedString([]byte("test-secret"))
+	signed, err := token.SignedString([]byte("test-secret-with-enough-length-for-suite"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ts, _ := NewTokenService("test-secret")
+	ts, _ := NewTokenService("test-secret-with-enough-length-for-suite")
 	_, err = ts.ParseAccessToken(signed)
 	if err == nil {
 		t.Fatal("expected HS512 token to be rejected")
@@ -206,7 +215,7 @@ func TestParseToken_RejectsHS512(t *testing.T) {
 
 func TestTokenService_UsesFixedClock(t *testing.T) {
 	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	ts := &TokenService{secret: []byte("test-secret"), now: func() time.Time { return fixedTime }}
+	ts := &TokenService{secret: []byte("test-secret-with-enough-length-for-suite"), now: func() time.Time { return fixedTime }}
 
 	token, err := ts.GenerateAccessToken(1, "test@test.com")
 	if err != nil {

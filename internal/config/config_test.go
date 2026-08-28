@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -11,6 +12,24 @@ func TestLoadRequiresJWTSecret(t *testing.T) {
 	t.Setenv("JWT_SECRET", "")
 	_, err := Load()
 	if !errors.Is(err, ErrJWTSecretRequired) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestLoadRejectsShortJWTSecret(t *testing.T) {
+	// 31 chars: just under the policy minimum.
+	t.Setenv("JWT_SECRET", "short-secret-but-31-chars")
+	_, err := Load()
+	if !errors.Is(err, ErrJWTSecretTooShort) {
+		t.Fatalf("err=%v, want ErrJWTSecretTooShort", err)
+	}
+}
+
+func TestLoadAcceptsMinimumJWTSecret(t *testing.T) {
+	// exactly MinJWTSecretLength characters
+	t.Setenv("JWT_SECRET", strings.Repeat("a", MinJWTSecretLength))
+	_, err := Load()
+	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
 }
@@ -69,7 +88,7 @@ func TestLoadAllDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.JWTSecret != "test-secret" {
+	if cfg.JWTSecret != "this-is-a-test-secret-with-enough-length" {
 		t.Fatalf("JWTSecret=%q", cfg.JWTSecret)
 	}
 	if cfg.APKStoragePath != "./apk_storage" {
@@ -91,7 +110,7 @@ func TestLoadAllDefaults(t *testing.T) {
 
 func TestLoadEnvOverrides(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("JWT_SECRET", "super-secret")
+	t.Setenv("JWT_SECRET", "super-secret-with-at-least-32-chars")
 	t.Setenv("DB_PASSWORD", "pass123")
 	t.Setenv("API_ADDR", ":9090")
 
@@ -100,7 +119,7 @@ func TestLoadEnvOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.JWTSecret != "super-secret" {
+	if cfg.JWTSecret != "super-secret-with-at-least-32-chars" {
 		t.Fatalf("JWTSecret=%q", cfg.JWTSecret)
 	}
 	if cfg.Database.Password != "pass123" {
@@ -112,7 +131,7 @@ func TestLoadEnvOverrides(t *testing.T) {
 }
 
 func TestLoadRedisDefaults(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "this-is-a-test-secret-with-enough-length")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +160,7 @@ func setRequiredEnv(t *testing.T) {
 	} {
 		t.Setenv(key, "")
 	}
-	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "this-is-a-test-secret-with-enough-length")
 }
 
 func TestDatabasePoolDefaults(t *testing.T) {
