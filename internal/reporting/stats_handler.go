@@ -31,7 +31,7 @@ func (h *StatsHandler) handleTopEvents(c *gin.Context) {
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 		limit = l
 	}
-	stats, err := h.repo.GetTopEvents(limit)
+	stats, err := h.repo.GetTopEvents(c.Request.Context(), limit)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
