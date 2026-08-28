@@ -16,19 +16,25 @@ onMounted(() => changeTheme());
 
 <template>
   <li class="nav-item dropdown me-2">
-    <a
+    <button
+      type="button"
       class="nav-link dropdown-toggle hide-arrow"
       :class="{ show: showingDropdown }"
       id="nav-theme"
-      href="javascript:void(0)"
-      @click="showingDropdown = !showingDropdown"
+      data-test="theme-trigger"
       data-bs-toggle="dropdown"
-      aria-label="Toggle theme (dark)"
-      aria-expanded="false"
+      :aria-label="`Switch theme (currently ${styleStore.theme})`"
+      :aria-expanded="showingDropdown"
+      aria-haspopup="menu"
+      @click="showingDropdown = !showingDropdown"
     >
-      <i class="bx-moon icon-base bx icon-md theme-icon-active"></i>
+      <i
+        class="bx-moon icon-base bx icon-md theme-icon-active"
+        data-test="theme-icon"
+        aria-hidden="true"
+      ></i>
       <span class="d-none ms-2" id="nav-theme-text">Toggle theme</span>
-    </a>
+    </button>
     <ul
       class="dropdown-menu dropdown-menu-end"
       :class="{ show: showingDropdown }"
@@ -40,7 +46,7 @@ onMounted(() => changeTheme());
           class="dropdown-item align-items-center"
           :class="{ active: styleStore.theme === 'light' }"
           data-bs-theme-value="light"
-          aria-pressed="false"
+          :aria-pressed="styleStore.theme === 'light'"
           @click="changeTheme('light')"
         >
           <span
@@ -55,7 +61,7 @@ onMounted(() => changeTheme());
           class="dropdown-item align-items-center"
           :class="{ active: styleStore.theme === 'dark' }"
           data-bs-theme-value="dark"
-          aria-pressed="true"
+          :aria-pressed="styleStore.theme === 'dark'"
           @click="changeTheme('dark')"
         >
           <span
