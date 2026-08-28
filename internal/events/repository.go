@@ -58,6 +58,16 @@ func NewRepository(db *gorm.DB) *Repository {
 	}
 }
 
+// DB exposes the underlying *gorm.DB so callers that still need raw
+// access (e.g. admin handlers using offset-based queries that have not
+// been promoted to repository methods) can share the same connection
+// pool as the repository. Prefer adding a new method on Repository
+// over reaching for this getter; the goal is to delete every direct
+// query, not to keep it alive forever.
+func (r *Repository) DB() *gorm.DB {
+	return r.db
+}
+
 func NewRepositoryWithLogoScheduler(db *gorm.DB, scheduler TeamLogoScheduler) *Repository {
 	repository := NewRepository(db)
 	if scheduler != nil {

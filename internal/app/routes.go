@@ -112,7 +112,7 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	eventsAppHandler := events.NewAppHandler(eventsService)
 	eventsAppHandler.RegisterRoutes(appV1, events.AppHandlerDeps{AppMiddleware: appMw})
 
-	eventsAdminHandler := events.NewAdminHandler(db)
+	eventsAdminHandler := events.NewAdminHandler(eventsRepo)
 	eventsAdminHandler.RegisterRoutes(webV1, events.AdminHandlerDeps{AuthMiddleware: adminThenRl})
 
 	logoHandler := events.NewLogoHandler()

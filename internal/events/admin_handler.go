@@ -10,7 +10,6 @@ import (
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"gorm.io/gorm"
 )
 
 type AdminHandlerDeps struct {
@@ -18,11 +17,11 @@ type AdminHandlerDeps struct {
 }
 
 type AdminHandler struct {
-	db *gorm.DB
+	repo *Repository
 }
 
-func NewAdminHandler(db *gorm.DB) *AdminHandler {
-	return &AdminHandler{db: db}
+func NewAdminHandler(repo *Repository) *AdminHandler {
+	return &AdminHandler{repo: repo}
 }
 
 func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerDeps) {
@@ -120,7 +119,7 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 		TeamName:             team,
 	}
 
-	events, hasMore, err := NewRepository(h.db).ListPage(c.Request.Context(), filter)
+	events, hasMore, err := h.repo.ListPage(c.Request.Context(), filter)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -200,7 +199,7 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 		limit = parsedLimit
 	}
 
-	query := h.db.WithContext(c.Request.Context()).Model(&Event{})
+	query := h.repo.DB().WithContext(c.Request.Context()).Model(&Event{})
 	if date != "" {
 		t, err := time.Parse("2006-01-02", date)
 		if err != nil {

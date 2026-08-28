@@ -53,7 +53,7 @@ func TestAdminEventsDateUsesUnixMilliseconds(t *testing.T) {
 		t.Fatalf("seed event: %v", err)
 	}
 
-	recorder, response := getAdminEvents(t, NewAdminHandler(db), "/events?date=2026-07-17")
+	recorder, response := getAdminEvents(t, NewAdminHandler(NewRepository(db)), "/events?date=2026-07-17")
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want %d, got %d", http.StatusOK, recorder.Code)
@@ -72,7 +72,7 @@ func TestAdminEventsWithoutDateUsesUnixMilliseconds(t *testing.T) {
 		t.Fatalf("seed events: %v", err)
 	}
 
-	recorder, response := getAdminEvents(t, NewAdminHandler(db), "/events")
+	recorder, response := getAdminEvents(t, NewAdminHandler(NewRepository(db)), "/events")
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want %d, got %d", http.StatusOK, recorder.Code)
@@ -88,7 +88,7 @@ func TestAdminEventsWithoutDateUsesUnixMilliseconds(t *testing.T) {
 func TestAdminEventsRejectsInvalidDate(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
 
-	recorder, _ := getAdminEvents(t, NewAdminHandler(db), "/events?date=not-a-date")
+	recorder, _ := getAdminEvents(t, NewAdminHandler(NewRepository(db)), "/events?date=not-a-date")
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
@@ -98,7 +98,7 @@ func TestAdminEventsRejectsInvalidDate(t *testing.T) {
 func TestAdminEventsInvalidDateMentionsUTC(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
 
-	recorder, _ := getAdminEvents(t, NewAdminHandler(db), "/events?date=not-a-date")
+	recorder, _ := getAdminEvents(t, NewAdminHandler(NewRepository(db)), "/events?date=not-a-date")
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
@@ -145,7 +145,7 @@ func TestHandleGetEventsPage_DescendingOrder(t *testing.T) {
 		}
 	}
 
-	recorder, response := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?limit=10&direction=desc")
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)), "/events/page?limit=10&direction=desc")
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want %d, got %d (%s)", http.StatusOK, recorder.Code, recorder.Body.String())
@@ -160,7 +160,7 @@ func TestHandleGetEventsPage_DescendingOrder(t *testing.T) {
 
 func TestHandleGetEventsPage_RejectsInvalidDirection(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
-	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?direction=sideways")
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)), "/events/page?direction=sideways")
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
 	}
@@ -176,7 +176,7 @@ func TestHandleGetEventsPage_DefaultsFromToTodayUTC(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	recorder, response := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?limit=10")
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)), "/events/page?limit=10")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
 	}
@@ -187,7 +187,7 @@ func TestHandleGetEventsPage_DefaultsFromToTodayUTC(t *testing.T) {
 
 func TestHandleGetEventsPage_InvalidTZ_400(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
-	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?tz=Mars/Olympus_Mons&limit=10")
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)), "/events/page?tz=Mars/Olympus_Mons&limit=10")
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want 400, got %d", recorder.Code)
 	}
@@ -198,7 +198,7 @@ func TestHandleGetEventsPage_InvalidTZ_400(t *testing.T) {
 
 func TestHandleGetEventsPage_InvalidStatus_400(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
-	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?status=paused&limit=10")
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)), "/events/page?status=paused&limit=10")
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want 400, got %d", recorder.Code)
 	}
@@ -206,7 +206,7 @@ func TestHandleGetEventsPage_InvalidStatus_400(t *testing.T) {
 
 func TestHandleGetEventsPage_MalformedFrom_400(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
-	recorder, _ := getAdminEventsPage(t, NewAdminHandler(db), "/events/page?from=not-a-date&limit=10")
+	recorder, _ := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)), "/events/page?from=not-a-date&limit=10")
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status: want 400, got %d", recorder.Code)
 	}
@@ -237,7 +237,7 @@ func TestHandleGetEventsPage_FromInUserTZ(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	recorder, response := getAdminEventsPage(t, NewAdminHandler(db),
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)),
 		"/events/page?from=2026-08-27&tz=Pacific/Auckland&limit=10")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
@@ -267,7 +267,7 @@ func TestHandleGetEventsPage_FromInNonUTCBoundary(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	recorder, response := getAdminEventsPage(t, NewAdminHandler(db),
+	recorder, response := getAdminEventsPage(t, NewAdminHandler(NewRepository(db)),
 		"/events/page?tz=America/Santo_Domingo&limit=10")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
