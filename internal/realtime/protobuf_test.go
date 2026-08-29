@@ -45,7 +45,7 @@ func TestEncodeDecodeHello(t *testing.T) {
 func TestEncodeDecodePush(t *testing.T) {
 	original := &pb.WsFrame{Payload: &pb.WsFrame_Push{Push: &pb.WsPush{
 		PushId:     42,
-		MessageId:  99,
+		MessageId:  "99",
 		Category:   pb.PushCategory_PUSH_CATEGORY_EVENT_ALERT,
 		Title:      "Goal!",
 		Body:       "Real Madrid 1 - 0 Barcelona",
@@ -70,8 +70,8 @@ func TestEncodeDecodePush(t *testing.T) {
 	if push == nil {
 		t.Fatalf("decoded payload is not Push: %T", got.Payload)
 	}
-	if push.PushId != 42 || push.MessageId != 99 {
-		t.Errorf("ids = (%d, %d), want (42, 99)", push.PushId, push.MessageId)
+	if push.PushId != 42 || push.MessageId != "99" {
+		t.Errorf("ids = (%d, %q), want (42, \"99\")", push.PushId, push.MessageId)
 	}
 	if push.Category != pb.PushCategory_PUSH_CATEGORY_EVENT_ALERT {
 		t.Errorf("Category = %v", push.Category)
@@ -94,7 +94,7 @@ func TestEncodeDecodePush(t *testing.T) {
 // server uses this to flip delivery_attempts to DELIVERED.
 func TestEncodeDecodePushAck(t *testing.T) {
 	original := &pb.WsFrame{Payload: &pb.WsFrame_PushAck{PushAck: &pb.WsPushAck{
-		MessageId: 99,
+		MessageId: "99",
 		AckedAt:   1700000001500,
 	}}}
 	raw, err := encodeFrame(original)
@@ -109,8 +109,8 @@ func TestEncodeDecodePushAck(t *testing.T) {
 	if ack == nil {
 		t.Fatalf("decoded payload is not PushAck: %T", got.Payload)
 	}
-	if ack.MessageId != 99 {
-		t.Errorf("MessageId = %d, want 99", ack.MessageId)
+	if ack.MessageId != "99" {
+		t.Errorf("MessageId = %q, want \"99\"", ack.MessageId)
 	}
 	if ack.AckedAt != 1700000001500 {
 		t.Errorf("AckedAt = %d", ack.AckedAt)

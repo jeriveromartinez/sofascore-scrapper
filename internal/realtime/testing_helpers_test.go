@@ -14,7 +14,7 @@ import (
 // delivery tests. The hub only cares about the encoded bytes.
 type testPush struct {
 	ID        uint64
-	MessageID uint64
+	MessageID string
 }
 
 // encode implements FramePayload: returns the wire bytes the hub will

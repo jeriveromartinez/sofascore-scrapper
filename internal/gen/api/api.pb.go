@@ -5449,8 +5449,8 @@ func (x *WsHello) GetServerTime() int64 {
 
 type WsPush struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PushId        uint64                 `protobuf:"varint,1,opt,name=push_id,json=pushId,proto3" json:"push_id,omitempty"`          // = push_messages.id
-	MessageId     uint64                 `protobuf:"varint,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"` // unique per attempt; client must echo in ack
+	PushId        uint64                 `protobuf:"varint,1,opt,name=push_id,json=pushId,proto3" json:"push_id,omitempty"`         // = push_messages.id
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"` // unique per attempt; client must echo in ack
 	Category      PushCategory           `protobuf:"varint,3,opt,name=category,proto3,enum=sofascore.PushCategory" json:"category,omitempty"`
 	Title         string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
 	Body          string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
@@ -5501,11 +5501,11 @@ func (x *WsPush) GetPushId() uint64 {
 	return 0
 }
 
-func (x *WsPush) GetMessageId() uint64 {
+func (x *WsPush) GetMessageId() string {
 	if x != nil {
 		return x.MessageId
 	}
-	return 0
+	return ""
 }
 
 func (x *WsPush) GetCategory() PushCategory {
@@ -5573,9 +5573,8 @@ func (x *WsPush) GetSentAt() int64 {
 
 type WsPushAck struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PushId        uint64                 `protobuf:"varint,1,opt,name=push_id,json=pushId,proto3" json:"push_id,omitempty"`          // identifies the push_messages row; the server uses it to look up delivery_attempts
-	MessageId     uint64                 `protobuf:"varint,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"` // echoes WsPush.message_id (kept for client-side latency display)
-	AckedAt       int64                  `protobuf:"varint,3,opt,name=acked_at,json=ackedAt,proto3" json:"acked_at,omitempty"`       // unix milliseconds
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"` // echoes WsPush.message_id (kept for client-side latency display)
+	AckedAt       int64                  `protobuf:"varint,3,opt,name=acked_at,json=ackedAt,proto3" json:"acked_at,omitempty"`      // unix milliseconds
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5610,18 +5609,11 @@ func (*WsPushAck) Descriptor() ([]byte, []int) {
 	return file_proto_api_proto_rawDescGZIP(), []int{73}
 }
 
-func (x *WsPushAck) GetPushId() uint64 {
-	if x != nil {
-		return x.PushId
-	}
-	return 0
-}
-
-func (x *WsPushAck) GetMessageId() uint64 {
+func (x *WsPushAck) GetMessageId() string {
 	if x != nil {
 		return x.MessageId
 	}
-	return 0
+	return ""
 }
 
 func (x *WsPushAck) GetAckedAt() int64 {
@@ -6236,7 +6228,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x06WsPush\x12\x17\n" +
 	"\apush_id\x18\x01 \x01(\x04R\x06pushId\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\x04R\tmessageId\x123\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x123\n" +
 	"\bcategory\x18\x03 \x01(\x0e2\x17.sofascore.PushCategoryR\bcategory\x12\x14\n" +
 	"\x05title\x18\x04 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x05 \x01(\tR\x04body\x12\x1b\n" +
@@ -6250,11 +6242,10 @@ const file_proto_api_proto_rawDesc = "" +
 	"\asent_at\x18\v \x01(\x03R\x06sentAt\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"^\n" +
-	"\tWsPushAck\x12\x17\n" +
-	"\apush_id\x18\x01 \x01(\x04R\x06pushId\x12\x1d\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"E\n" +
+	"\tWsPushAck\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\x04R\tmessageId\x12\x19\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12\x19\n" +
 	"\backed_at\x18\x03 \x01(\x03R\aackedAt\"!\n" +
 	"\x06WsPing\x12\x17\n" +
 	"\asent_at\x18\x01 \x01(\x03R\x06sentAt\"!\n" +

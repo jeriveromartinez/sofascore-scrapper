@@ -69,7 +69,7 @@ func TestSubscriber_RoundTripsPushMessage(t *testing.T) {
 	// Publish a push aimed at device 42.
 	push := &pb.WsPush{
 		PushId:    7,
-		MessageId: 100,
+		MessageId: "100",
 		Title:     "hello",
 		Body:      "world",
 		SentAt:    1700000000000,
@@ -94,7 +94,7 @@ func TestSubscriber_RoundTripsPushMessage(t *testing.T) {
 		if p == nil {
 			t.Fatalf("decoded payload is not Push: %T", frame.Payload)
 		}
-		if p.PushId != 7 || p.MessageId != 100 || p.Title != "hello" {
+		if p.PushId != 7 || p.MessageId != "100" || p.Title != "hello" {
 			t.Errorf("decoded push = %+v", p)
 		}
 	case <-time.After(2 * time.Second):
@@ -123,7 +123,7 @@ func TestSubscriber_IgnoresOtherInstances(t *testing.T) {
 
 	// No error expected; miniredis counts the published messages
 	// and we can assert at least one was broadcast.
-	if err := sub.Publish(ctx, 9999, &pb.WsPush{PushId: 1, MessageId: 1, Title: "x", Body: "y"}); err != nil {
+	if err := sub.Publish(ctx, 9999, &pb.WsPush{PushId: 1, MessageId: "1", Title: "x", Body: "y"}); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)

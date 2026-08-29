@@ -51,7 +51,7 @@ func TestHub_DeliverToLocal(t *testing.T) {
 	h.Register(2, c2)
 
 	// Push to device 1 only.
-	if err := h.DeliverToLocal(1, &testPush{ID: 99, MessageID: 7}); err != nil {
+	if err := h.DeliverToLocal(1, &testPush{ID: 99, MessageID: "7"}); err != nil {
 		t.Fatalf("DeliverToLocal(1): %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestHub_DeliverToLocal(t *testing.T) {
 // delivery_attempts.state = failed / failure_reason = device_offline.
 func TestHub_DeliverToLocal_UnknownDeviceIsNoop(t *testing.T) {
 	h := NewHub()
-	err := h.DeliverToLocal(404, &testPush{ID: 1, MessageID: 1})
+	err := h.DeliverToLocal(404, &testPush{ID: 1, MessageID: "1"})
 	if err != ErrDeviceNotConnected {
 		t.Errorf("err = %v, want ErrDeviceNotConnected", err)
 	}

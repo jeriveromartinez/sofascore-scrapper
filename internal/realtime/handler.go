@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"strconv"
 )
 
 const (
@@ -209,7 +208,7 @@ func readLoop(conn *Connection, logger *slog.Logger) {
 			continue
 		}
 		if ack := frame.GetPushAck(); ack != nil {
-			conn.onAck(strconv.FormatUint(ack.MessageId, 10))
+			conn.onAck(ack.MessageId)
 		}
 		// Other inbound frames (Hello/Push/Error) are not expected
 		// from the client and are silently dropped.
