@@ -61,20 +61,16 @@ func (r *Repository) InsertDeliveryAttempts(ctx context.Context, attempts []Deli
 }
 
 // MarkDeliveryDelivered flips the row to DELIVERED and stamps
-// acked_at + latency_ms (now - sent_at). It is called from the WS
-// ack handler when the client echoes the message_id.
-//
-// Latency is computed in Go (not via SQL) so the same code path
-// works on both MariaDB (production) and SQLite (tests). The
-// tradeoff is one extra read of sent_at; the row is indexed by
-// (push_message_id, device_id) so the lookup is cheap.
-func (r *Repository) MarkDeliveryDelivered(ctx context.Context, pushID, deviceID uint, ackedAt time.Time) error {
+// acked_at + latency_ms (now - sent_at). Lookup is by the
+// transport message_id (UUID v4), which is UNIQUE on the table.
+// Latency is computed in Go (not via SQL) for MariaDB/SQLite parity.
+func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string, ackedAt time.Time) error {
 	// Read sent_at first to compute latency. If sent_at is null
 	// (which should never happen but is a defensive guard), skip
 	// the latency update entirely.
 	var existing DeliveryAttempt
 	if err := r.db.WithContext(ctx).
-		Where("push_message_id = ? AND device_id = ?", pushID, deviceID).
+		Where("message_id = ?", messageID).
 		First(&existing).Error; err != nil {
 		return err
 	}
@@ -91,7 +87,7 @@ func (r *Repository) MarkDeliveryDelivered(ctx context.Context, pushID, deviceID
 		updates["latency_ms"] = int(latencyMS)
 	}
 	return r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
-		Where("push_message_id = ? AND device_id = ?", pushID, deviceID).
+		Where("message_id = ?", messageID).
 		Updates(updates).Error
 }
 
@@ -125,10 +121,10 @@ func (r *Repository) MarkDeliveryDeliveredByMessageID(ctx context.Context, messa
 
 // MarkDeliveryFailed flips the row to FAILED and records the
 // reason. Used for timeouts, ws_disconnected, domain_mismatch, and
-// device_offline. No ack_at is set.
-func (r *Repository) MarkDeliveryFailed(ctx context.Context, pushID, deviceID uint, reason FailureReason) error {
+// device_offline. No ack_at is set. Lookup is by message_id.
+func (r *Repository) MarkDeliveryFailed(ctx context.Context, messageID string, reason FailureReason) error {
 	return r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
-		Where("push_message_id = ? AND device_id = ?", pushID, deviceID).
+		Where("message_id = ?", messageID).
 		Updates(map[string]any{
 			"state":          StateFailed,
 			"failure_reason": reason,

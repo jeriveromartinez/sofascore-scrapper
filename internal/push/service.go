@@ -170,10 +170,9 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 	for _, dev := range audience {
 		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), pushFrames[dev.ID]); err != nil {
 			if errors.Is(err, realtime.ErrDeviceNotConnected) {
-				if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureDeviceOffline); markErr != nil {
+				if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureDeviceOffline); markErr != nil {
 					s.logger.Warn("push: mark offline failed",
-						slog.Uint64("push_id", uint64(msg.ID)),
-						slog.Uint64("device_id", uint64(dev.ID)),
+						slog.String("message_id", pushFrames[dev.ID].MessageId),
 						slog.String("error", markErr.Error()))
 				}
 				continue
@@ -182,10 +181,9 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 				slog.Uint64("push_id", uint64(msg.ID)),
 				slog.Uint64("device_id", uint64(dev.ID)),
 				slog.String("error", err.Error()))
-			if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureInternalError); markErr != nil {
+			if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureInternalError); markErr != nil {
 				s.logger.Warn("push: mark internal-error failed",
-					slog.Uint64("push_id", uint64(msg.ID)),
-					slog.Uint64("device_id", uint64(dev.ID)),
+					slog.String("message_id", pushFrames[dev.ID].MessageId),
 					slog.String("error", markErr.Error()))
 			}
 		}
@@ -364,10 +362,9 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 	for _, dev := range audience {
 		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), pushFrames[dev.ID]); err != nil {
 			if errors.Is(err, realtime.ErrDeviceNotConnected) {
-				if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureDeviceOffline); markErr != nil {
+				if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureDeviceOffline); markErr != nil {
 					s.logger.Warn("push: mark offline failed",
-						slog.Uint64("push_id", uint64(msg.ID)),
-						slog.Uint64("device_id", uint64(dev.ID)),
+						slog.String("message_id", pushFrames[dev.ID].MessageId),
 						slog.String("error", markErr.Error()))
 				}
 				continue
@@ -376,10 +373,9 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 				slog.Uint64("push_id", uint64(msg.ID)),
 				slog.Uint64("device_id", uint64(dev.ID)),
 				slog.String("error", err.Error()))
-			if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureInternalError); markErr != nil {
+			if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureInternalError); markErr != nil {
 				s.logger.Warn("push: mark internal-error failed",
-					slog.Uint64("push_id", uint64(msg.ID)),
-					slog.Uint64("device_id", uint64(dev.ID)),
+					slog.String("message_id", pushFrames[dev.ID].MessageId),
 					slog.String("error", markErr.Error()))
 			}
 		}

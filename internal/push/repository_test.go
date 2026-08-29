@@ -205,7 +205,7 @@ func TestRepository_MarkDeliverySent_Delivered_Failed(t *testing.T) {
 		t.Fatalf("insert attempts: %v", err)
 	}
 	ackedAt := now.Add(50 * time.Millisecond)
-	if err := repo.MarkDeliveryDelivered(ctx, msg.ID, devs[0], ackedAt); err != nil {
+	if err := repo.MarkDeliveryDelivered(ctx, "test-msg-1", ackedAt); err != nil {
 		t.Fatalf("mark delivered: %v", err)
 	}
 	var got DeliveryAttempt
@@ -237,7 +237,7 @@ func TestRepository_MarkDeliverySent_Delivered_Failed(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("insert attempts2: %v", err)
 	}
-	if err := repo.MarkDeliveryFailed(ctx, msg2.ID, devs[0], FailureDeviceOffline); err != nil {
+	if err := repo.MarkDeliveryFailed(ctx, "test-msg-2", FailureDeviceOffline); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
 	var got2 DeliveryAttempt
