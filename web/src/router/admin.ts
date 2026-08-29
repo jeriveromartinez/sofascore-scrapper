@@ -13,6 +13,12 @@ export const adminRoutes: CustomRouteRecordRaw[] = [
     component: () => import("../pages/apk/apkAdmin.vue"),
     icon: "bx-joystick",
   },
+  {
+    name: "Pushes",
+    path: "pushes",
+    component: () => import("../pages/pushes.vue"),
+    icon: "bx-bell",
+  },
 ];
 
 export default adminRoutes;
