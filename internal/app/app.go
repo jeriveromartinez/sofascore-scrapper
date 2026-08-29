@@ -16,6 +16,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	goredis "github.com/redis/go-redis/v9"
@@ -31,11 +32,17 @@ type App struct {
 	SQL           *sql.DB
 	Redis         *goredis.Client
 	logoScheduler events.TeamLogoScheduler
-	ready         atomic.Bool
-	batchSize     int
-	concur        int
-	storagePath   string
-	logger        *slog.Logger
+	// realtimeHub is the local WebSocket registry. One per backend
+	// instance; the Redis pub/sub subscriber fans out cross-instance.
+	realtimeHub *realtime.Hub
+	// realtimeSubscriber consumes push:fanout and dispatches to the
+	// local hub. Stopped during shutdown.
+	realtimeSubscriber *realtime.Subscriber
+	ready              atomic.Bool
+	batchSize          int
+	concur             int
+	storagePath        string
+	logger             *slog.Logger
 }
 
 func (a *App) IsReady() bool {
@@ -84,14 +91,18 @@ func New(cfg config.Config) (*App, error) {
 		Redis:         redisClient,
 		logoScheduler: logoScheduler,
 		Pprof:         pprofSrv,
+		realtimeHub:   realtime.NewHub(),
 		batchSize:     cfg.ScrapeBatchSize,
 		concur:        cfg.ScrapeConcurrency,
 		storagePath:   cfg.APKStoragePath,
 		logger:        logger,
 	}
+	app.realtimeSubscriber = realtime.NewSubscriber(redisClient, app.realtimeHub, realtime.SubscriberConfig{
+		Logger: logger,
+	})
 	app.ready.Store(true)
 
-	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler)
+	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler, app.realtimeHub)
 	router.Use(server.ReadinessMiddleware(&app.ready))
 
 	app.HTTP = &http.Server{
@@ -120,6 +131,19 @@ func (a *App) Run(ctx context.Context) error {
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))
 
 	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		if a.realtimeSubscriber == nil {
+			// Tests construct an App directly without wiring the
+			// subscriber; treat this as a no-op rather than a panic.
+			<-ctx.Done()
+			return nil
+		}
+		if err := a.realtimeSubscriber.Start(ctx); err != nil {
+			a.logger.Error("realtime: subscriber start failed", slog.String("error", err.Error()))
+			return err
+		}
+		return nil
+	})
 	group.Go(func() error {
 		a.logger.Info("API server listening", slog.String("addr", a.HTTP.Addr))
 		return a.HTTP.ListenAndServe()
