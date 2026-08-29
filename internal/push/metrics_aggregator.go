@@ -18,10 +18,11 @@ import (
 //
 // The aggregations covered here match the spec section "Agregadas
 // por user":
-//   messages_sent_total, messages_delivered_total, delivery_rate_total,
-//   active_schedules, scheduled_fires_24h/7d/30d, scheduled_failures,
-//   audience_size (devices in the user's domains), audience_peak_today,
-//   top_platforms, top_app_versions, hourly_histogram_30d, last_push_at.
+//
+//	messages_sent_total, messages_delivered_total, delivery_rate_total,
+//	active_schedules, scheduled_fires_24h/7d/30d, scheduled_failures,
+//	audience_size (devices in the user's domains), audience_peak_today,
+//	top_platforms, top_app_versions, hourly_histogram_30d, last_push_at.
 //
 // The 30-day histogram bucket is built in Go from a single SQL
 // SELECT; the same query also feeds last_push_at.
