@@ -7,7 +7,7 @@ import (
 )
 
 func DeviceToProto(d Device) *pb.Device {
-	return &pb.Device{
+	pb := &pb.Device{
 		Id:        uint32(d.ID),
 		CreatedAt: formatDateTime(d.CreatedAt),
 		UpdatedAt: formatDateTime(d.UpdatedAt),
@@ -17,6 +17,10 @@ func DeviceToProto(d Device) *pb.Device {
 		Version:   d.Version,
 		LastSeen:  d.LastSeen,
 	}
+	if d.DomainID != nil {
+		pb.DomainId = uint32(*d.DomainID)
+	}
+	return pb
 }
 
 func DevicesToProto(devices []Device) []*pb.Device {

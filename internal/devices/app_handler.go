@@ -27,7 +27,13 @@ func (h *AppHandler) handleRegisterDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.repo.Register(nil, req.Token, req.Platform, req.Name, req.Version)
+	var domainID *uint
+	if req.DomainId != 0 {
+		id := uint(req.DomainId)
+		domainID = &id
+	}
+
+	device, err := h.repo.Register(nil, domainID, req.Token, req.Platform, req.Name, req.Version)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

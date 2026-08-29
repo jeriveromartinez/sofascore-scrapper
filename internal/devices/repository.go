@@ -17,7 +17,11 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Register(userID *uint, token, platform, name, version string) (*Device, error) {
+// Register upserts a device by token. If the row already exists, only
+// the explicitly provided fields are refreshed; a nil domainID does
+// NOT clear an existing domain_id, so a re-register from the Flutter
+// app does not wipe the operator's domain assignment.
+func (r *Repository) Register(userID, domainID *uint, token, platform, name, version string) (*Device, error) {
 	device := &Device{
 		UserID:   userID,
 		Token:    token,
@@ -26,7 +30,11 @@ func (r *Repository) Register(userID *uint, token, platform, name, version strin
 		Version:  version,
 		LastSeen: time.Now().Unix(),
 	}
-	result := r.db.Where(Device{Token: token}).Assign(Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version}).FirstOrCreate(device)
+	assign := Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version}
+	if domainID != nil {
+		assign.DomainID = domainID
+	}
+	result := r.db.Where(Device{Token: token}).Assign(assign).FirstOrCreate(device)
 	return device, result.Error
 }
 
