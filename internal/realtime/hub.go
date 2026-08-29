@@ -27,8 +27,11 @@ type FramePayload interface {
 // The Hub is safe for concurrent use: register, unregister, get,
 // count, and deliver can be called from any goroutine.
 type Hub struct {
-	mu    sync.RWMutex
-	conns map[uint64]*Connection
+	mu      sync.RWMutex
+	conns   map[uint64]*Connection
+	metrics interface {
+		SetWSConnections(n int)
+	}
 }
 
 // NewHub returns an empty Hub.
@@ -51,7 +54,9 @@ func (h *Hub) Register(deviceID uint64, c *Connection) {
 		delete(h.conns, deviceID)
 	}
 	h.conns[deviceID] = c
+	count := len(h.conns)
 	h.mu.Unlock()
+	h.notifyConnCount(count)
 }
 
 // Unregister removes the connection for deviceID and closes it. The
@@ -63,9 +68,26 @@ func (h *Hub) Unregister(deviceID uint64) {
 	if ok {
 		delete(h.conns, deviceID)
 	}
+	count := len(h.conns)
 	h.mu.Unlock()
 	if ok && c != nil {
 		c.Close(1000, "client closed or hub unregister")
+	}
+	h.notifyConnCount(count)
+}
+
+// SetMetrics wires the gauge callback that fires on every
+// register/unregister. The interface (rather than a concrete
+// *push.Metrics) avoids an import cycle: realtime would otherwise
+// have to import push just to bump a counter.
+func (h *Hub) SetMetrics(m interface{ SetWSConnections(n int) }) {
+	h.metrics = m
+	h.notifyConnCount(h.Count())
+}
+
+func (h *Hub) notifyConnCount(n int) {
+	if h.metrics != nil {
+		h.metrics.SetWSConnections(n)
 	}
 }
 

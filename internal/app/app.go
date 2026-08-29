@@ -22,6 +22,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/prometheus/client_golang/prometheus"
 	goredis "github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
@@ -47,6 +48,10 @@ type App struct {
 	// flip delivery_attempts to DELIVERED on the same database
 	// the REST handlers read.
 	pushService *push.Service
+	// pushMetrics exports the push counters/gauges/histograms to
+	// the project's Prometheus registry. nil-safe so tests can
+	// skip wiring it.
+	pushMetrics *push.Metrics
 	ready       atomic.Bool
 	batchSize   int
 	concur      int
@@ -109,6 +114,8 @@ func New(cfg config.Config) (*App, error) {
 	app.realtimeSubscriber = realtime.NewSubscriber(redisClient, app.realtimeHub, realtime.SubscriberConfig{
 		Logger: logger,
 	})
+	pushMetrics := push.NewMetrics(prometheus.DefaultRegisterer)
+	app.pushMetrics = pushMetrics
 	pushRepo := push.NewRepository(db)
 	domainRepoPush := domains.NewRepository(db)
 	userRepoPush := users.NewRepository(db)
@@ -119,6 +126,8 @@ func New(cfg config.Config) (*App, error) {
 		userRepoPush,
 		logger,
 	)
+	app.pushService.SetMetrics(pushMetrics)
+	app.realtimeHub.SetMetrics(pushMetrics)
 	app.ready.Store(true)
 
 	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler, app.realtimeHub, app.pushService)
@@ -148,6 +157,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))
+	a.Scheduler.SetPushService(a.pushService, redisplatform.NewLocker(a.Redis))
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {

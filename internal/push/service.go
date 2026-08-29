@@ -62,6 +62,7 @@ type Service struct {
 	userRepo   UserGetter
 	parser     cron.Parser
 	logger     *slog.Logger
+	metrics    *Metrics
 	// messageCounter is a per-process atomic used to mint the
 	// transport message_id. It is intentionally not persisted:
 	// the message_id is only meaningful to the client, not to the
@@ -83,6 +84,12 @@ func NewService(repo *Repository, pusher Pusher, domainRepo DomainLister, userRe
 		parser:     cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow),
 		logger:     logger,
 	}
+}
+
+// SetMetrics wires the Prometheus metrics. nil-safe at the call
+// sites; the service continues to work without metrics.
+func (s *Service) SetMetrics(m *Metrics) {
+	s.metrics = m
 }
 
 // CreateImmediate validates the request, persists a push_messages
@@ -245,6 +252,153 @@ func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, do
 // keyed by message_id).
 func (s *Service) OnAck(ctx context.Context, pushID, deviceID, _ uint64) error {
 	return s.repo.MarkDeliveryDelivered(ctx, uint(pushID), uint(deviceID), time.Now())
+}
+
+// DispatchScheduled fires a single scheduled push. It is called
+// from the scheduler runner for every row that is due
+// (is_active = true and next_fire_at <= now). The flow is the
+// same as CreateImmediate's: persist a push_messages row, snapshot
+// delivery_attempts, publish to the hub, and record per-device
+// outcomes. The schedule is then either deactivated (one_shot) or
+// rescheduled (recurring).
+//
+// Unlike CreateImmediate, this method does NOT re-validate the
+// per-user feature toggle or domain ownership. The schedule is
+// the source of truth: if the user disabled notifications after
+// creating the schedule, the existing schedule still fires (the
+// spec's "se desactiva en cascada" rule is enforced at toggle
+// time, not at fire time). The audience filter still runs and the
+// rows are still snapshotted, so a deactivated user can
+// reactivate and immediately see the metrics.
+func (s *Service) DispatchScheduled(ctx context.Context, schedule *ScheduledPush) error {
+	now := time.Now()
+	domainIDs := make([]uint, 0, len(schedule.Domains))
+	for _, d := range schedule.Domains {
+		domainIDs = append(domainIDs, d.ID)
+	}
+	msg := &PushMessage{
+		UserID:      schedule.UserID,
+		Category:    schedule.Category,
+		Title:       schedule.Title,
+		Body:        schedule.Body,
+		ImageURL:    schedule.ImageURL,
+		DeepLink:    schedule.DeepLink,
+		Priority:    schedule.Priority,
+		TTLSeconds:  schedule.TTLSeconds,
+		DataJSON:    schedule.DataJSON,
+		Source:      SourceScheduled,
+		ScheduledID: &schedule.ID,
+	}
+	if err := s.repo.InsertPushMessageWithTargets(ctx, msg, domainIDs, &now); err != nil {
+		return fmt.Errorf("insert scheduled push: %w", err)
+	}
+	if err := s.markScheduleFired(ctx, schedule, now); err != nil {
+		s.logger.Warn("push: mark schedule fired",
+			slog.Uint64("schedule_id", uint64(schedule.ID)),
+			slog.String("error", err.Error()))
+	}
+	payload := payloadFromSchedule(schedule)
+	if err := s.dispatchToAudience(ctx, msg, audienceFilter{DomainIDs: domainIDs}, payload); err != nil {
+		return fmt.Errorf("dispatch: %w", err)
+	}
+	return nil
+}
+
+// markScheduleFired handles the per-type post-fire state. For
+// one_shot, it deactivates the row. For recurring, it computes
+// the next fire and stamps last_fired_at.
+func (s *Service) markScheduleFired(ctx context.Context, schedule *ScheduledPush, now time.Time) error {
+	switch schedule.ScheduleType {
+	case ScheduleTypeOneShot:
+		return s.repo.MarkScheduledPushFired(ctx, schedule.ID, now)
+	case ScheduleTypeRecurring:
+		parsed, err := s.parser.Parse(schedule.CronExpr)
+		if err != nil {
+			return fmt.Errorf("parse cron: %w", err)
+		}
+		next := parsed.Next(now)
+		return s.repo.RescheduleRecurring(ctx, schedule.ID, next, now)
+	default:
+		return fmt.Errorf("unknown schedule_type %q", schedule.ScheduleType)
+	}
+}
+
+// audienceFilter is a small helper struct for the audience filter
+// path. Today it only carries domainIDs; future filters (platform,
+// app version, last-seen-recently) extend it.
+type audienceFilter struct {
+	DomainIDs []uint
+}
+
+// dispatchToAudience is the shared path used by both
+// CreateImmediate and DispatchScheduled. It snapshots the
+// audience, inserts delivery_attempts, publishes each frame to
+// the hub, and records per-device outcomes.
+func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filter audienceFilter, payload *pb.PushPayload) error {
+	audience, err := s.repo.ListAudienceDevicesForDomains(ctx, filter.DomainIDs)
+	if err != nil {
+		return fmt.Errorf("list audience: %w", err)
+	}
+	now := time.Now()
+	attempts := make([]DeliveryAttempt, 0, len(audience))
+	for _, dev := range audience {
+		attempts = append(attempts, DeliveryAttempt{
+			PushMessageID: msg.ID,
+			DeviceID:      dev.ID,
+			State:         StateSent,
+			SentAt:        &now,
+		})
+	}
+	if err := s.repo.InsertDeliveryAttempts(ctx, attempts); err != nil {
+		return fmt.Errorf("insert delivery attempts: %w", err)
+	}
+	for _, dev := range audience {
+		frame := buildWsPush(msg.ID, dev.ID, &now, payload)
+		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), frame); err != nil {
+			if errors.Is(err, realtime.ErrDeviceNotConnected) {
+				if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureDeviceOffline); markErr != nil {
+					s.logger.Warn("push: mark offline failed",
+						slog.Uint64("push_id", uint64(msg.ID)),
+						slog.Uint64("device_id", uint64(dev.ID)),
+						slog.String("error", markErr.Error()))
+				}
+				continue
+			}
+			s.logger.Warn("push: publish failed",
+				slog.Uint64("push_id", uint64(msg.ID)),
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("error", err.Error()))
+			if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureInternalError); markErr != nil {
+				s.logger.Warn("push: mark internal-error failed",
+					slog.Uint64("push_id", uint64(msg.ID)),
+					slog.Uint64("device_id", uint64(dev.ID)),
+					slog.String("error", markErr.Error()))
+			}
+		}
+	}
+	return nil
+}
+
+// payloadFromSchedule converts a schedule's denormalized payload
+// fields into a pb.PushPayload suitable for buildWsPush.
+func payloadFromSchedule(s *ScheduledPush) *pb.PushPayload {
+	return &pb.PushPayload{
+		Category:   CategoryToProto(s.Category),
+		Title:      s.Title,
+		Body:       s.Body,
+		ImageUrl:   s.ImageURL,
+		DeepLink:   s.DeepLink,
+		Priority:   PriorityToProto(s.Priority),
+		TtlSeconds: int32(s.TTLSeconds),
+		Data:       map[string]string(s.DataJSON),
+	}
+}
+
+// ListDueScheduledPushes returns schedules whose next_fire_at has
+// arrived. Exposed as a service method so the scheduler runner in
+// internal/scheduler does not need to import internal/push.
+func (s *Service) ListDueScheduledPushes(ctx context.Context, now time.Time, limit int) ([]ScheduledPush, error) {
+	return s.repo.ListDueScheduledPushes(ctx, now, limit)
 }
 
 // authorize checks that the caller is either the user themselves
