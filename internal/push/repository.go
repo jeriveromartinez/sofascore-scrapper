@@ -91,34 +91,6 @@ func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string
 		Updates(updates).Error
 }
 
-// MarkDeliveryDeliveredByMessageID flips the row to DELIVERED using
-// the transport message_id (UUID v4) as the lookup key. This is the
-// preferred path after the AckHandler refactor (Tasks 6-9). Latency
-// is computed in Go for SQLite/MariaDB parity.
-func (r *Repository) MarkDeliveryDeliveredByMessageID(ctx context.Context, messageID string, ackedAt time.Time) error {
-	var existing DeliveryAttempt
-	if err := r.db.WithContext(ctx).
-		Where("message_id = ?", messageID).
-		First(&existing).Error; err != nil {
-		return err
-	}
-	updates := map[string]any{
-		"state":          StateDelivered,
-		"acked_at":       ackedAt,
-		"failure_reason": nil,
-	}
-	if existing.SentAt != nil {
-		latencyMS := ackedAt.Sub(*existing.SentAt).Milliseconds()
-		if latencyMS < 0 {
-			latencyMS = 0
-		}
-		updates["latency_ms"] = int(latencyMS)
-	}
-	return r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
-		Where("message_id = ?", messageID).
-		Updates(updates).Error
-}
-
 // MarkDeliveryFailed flips the row to FAILED and records the
 // reason. Used for timeouts, ws_disconnected, domain_mismatch, and
 // device_offline. No ack_at is set. Lookup is by message_id.

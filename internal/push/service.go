@@ -252,7 +252,7 @@ func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, do
 // DELIVERED. The messageID is the client-side transport UUID v4
 // (Tasks 8-9) that uniquely identifies the delivery attempt.
 func (s *Service) OnAck(ctx context.Context, messageID string) error {
-	return s.repo.MarkDeliveryDeliveredByMessageID(ctx, messageID, time.Now())
+	return s.repo.MarkDeliveryDelivered(ctx, messageID, time.Now())
 }
 
 // DispatchScheduled fires a single scheduled push. It is called
