@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"strconv"
 	"sync/atomic"
@@ -522,10 +523,14 @@ func deviceIDsOf(devs []devices.Device) []uint {
 }
 
 // buildWsPush constructs the on-the-wire WsPush frame. The
-// message_id is a monotonic per-process counter; it is not
-// persisted because the server identifies deliveries by
-// (push_id, device_id). The client uses message_id to display
-// latency or to deduplicate retransmits.
+// message_id is a globally unique UUID v4 string. It is persisted
+// in delivery_attempts.message_id (UNIQUE) and echoed by the
+// client in WsPushAck.
+//
+// The proto field WsPush.MessageId is currently uint64 (Task 9 will
+// change it to string). As a temporary bridge, we hash the UUID to
+// a uint64; when Task 9 lands, the proto regenerates with string
+// MessageId and this line becomes: MessageId: id
 func buildWsPush(pushID, deviceID uint, sentAt *time.Time, payload *pb.PushPayload) *pb.WsPush {
 	data := map[string]string{}
 	for k, v := range payload.GetData() {
@@ -536,9 +541,12 @@ func buildWsPush(pushID, deviceID uint, sentAt *time.Time, payload *pb.PushPaylo
 		sentAtMS = sentAt.UnixMilli()
 	}
 	_ = deviceID
+	id := nextMessageID()
+	// TODO(Task-9): proto WsPush.MessageId changes to string; remove hash.
+	msgIDUint64 := fnvHash64(id)
 	return &pb.WsPush{
 		PushId:     uint64(pushID),
-		MessageId:  nextMessageID(),
+		MessageId:  msgIDUint64,
 		Category:   payload.GetCategory(),
 		Title:      payload.GetTitle(),
 		Body:       payload.GetBody(),
@@ -549,4 +557,13 @@ func buildWsPush(pushID, deviceID uint, sentAt *time.Time, payload *pb.PushPaylo
 		Data:       data,
 		SentAt:     sentAtMS,
 	}
+}
+
+// fnvHash64 returns a deterministic uint64 hash of s using FNV-1a.
+// Used as a temporary bridge while proto WsPush.MessageId transitions
+// from uint64 to string (Task 9).
+func fnvHash64(s string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(s))
+	return h.Sum64()
 }
