@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"errors"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -102,6 +103,37 @@ func (r *Repository) CountAdmins() (int64, error) {
 	var count int64
 	err := r.db.Model(&User{}).Where("role = ?", RoleAdmin).Count(&count).Error
 	return count, err
+}
+
+// SetNotificationsEnabled flips the per-user push feature toggle.
+// When enabled flips to true, notifications_enabled_at is stamped
+// (audit). When it flips to false, the timestamp is left in place
+// so the operator can see when the feature was last used.
+//
+// The caller is expected to enforce the rule that only the user
+// themselves (or an admin) can call this endpoint. This method
+// does not check authorization; that is the handler's job.
+func (r *Repository) SetNotificationsEnabled(id uint, enabled bool) (*User, error) {
+	var user User
+	if err := r.db.First(&user, id).Error; err != nil {
+		return nil, err
+	}
+	updates := map[string]any{
+		"notifications_enabled": enabled,
+	}
+	if enabled && user.NotificationsEnabledAt == nil {
+		// Stamp in Go rather than via SQL NOW() so the same code
+		// path works on MariaDB and SQLite (the test driver).
+		now := time.Now()
+		updates["notifications_enabled_at"] = now
+	}
+	if err := r.db.Model(&user).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	// Re-read so the returned struct reflects the new
+	// notifications_enabled_at stamp (the Updates map bypasses
+	// GORM's after-update hooks for non-zero fields).
+	return r.GetByID(id)
 }
 
 // SetRole updates a single user's role. Only the known roles are accepted.

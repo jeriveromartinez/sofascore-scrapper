@@ -57,6 +57,13 @@ message User {
   string notifications_enabled_at = 7;
 }
 
+// SetNotificationsEnabledRequest flips the per-user push feature
+// toggle. The response is the updated User (echoed back so the
+// dashboard can refresh without a second GET).
+message SetNotificationsEnabledRequest {
+  bool enabled = 1;
+}
+
 message UserList {
   repeated User users = 1;
 }
@@ -623,7 +630,7 @@ message WsHello {
 
 message WsPush {
   uint64 push_id = 1;                          // = push_messages.id
-  uint64 message_id = 2;                       // unique per attempt; client must echo in ack
+  string message_id = 2;                       // unique per attempt; client must echo in ack
   PushCategory category = 3;
   string title = 4;
   string body = 5;
@@ -636,8 +643,8 @@ message WsPush {
 }
 
 message WsPushAck {
-  uint64 message_id = 1;                       // echoes WsPush.message_id
-  int64 acked_at = 2;                          // unix milliseconds
+  string message_id = 2;                       // echoes WsPush.message_id (kept for client-side latency display)
+  int64 acked_at = 3;                          // unix milliseconds
 }
 
 message WsPing { int64 sent_at = 1; }          // unix milliseconds

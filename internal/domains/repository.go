@@ -44,6 +44,15 @@ func (r *Repository) GetByID(id uint) (*Domain, error) {
 	return &domain, result.Error
 }
 
+// ListByUser returns every domain owned by the user. Used by the
+// push service to validate that a requested domain_id belongs to
+// the caller before dispatching the push.
+func (r *Repository) ListByUser(ctx context.Context, userID uint) ([]Domain, error) {
+	var rows []Domain
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Find(&rows).Error
+	return rows, err
+}
+
 func (r *Repository) Create(domain string, userID uint) (*Domain, error) {
 	if err := r.db.First(&users.User{}, userID).Error; err != nil {
 		return nil, err
