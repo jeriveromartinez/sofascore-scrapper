@@ -120,7 +120,7 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 		}
 		if raw, err := encodeFrame(hello.toProto()); err == nil {
 			_ = ws.SetWriteDeadline(time.Now().Add(writeWait))
-			_ = ws.WriteMessage(websocket.TextMessage, raw)
+			_ = ws.WriteMessage(websocket.BinaryMessage, raw)
 		}
 
 		cfg.Hub.Register(uint64(dev.ID), conn)
@@ -163,7 +163,13 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 			if err != nil {
 				continue
 			}
-			if err := conn.ws.WriteMessage(websocket.PingMessage, raw); err != nil {
+			// Application frame (WsFrame with oneof=ping) instead of
+			// PingMessage control frame: the Dart client (web_socket_channel
+			// in IO mode) does not auto-handle control frames, and its
+			// only way to reply is with a WsPong application frame.
+			// Keeping the keepalive inside the proto envelope lets both
+			// peers share a single framing model.
+			if err := conn.ws.WriteMessage(websocket.BinaryMessage, raw); err != nil {
 				conn.Close(1011, "ping write error")
 				return
 			}
@@ -209,6 +215,14 @@ func readLoop(conn *Connection, logger *slog.Logger) {
 		}
 		if ack := frame.GetPushAck(); ack != nil {
 			conn.onAck(ack.MessageId)
+		}
+		// WsPong is the application-frame counterpart to a WsPing. It
+		// arrives as the keepalive ack from clients that do not
+		// auto-handle WebSocket control frames (e.g. Dart
+		// web_socket_channel in IO mode). Reset the read deadline so
+		// the connection stays open.
+		if frame.GetPong() != nil {
+			_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
 		}
 		// Other inbound frames (Hello/Push/Error) are not expected
 		// from the client and are silently dropped.
