@@ -318,18 +318,6 @@ func writeServiceError(c *gin.Context, err error) {
 	}
 }
 
-// uint32SliceFromIDs widens a []uint to []uint32 for the proto.
-// We never expect more than 2^32 domains, but if a deployer
-// somehow hits that boundary the cast is the only place the
-// divergence would surface.
-func uint32SliceFromIDs(ids []uint) []uint32 {
-	out := make([]uint32, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, uint32(id))
-	}
-	return out
-}
-
 // uint32SliceToUint narrows the proto's []uint32 back to the
 // service's []uint. The proto field is uint32 because the wire
 // format only supports 32-bit ids; the internal representation

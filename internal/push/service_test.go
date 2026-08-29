@@ -39,12 +39,6 @@ func (f *fakePusher) PublishPush(_ context.Context, deviceID uint64, push *pb.Ws
 	return f.result[deviceID]
 }
 
-func (f *fakePusher) callCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.calls)
-}
-
 // fakeDomainRepo returns a fixed set of domains for ListByUser.
 type fakeDomainRepo struct {
 	owned map[uint][]domains.Domain

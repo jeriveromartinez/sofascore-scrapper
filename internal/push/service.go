@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync/atomic"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
@@ -61,14 +60,8 @@ type Service struct {
 	domainRepo DomainLister
 	userRepo   UserGetter
 	parser     cron.Parser
-	logger     *slog.Logger
-	metrics    *Metrics
-	// messageCounter is a per-process atomic used to mint the
-	// transport message_id. It is intentionally not persisted:
-	// the message_id is only meaningful to the client, not to the
-	// server. The server-side lookup is by (push_id, device_id),
-	// which the client supplies via the ack.
-	messageCounter atomic.Uint64
+	logger  *slog.Logger
+	metrics *Metrics
 }
 
 // NewService wires a Service. All dependencies are required.

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,6 +49,16 @@ func newServiceDB(t *testing.T) *gorm.DB {
 }
 
 var svcTestCounter int64
+
+// callCount is defined here (rather than in service_test.go) so it is
+// scoped behind //go:build integration and invisible to the default lint
+// scope. The unit-test linter correctly flags the unused-symbol rule for
+// the default scope; the integration tests carry their own coverage.
+func (f *fakePusher) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
+}
 
 // TestService_CreateImmediate_DispatchesAndPersists is the
 // end-to-end happy path:

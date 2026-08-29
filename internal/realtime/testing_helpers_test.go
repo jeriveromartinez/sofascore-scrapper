@@ -1,11 +1,8 @@
 package realtime
 
 import (
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/gorilla/websocket"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 )
 
@@ -54,19 +51,4 @@ func newTestConnection(t *testing.T, deviceID uint64, userID, domainID uint32) *
 	c.closedFlag = false
 	c.closedMu.Unlock()
 	return c
-}
-
-// dialAndReturnServerSide is a helper to bootstrap a real WS
-// handshake in tests that need to exercise the read loop. It is not
-// used by the current hub tests (which stay at the hub boundary) but
-// is provided so the connection-level tests have a single import
-// surface.
-func dialAndReturnServerSide(t *testing.T) (*websocket.Conn, *websocket.Conn) {
-	t.Helper()
-	// Stub: a real net.Pair-backed pair is intentionally not wired
-	// up here. Tests that need gorilla-level frame exchange should
-	// use httptest.NewServer with a hub.HandleWS handler.
-	_ = sync.Mutex{}
-	_ = time.Now()
-	return nil, nil
 }
