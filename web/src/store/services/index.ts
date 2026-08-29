@@ -11,3 +11,4 @@ export * from "./TournamentsApiService";
 export * from "./DeviceTournamentsApiService";
 export * from "./GlobalConfigApiService";
 export * from "./CurrentEventsApiService";
+export * from "./PushesApiService";
