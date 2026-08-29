@@ -57,6 +57,13 @@ message User {
   string notifications_enabled_at = 7;
 }
 
+// SetNotificationsEnabledRequest flips the per-user push feature
+// toggle. The response is the updated User (echoed back so the
+// dashboard can refresh without a second GET).
+message SetNotificationsEnabledRequest {
+  bool enabled = 1;
+}
+
 message UserList {
   repeated User users = 1;
 }

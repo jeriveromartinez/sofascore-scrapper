@@ -33,6 +33,7 @@ func (h *Handler) RegisterUserRoutes(group *gin.RouterGroup, deps HandlerDeps) {
 	group.POST("/users", deps.AuthMiddleware, h.handleCreate)
 	group.PUT("/users/:id", deps.AuthMiddleware, h.handleUpdate)
 	group.PUT("/users/:id/role", deps.AuthMiddleware, h.handleSetRole)
+	group.PUT("/users/:id/notifications", deps.AuthMiddleware, h.handleSetNotificationsEnabled)
 	group.DELETE("/users/:id", deps.AuthMiddleware, h.handleDelete)
 }
 
@@ -239,4 +240,38 @@ func (h *Handler) handleDelete(c *gin.Context) {
 	}
 
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "user deleted"})
+}
+
+// handleSetNotificationsEnabled flips the per-user push feature
+// toggle. The body is a small SetNotificationsEnabledRequest proto
+// (just a bool). The response is the updated User so the dashboard
+// can refresh in one round trip.
+//
+// Authorization is enforced by the auth middleware that wraps
+// the route (adminThenRl in routes.go) plus the ownership check
+// below: a non-admin caller may only toggle their own account.
+func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
+	id, err := server.ParseID(c.Param("id"))
+	if err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	var req pb.SetNotificationsEnabledRequest
+	if err := server.ParseProtoBody(c, &req); err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user, err := h.repo.SetNotificationsEnabled(id, req.Enabled)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			server.RespondError(c, http.StatusNotFound, "user not found")
+			return
+		}
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	server.RespondProto(c, http.StatusOK, UserToProto(*user))
 }
