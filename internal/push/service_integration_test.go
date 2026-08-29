@@ -180,7 +180,13 @@ func TestService_OnAck_FlipsRowToDelivered(t *testing.T) {
 	}
 	// Simulate a client ack 50ms later.
 	time.Sleep(50 * time.Millisecond)
-	if err := s.OnAck(context.Background(), uint64(msg.ID), uint64(devs[0]), 1); err != nil {
+	// Look up the message_id from the delivery_attempt row that was
+	// inserted by CreateImmediate.
+	var attempt DeliveryAttempt
+	if err := db.First(&attempt, "push_message_id = ? AND device_id = ?", msg.ID, devs[0]).Error; err != nil {
+		t.Fatalf("re-read attempt row: %v", err)
+	}
+	if err := s.OnAck(context.Background(), attempt.MessageID); err != nil {
 		t.Fatalf("OnAck: %v", err)
 	}
 	var got DeliveryAttempt

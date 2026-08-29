@@ -67,7 +67,7 @@ func setupWSTest(t *testing.T) (string, *Hub, string, func()) {
 		Authenticator: auth,
 		Hub:           hub,
 		Logger:        slog.Default(),
-		AckHandler:    func(uint64, uint64) {},
+		AckHandler:    func(string) {},
 	}))
 
 	srv := httptest.NewServer(r)

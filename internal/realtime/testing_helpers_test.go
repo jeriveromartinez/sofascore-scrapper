@@ -47,7 +47,7 @@ func newTestConnection(t *testing.T, deviceID uint64, userID, domainID uint32) *
 		domainID:   domainID,
 		send:       make(chan []byte, 16),
 		closed:     make(chan struct{}),
-		ackHandler: func(uint64, uint64) {},
+		ackHandler: func(string) {},
 		ws:         nil, // tests don't write through gorilla
 	}
 	c.closedMu.Lock()

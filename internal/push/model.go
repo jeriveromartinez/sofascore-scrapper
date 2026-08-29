@@ -168,6 +168,7 @@ type DeliveryAttempt struct {
 	gorm.Model
 	PushMessageID uint          `gorm:"uniqueIndex:uq_push_device;not null"`
 	DeviceID      uint          `gorm:"uniqueIndex:uq_push_device;not null"`
+	MessageID     string        `gorm:"size:64;index;not null"` // UUID v4 transport id from the client
 	State         DeliveryState `gorm:"size:16;not null;index"`
 	FailureReason FailureReason `gorm:"size:32"`
 	SentAt        *time.Time    `gorm:"null"`

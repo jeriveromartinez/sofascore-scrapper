@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"strconv"
 )
 
 const (
@@ -65,7 +66,7 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 		cfg.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	}
 	if cfg.AckHandler == nil {
-		cfg.AckHandler = func(uint64, uint64) {}
+		cfg.AckHandler = func(string) {}
 	}
 
 	return func(c *gin.Context) {
@@ -208,7 +209,7 @@ func readLoop(conn *Connection, logger *slog.Logger) {
 			continue
 		}
 		if ack := frame.GetPushAck(); ack != nil {
-			conn.onAck(ack.PushId, ack.MessageId)
+			conn.onAck(strconv.FormatUint(ack.MessageId, 10))
 		}
 		// Other inbound frames (Hello/Push/Error) are not expected
 		// from the client and are silently dropped.

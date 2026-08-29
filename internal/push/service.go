@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -145,12 +146,17 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 
 	// Insert delivery_attempts (SENT for everyone; the actual
 	// socket write happens immediately below for the ones that
-	// are connected).
+	// are connected). We build the push frames first to capture
+	// the transport message_id (stored as a string on each row).
+	pushFrames := make(map[uint]*pb.WsPush, len(audience))
 	attempts := make([]DeliveryAttempt, 0, len(audience))
 	for _, dev := range audience {
+		frame := buildWsPush(msg.ID, dev.ID, &now, payload)
+		pushFrames[dev.ID] = frame
 		attempts = append(attempts, DeliveryAttempt{
 			PushMessageID: msg.ID,
 			DeviceID:      dev.ID,
+			MessageID:     strconv.FormatUint(frame.MessageId, 10),
 			State:         StateSent,
 			SentAt:        &now,
 		})
@@ -163,8 +169,7 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 	// for siblings; we record that as the failure_reason on the
 	// attempt row so the metric snapshot is accurate.
 	for _, dev := range audience {
-		pushFrame := buildWsPush(msg.ID, dev.ID, &now, payload)
-		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), pushFrame); err != nil {
+		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), pushFrames[dev.ID]); err != nil {
 			if errors.Is(err, realtime.ErrDeviceNotConnected) {
 				if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureDeviceOffline); markErr != nil {
 					s.logger.Warn("push: mark offline failed",
@@ -247,11 +252,10 @@ func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, do
 // OnAck is the entry point for the realtime hub. It is called from
 // the connection's reader loop when the client echoes a
 // WsPushAck. We flip the matching delivery_attempts row to
-// DELIVERED. The messageID is currently unused on the server but
-// kept in the signature for future use (e.g. latency histograms
-// keyed by message_id).
-func (s *Service) OnAck(ctx context.Context, pushID, deviceID, _ uint64) error {
-	return s.repo.MarkDeliveryDelivered(ctx, uint(pushID), uint(deviceID), time.Now())
+// DELIVERED. The messageID is the client-side transport UUID v4
+// (Tasks 8-9) that uniquely identifies the delivery attempt.
+func (s *Service) OnAck(ctx context.Context, messageID string) error {
+	return s.repo.MarkDeliveryDeliveredByMessageID(ctx, messageID, time.Now())
 }
 
 // DispatchScheduled fires a single scheduled push. It is called
@@ -340,11 +344,17 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 		return fmt.Errorf("list audience: %w", err)
 	}
 	now := time.Now()
+	// Build push frames first so we can capture the transport
+	// message_id (stored as a string on each delivery_attempt row).
+	pushFrames := make(map[uint]*pb.WsPush, len(audience))
 	attempts := make([]DeliveryAttempt, 0, len(audience))
 	for _, dev := range audience {
+		frame := buildWsPush(msg.ID, dev.ID, &now, payload)
+		pushFrames[dev.ID] = frame
 		attempts = append(attempts, DeliveryAttempt{
 			PushMessageID: msg.ID,
 			DeviceID:      dev.ID,
+			MessageID:     strconv.FormatUint(frame.MessageId, 10),
 			State:         StateSent,
 			SentAt:        &now,
 		})
@@ -353,8 +363,7 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 		return fmt.Errorf("insert delivery attempts: %w", err)
 	}
 	for _, dev := range audience {
-		frame := buildWsPush(msg.ID, dev.ID, &now, payload)
-		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), frame); err != nil {
+		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), pushFrames[dev.ID]); err != nil {
 			if errors.Is(err, realtime.ErrDeviceNotConnected) {
 				if markErr := s.repo.MarkDeliveryFailed(ctx, msg.ID, dev.ID, FailureDeviceOffline); markErr != nil {
 					s.logger.Warn("push: mark offline failed",
