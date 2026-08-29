@@ -643,8 +643,9 @@ message WsPush {
 }
 
 message WsPushAck {
-  uint64 message_id = 1;                       // echoes WsPush.message_id
-  int64 acked_at = 2;                          // unix milliseconds
+  uint64 push_id = 1;                          // identifies the push_messages row; the server uses it to look up delivery_attempts
+  uint64 message_id = 2;                       // echoes WsPush.message_id (kept for client-side latency display)
+  int64 acked_at = 3;                          // unix milliseconds
 }
 
 message WsPing { int64 sent_at = 1; }          // unix milliseconds

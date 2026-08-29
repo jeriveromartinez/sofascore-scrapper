@@ -12,6 +12,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
@@ -22,7 +23,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService, logoScheduler events.TeamLogoScheduler, hub *realtime.Hub) *gin.Engine {
+func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService, logoScheduler events.TeamLogoScheduler, hub *realtime.Hub, pushSvc *push.Service) *gin.Engine {
 	if cfg.ScrapeBatchSize <= 0 {
 		cfg.ScrapeBatchSize = 500
 	}
@@ -151,20 +152,38 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	domainHandler := domains.NewHandler(domainRepo)
 	domainHandler.RegisterRoutes(webV1, domains.HandlerDeps{AuthMiddleware: adminThenRl})
 
+	// Push notifications REST surface. The service was created
+	// in app.New so it can be shared with the realtime WS handler
+	// (which uses it as the AckHandler for incoming WsPushAck
+	// frames).
+	if pushSvc != nil {
+		pushHandler := push.NewHandler(pushSvc, push.HandlerDeps{
+			CallerID: callerIDFromContext,
+		})
+		pushHandler.RegisterRoutes(webV1, adminThenRl)
+	}
+
 	// Realtime (WebSocket) endpoint for the Flutter client. The
 	// handler authenticates the device via APP-XIPTV (or ?token=)
 	// and upgrades the request; no JWT, no appMw — the Flutter app
 	// does not authenticate as a user.
 	wsAuthenticator := realtime.NewAuthenticator(db)
+	ackHandler := realtime.AckHandler(func(uint64, uint64) {})
+	if pushSvc != nil {
+		// Wrap the service's OnAck to the realtime AckHandler
+		// signature (no ctx, no return). The connection's
+		// background context is what the service uses anyway, so
+		// we just call it with context.Background().
+		pushSvc := pushSvc
+		ackHandler = func(pushID, messageID uint64) {
+			_ = pushSvc.OnAck(context.Background(), pushID, messageID, 0)
+		}
+	}
 	wsHandler := realtime.Handler(realtime.HandlerConfig{
 		Authenticator: wsAuthenticator,
 		Hub:           hub,
 		Logger:        slog.Default(),
-		// AckHandler is wired in phase 3 when the push service is
-		// available. For now we drop acks: the connection still
-		// works, the hub still tracks it, and the message_id round
-		// trip is verifiable from the client.
-		AckHandler: func(uint64) {},
+		AckHandler:    ackHandler,
 	})
 	appV1.GET("/ws", wsHandler)
 
@@ -189,4 +208,33 @@ func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *even
 	})
 	aggRepo := reporting.NewAggregationRepository(db)
 	return scrapeSvc, aggRepo
+}
+
+// callerIDFromContext extracts the authenticated user id from the
+// gin context. auth.AuthMiddleware stashes the id under the
+// "userID" key; this closure is passed to push.NewHandler as the
+// CallerID dependency. The closure lives in app/ so that the
+// push package does not have to import auth (which itself imports
+// users, creating a cycle if the handler were in users).
+func callerIDFromContext(c *gin.Context) (uint, bool) {
+	v, ok := c.Get("userID")
+	if !ok {
+		return 0, false
+	}
+	id, ok := v.(uint)
+	if !ok {
+		// The auth package sometimes stores other integer types
+		// depending on the token variant; accept int64 and uint32
+		// as a defensive measure.
+		switch n := v.(type) {
+		case int64:
+			return uint(n), true
+		case uint32:
+			return uint(n), true
+		case int:
+			return uint(n), true
+		}
+		return 0, false
+	}
+	return id, true
 }

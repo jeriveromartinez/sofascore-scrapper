@@ -12,13 +12,16 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	goredis "github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
@@ -38,11 +41,17 @@ type App struct {
 	// realtimeSubscriber consumes push:fanout and dispatches to the
 	// local hub. Stopped during shutdown.
 	realtimeSubscriber *realtime.Subscriber
-	ready              atomic.Bool
-	batchSize          int
-	concur             int
-	storagePath        string
-	logger             *slog.Logger
+	// pushService is the push-notifications domain service. It is
+	// shared with the realtime WS handler (the AckHandler closure
+	// installed in routes.go calls pushService.OnAck) so acks
+	// flip delivery_attempts to DELIVERED on the same database
+	// the REST handlers read.
+	pushService *push.Service
+	ready       atomic.Bool
+	batchSize   int
+	concur      int
+	storagePath string
+	logger      *slog.Logger
 }
 
 func (a *App) IsReady() bool {
@@ -100,9 +109,19 @@ func New(cfg config.Config) (*App, error) {
 	app.realtimeSubscriber = realtime.NewSubscriber(redisClient, app.realtimeHub, realtime.SubscriberConfig{
 		Logger: logger,
 	})
+	pushRepo := push.NewRepository(db)
+	domainRepoPush := domains.NewRepository(db)
+	userRepoPush := users.NewRepository(db)
+	app.pushService = push.NewService(
+		pushRepo,
+		push.NewRealtimeSubscriberPusher(app.realtimeSubscriber),
+		domainRepoPush,
+		userRepoPush,
+		logger,
+	)
 	app.ready.Store(true)
 
-	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler, app.realtimeHub)
+	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler, app.realtimeHub, app.pushService)
 	router.Use(server.ReadinessMiddleware(&app.ready))
 
 	app.HTTP = &http.Server{

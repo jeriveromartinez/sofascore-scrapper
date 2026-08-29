@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
 
@@ -186,4 +187,128 @@ func (r *Repository) DeactivateAllForUser(ctx context.Context, userID uint) erro
 	return r.db.WithContext(ctx).Model(&ScheduledPush{}).
 		Where("user_id = ? AND is_active = ?", userID, true).
 		Update("is_active", false).Error
+}
+
+// GetPushMessageByID fetches a single push with its target domains
+// preloaded. Returns ErrNotFound-equivalent (gorm.ErrRecordNotFound)
+// when the row does not exist OR the user_id does not match (the
+// latter prevents enumeration of other users' pushes).
+func (r *Repository) GetPushMessageByID(ctx context.Context, id, userID uint) (*PushMessage, error) {
+	var m PushMessage
+	err := r.db.WithContext(ctx).
+		Preload("Domains").
+		Where("id = ? AND user_id = ?", id, userID).
+		First(&m).Error
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// ListPushMessagesByUser returns the user's most recent pushes,
+// optionally filtered by source ("immediate" or "scheduled"). The
+// rows are returned in created_at DESC order. Pagination is
+// cursor-based: pass the last id from a previous page to fetch the
+// next N older rows. hasMore=true means there is at least one more
+// row beyond the returned slice.
+func (r *Repository) ListPushMessagesByUser(ctx context.Context, userID uint, source string, limit int) ([]PushMessage, bool, error) {
+	q := r.db.WithContext(ctx).
+		Preload("Domains").
+		Where("user_id = ?", userID).
+		Order("id DESC")
+	if source == "immediate" || source == "scheduled" {
+		q = q.Where("source = ?", source)
+	}
+	var rows []PushMessage
+	if err := q.Limit(limit + 1).Find(&rows).Error; err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
+}
+
+// ListScheduledPushesByUser is the schedule equivalent of
+// ListPushMessagesByUser. is_active rows are kept (the dashboard
+// shows deactivated ones with a "paused" badge).
+func (r *Repository) ListScheduledPushesByUser(ctx context.Context, userID uint, limit int) ([]ScheduledPush, bool, error) {
+	q := r.db.WithContext(ctx).
+		Preload("Domains").
+		Where("user_id = ?", userID).
+		Order("id DESC")
+	var rows []ScheduledPush
+	if err := q.Limit(limit + 1).Find(&rows).Error; err != nil {
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	return rows, hasMore, nil
+}
+
+// GetScheduledPushByID fetches a single schedule. Same ownership
+// guard as GetPushMessageByID: a row owned by a different user
+// returns ErrRecordNotFound.
+func (r *Repository) GetScheduledPushByID(ctx context.Context, id, userID uint) (*ScheduledPush, error) {
+	var s ScheduledPush
+	err := r.db.WithContext(ctx).
+		Preload("Domains").
+		Where("id = ? AND user_id = ?", id, userID).
+		First(&s).Error
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// UpdateScheduledPushActive flips is_active. The only mutable field
+// after create; cron and run_at are immutable to keep the
+// next_fire_at invariant sane. To change the schedule, the user
+// deletes and re-creates.
+func (r *Repository) UpdateScheduledPushActive(ctx context.Context, id, userID uint, isActive bool) (*ScheduledPush, error) {
+	res := r.db.WithContext(ctx).Model(&ScheduledPush{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Update("is_active", isActive)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return r.GetScheduledPushByID(ctx, id, userID)
+}
+
+// DeleteScheduledPush soft-deletes a schedule by setting
+// is_active=false. The row stays in the table for audit; the
+// runner simply skips inactive rows.
+func (r *Repository) DeleteScheduledPush(ctx context.Context, id, userID uint) error {
+	res := r.db.WithContext(ctx).Model(&ScheduledPush{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Update("is_active", false)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// AggregateMetricsForUser returns the per-user snapshot that the
+// dashboard renders. The spec calls for several counters
+// (delivered_total, delivery_rate, active_schedules, fires_24h,
+// etc.) and a few breakdowns (top_platforms, top_app_versions,
+// hourly_histogram_30d). The full implementation lives in
+// metrics_aggregator.go; this thin wrapper just hands off the call.
+func (r *Repository) AggregateMetricsForUser(ctx context.Context, userID uint) (*pb.PushMetricsAggregate, error) {
+	return buildAggregateSnapshot(ctx, r.db, userID)
+}
+
+// CampaignMetrics returns the per-campaign snapshot for the given
+// push id, scoped to the user. Computed from delivery_attempts.
+func (r *Repository) CampaignMetrics(ctx context.Context, id, userID uint) (*pb.PushMetricsByCampaign, error) {
+	return buildCampaignSnapshot(ctx, r.db, id, userID)
 }

@@ -81,7 +81,7 @@ func newTestRouter(t *testing.T, cfg config.Config) *gin.Engine {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewRouter(nil, nil, cfg, tokens, nil, realtime.NewHub())
+	return NewRouter(nil, nil, cfg, tokens, nil, realtime.NewHub(), nil)
 }
 
 func TestCrashReportInheritsOneMiBBodyLimit(t *testing.T) {
@@ -143,7 +143,7 @@ func TestAdminRateLimitRunsBeforeProtectedHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	router := NewRouter(nil, nil, config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"}, tokens, nil, realtime.NewHub())
+	router := NewRouter(nil, nil, config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"}, tokens, nil, realtime.NewHub(), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/web/v1/apk/uploads", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -161,7 +161,7 @@ func TestRouteCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := config.Config{JWTSecret: "this-is-a-test-secret-with-enough-length"}
-	router := NewRouter(nil, nil, cfg, tokens, nil, realtime.NewHub())
+	router := NewRouter(nil, nil, cfg, tokens, nil, realtime.NewHub(), nil)
 	got := make(map[string]bool)
 	for _, route := range router.Routes() {
 		got[route.Method+" "+route.Path] = true
@@ -236,7 +236,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 65 {
-		t.Fatalf("got %d routes, want 65 (the +1 is /api/app/v1/ws for the push realtime endpoint)", len(got))
+	if len(got) != 66 {
+		t.Fatalf("got %d routes, want 66 (the +1 is /api/app/v1/ws for the push realtime endpoint; the other new ones are the /api/admin/v1/pushes surface)", len(got))
 	}
 }
