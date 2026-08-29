@@ -150,7 +150,7 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 	pushFrames := make(map[uint]*pb.WsPush, len(audience))
 	attempts := make([]DeliveryAttempt, 0, len(audience))
 	for _, dev := range audience {
-		frame := buildWsPush(msg.ID, dev.ID, &now, payload)
+		frame := buildWsPush(uint64(msg.ID), payload)
 		pushFrames[dev.ID] = frame
 		attempts = append(attempts, DeliveryAttempt{
 			PushMessageID: msg.ID,
@@ -346,7 +346,7 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 	pushFrames := make(map[uint]*pb.WsPush, len(audience))
 	attempts := make([]DeliveryAttempt, 0, len(audience))
 	for _, dev := range audience {
-		frame := buildWsPush(msg.ID, dev.ID, &now, payload)
+		frame := buildWsPush(uint64(msg.ID), payload)
 		pushFrames[dev.ID] = frame
 		attempts = append(attempts, DeliveryAttempt{
 			PushMessageID: msg.ID,
@@ -520,27 +520,14 @@ func deviceIDsOf(devs []devices.Device) []uint {
 // message_id is a globally unique UUID v4 string. It is persisted
 // in delivery_attempts.message_id (UNIQUE) and echoed by the
 // client in WsPushAck.
-func buildWsPush(pushID, deviceID uint, sentAt *time.Time, payload *pb.PushPayload) *pb.WsPush {
-	data := map[string]string{}
-	for k, v := range payload.GetData() {
-		data[k] = v
-	}
-	var sentAtMS int64
-	if sentAt != nil {
-		sentAtMS = sentAt.UnixMilli()
-	}
-	_ = deviceID
+func buildWsPush(pushID uint64, payload *pb.PushPayload) *pb.WsPush {
 	return &pb.WsPush{
-		PushId:     uint64(pushID),
-		MessageId:  nextMessageID(),
-		Category:   payload.GetCategory(),
-		Title:      payload.GetTitle(),
-		Body:       payload.GetBody(),
-		ImageUrl:   payload.GetImageUrl(),
-		DeepLink:   payload.GetDeepLink(),
-		Priority:   payload.GetPriority(),
-		TtlSeconds: payload.GetTtlSeconds(),
-		Data:       data,
-		SentAt:     sentAtMS,
+		PushId:    pushID,
+		MessageId: nextMessageID(),
+		Category:  payload.GetCategory(),
+		Title:     payload.GetTitle(),
+		Body:      payload.GetBody(),
+		Data:      payload.GetData(),
+		SentAt:    time.Now().UnixMilli(),
 	}
 }
