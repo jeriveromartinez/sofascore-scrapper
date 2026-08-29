@@ -18,6 +18,9 @@ func (a *App) shutdown() error {
 	if a.logoScheduler != nil {
 		a.logoScheduler.Stop()
 	}
+	if a.realtimeSubscriber != nil {
+		a.realtimeSubscriber.Stop()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -12,6 +12,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
@@ -21,7 +22,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService, logoScheduler events.TeamLogoScheduler) *gin.Engine {
+func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService, logoScheduler events.TeamLogoScheduler, hub *realtime.Hub) *gin.Engine {
 	if cfg.ScrapeBatchSize <= 0 {
 		cfg.ScrapeBatchSize = 500
 	}
@@ -149,6 +150,23 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	domainRepo := domains.NewRepository(db)
 	domainHandler := domains.NewHandler(domainRepo)
 	domainHandler.RegisterRoutes(webV1, domains.HandlerDeps{AuthMiddleware: adminThenRl})
+
+	// Realtime (WebSocket) endpoint for the Flutter client. The
+	// handler authenticates the device via APP-XIPTV (or ?token=)
+	// and upgrades the request; no JWT, no appMw — the Flutter app
+	// does not authenticate as a user.
+	wsAuthenticator := realtime.NewAuthenticator(db)
+	wsHandler := realtime.Handler(realtime.HandlerConfig{
+		Authenticator: wsAuthenticator,
+		Hub:           hub,
+		Logger:        slog.Default(),
+		// AckHandler is wired in phase 3 when the push service is
+		// available. For now we drop acks: the connection still
+		// works, the hub still tracks it, and the message_id round
+		// trip is verifiable from the client.
+		AckHandler: func(uint64) {},
+	})
+	appV1.GET("/ws", wsHandler)
 
 	server.RegisterDashboardRoutes(router)
 
