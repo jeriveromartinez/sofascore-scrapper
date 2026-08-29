@@ -8,8 +8,11 @@ import (
 
 // AckHandler is invoked when the client sends a WsPushAck back to the
 // server. The implementation in internal/push uses this to flip a
-// delivery_attempts row from SENT to DELIVERED.
-type AckHandler func(messageID uint64)
+// delivery_attempts row from SENT to DELIVERED. pushID is the
+// push_messages.id (so the server can look up the row); messageID
+// is the client-side transport ID and is currently unused on the
+// server side but kept for future debugging.
+type AckHandler func(pushID uint64, messageID uint64)
 
 // CloseHandler is invoked exactly once when the connection is being
 // torn down (either by the server, by the client, or because of an
@@ -106,8 +109,8 @@ func (c *Connection) Closed() <-chan struct{} { return c.closed }
 // onAck is called by the connection's reader loop when the client
 // sends a WsPushAck. It dispatches to the ackHandler installed at
 // construction time.
-func (c *Connection) onAck(messageID uint64) {
+func (c *Connection) onAck(pushID, messageID uint64) {
 	if c.ackHandler != nil {
-		c.ackHandler(messageID)
+		c.ackHandler(pushID, messageID)
 	}
 }

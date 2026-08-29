@@ -67,7 +67,7 @@ func setupWSTest(t *testing.T) (string, *Hub, string, func()) {
 		Authenticator: auth,
 		Hub:           hub,
 		Logger:        slog.Default(),
-		AckHandler:    func(uint64) {},
+		AckHandler:    func(uint64, uint64) {},
 	}))
 
 	srv := httptest.NewServer(r)
@@ -187,6 +187,16 @@ func TestWSHandler_AcceptsTokenInQuery(t *testing.T) {
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	if _, _, err := conn.ReadMessage(); err != nil {
 		t.Fatalf("read hello: %v", err)
+	}
+	// Same poll-then-assert dance as the header test: the upgrade
+	// handler registers synchronously, but the goroutine scheduling
+	// can race the assertion on slow CI.
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if hub.Count() == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if hub.Count() != 1 {
 		t.Errorf("hub.Count = %d, want 1", hub.Count())

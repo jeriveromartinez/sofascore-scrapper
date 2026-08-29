@@ -65,7 +65,7 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 		cfg.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	}
 	if cfg.AckHandler == nil {
-		cfg.AckHandler = func(uint64) {}
+		cfg.AckHandler = func(uint64, uint64) {}
 	}
 
 	return func(c *gin.Context) {
@@ -208,7 +208,7 @@ func readLoop(conn *Connection, logger *slog.Logger) {
 			continue
 		}
 		if ack := frame.GetPushAck(); ack != nil {
-			conn.onAck(ack.MessageId)
+			conn.onAck(ack.PushId, ack.MessageId)
 		}
 		// Other inbound frames (Hello/Push/Error) are not expected
 		// from the client and are silently dropped.

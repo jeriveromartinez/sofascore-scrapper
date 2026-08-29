@@ -5573,8 +5573,9 @@ func (x *WsPush) GetSentAt() int64 {
 
 type WsPushAck struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	MessageId     uint64                 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"` // echoes WsPush.message_id
-	AckedAt       int64                  `protobuf:"varint,2,opt,name=acked_at,json=ackedAt,proto3" json:"acked_at,omitempty"`       // unix milliseconds
+	PushId        uint64                 `protobuf:"varint,1,opt,name=push_id,json=pushId,proto3" json:"push_id,omitempty"`          // identifies the push_messages row; the server uses it to look up delivery_attempts
+	MessageId     uint64                 `protobuf:"varint,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"` // echoes WsPush.message_id (kept for client-side latency display)
+	AckedAt       int64                  `protobuf:"varint,3,opt,name=acked_at,json=ackedAt,proto3" json:"acked_at,omitempty"`       // unix milliseconds
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5607,6 +5608,13 @@ func (x *WsPushAck) ProtoReflect() protoreflect.Message {
 // Deprecated: Use WsPushAck.ProtoReflect.Descriptor instead.
 func (*WsPushAck) Descriptor() ([]byte, []int) {
 	return file_proto_api_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *WsPushAck) GetPushId() uint64 {
+	if x != nil {
+		return x.PushId
+	}
+	return 0
 }
 
 func (x *WsPushAck) GetMessageId() uint64 {
@@ -6242,11 +6250,12 @@ const file_proto_api_proto_rawDesc = "" +
 	"\asent_at\x18\v \x01(\x03R\x06sentAt\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"E\n" +
-	"\tWsPushAck\x12\x1d\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"^\n" +
+	"\tWsPushAck\x12\x17\n" +
+	"\apush_id\x18\x01 \x01(\x04R\x06pushId\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\x04R\tmessageId\x12\x19\n" +
-	"\backed_at\x18\x02 \x01(\x03R\aackedAt\"!\n" +
+	"message_id\x18\x02 \x01(\x04R\tmessageId\x12\x19\n" +
+	"\backed_at\x18\x03 \x01(\x03R\aackedAt\"!\n" +
 	"\x06WsPing\x12\x17\n" +
 	"\asent_at\x18\x01 \x01(\x03R\x06sentAt\"!\n" +
 	"\x06WsPong\x12\x17\n" +

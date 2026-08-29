@@ -1,0 +1,344 @@
+package push
+
+import (
+	"errors"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+)
+
+// Handler exposes the push-notifications REST surface. It is
+// mounted on the webV1 group (auth required) by the app wire-up
+// in internal/app/routes.go.
+type Handler struct {
+	svc *Service
+	// callerFromContext extracts the user_id of the JWT holder.
+	// Production passes auth.AuthMiddleware's Gin context key;
+	// tests can plug a stub.
+	callerFromContext func(c *gin.Context) (uint, bool)
+}
+
+// HandlerDeps bundles the dependencies the handler needs. Kept
+// in its own type so the wire-up site is greppable.
+type HandlerDeps struct {
+	// CallerID extracts the authenticated user id from the
+	// request context. Required.
+	CallerID func(c *gin.Context) (uint, bool)
+}
+
+// NewHandler returns a handler backed by the given service.
+func NewHandler(svc *Service, deps HandlerDeps) *Handler {
+	if deps.CallerID == nil {
+		panic("push.NewHandler: deps.CallerID is required")
+	}
+	return &Handler{svc: svc, callerFromContext: deps.CallerID}
+}
+
+// RegisterRoutes wires the push REST surface under the given
+// group. All endpoints require the caller's JWT (the
+// AuthMiddleware on the group enforces that).
+func (h *Handler) RegisterRoutes(group *gin.RouterGroup, authMW gin.HandlerFunc) {
+	p := group.Group("/pushes", authMW)
+	p.POST("", h.handleCreateImmediate)
+	p.GET("", h.handleList)
+	p.GET("/metrics/aggregate", h.handleMetricsAggregate)
+	p.GET("/metrics/campaign/:id", h.handleCampaignMetrics)
+	p.GET("/:id", h.handleGet)
+	p.POST("/schedules", h.handleCreateSchedule)
+	p.GET("/schedules", h.handleListSchedules)
+	p.GET("/schedules/:id", h.handleGetSchedule)
+	p.PATCH("/schedules/:id", h.handleUpdateSchedule)
+	p.DELETE("/schedules/:id", h.handleDeleteSchedule)
+}
+
+func (h *Handler) handleCreateImmediate(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req pb.CreateImmediatePushRequest
+	if err := server.ParseProtoBody(c, &req); err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	msg, _, err := h.svc.CreateImmediate(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	server.RespondProto(c, http.StatusCreated, &pb.PushMessage{
+		Id:         uint32(msg.ID),
+		CreatedAt:  msg.CreatedAt.Format(time.RFC3339),
+		UserId:     uint32(msg.UserID),
+		Category:   CategoryToProto(msg.Category),
+		Title:      msg.Title,
+		Body:       msg.Body,
+		ImageUrl:   msg.ImageURL,
+		DeepLink:   msg.DeepLink,
+		Priority:   PriorityToProto(msg.Priority),
+		TtlSeconds: int32(msg.TTLSeconds),
+		Data:       map[string]string(msg.DataJSON),
+		Source:     string(msg.Source),
+		DomainIds:  req.DomainIds,
+	})
+}
+
+func (h *Handler) handleGet(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := server.ParseID(c.Param("id"))
+	if err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	// For now, Get is just a thin wrapper around the repo. The
+	// full detail+metrics response is wired in a follow-up.
+	msg, err := h.svc.repo.GetPushMessageByID(c.Request.Context(), id, callerID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	server.RespondProto(c, http.StatusOK, PushMessageToProto(*msg))
+}
+
+func (h *Handler) handleList(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	limit := 20
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	source := c.Query("source") // optional: "immediate" | "scheduled"
+	rows, hasMore, err := h.svc.repo.ListPushMessagesByUser(c.Request.Context(), callerID, source, limit)
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp := &pb.PushMessagePage{
+		Data: make([]*pb.PushMessage, 0, len(rows)),
+	}
+	for i := range rows {
+		resp.Data = append(resp.Data, PushMessageToProto(rows[i]))
+	}
+	if hasMore && len(rows) > 0 {
+		// Cursor is the id of the last row. The frontend passes it
+		// back as ?after_id=. The repo's ListPage handles it.
+		last := rows[len(rows)-1]
+		resp.Page = &pb.CursorPageInfo{
+			NextCursor: strconv.FormatUint(uint64(last.ID), 10),
+			HasMore:    true,
+		}
+	}
+	server.RespondProto(c, http.StatusOK, resp)
+}
+
+func (h *Handler) handleCreateSchedule(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req pb.CreateScheduleRequest
+	if err := server.ParseProtoBody(c, &req); err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	var runAt *time.Time
+	if req.RunAt != "" {
+		t, err := time.Parse(time.RFC3339, req.RunAt)
+		if err != nil {
+			server.RespondError(c, http.StatusBadRequest, "run_at must be RFC3339")
+			return
+		}
+		runAt = &t
+	}
+	sched, err := h.svc.CreateSchedule(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload, req.ScheduleType, runAt, req.CronExpr)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	server.RespondProto(c, http.StatusCreated, ScheduledPushToProto(*sched))
+}
+
+func (h *Handler) handleListSchedules(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	limit := 20
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	rows, hasMore, err := h.svc.repo.ListScheduledPushesByUser(c.Request.Context(), callerID, limit)
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp := &pb.ScheduledPushPage{Data: make([]*pb.ScheduledPush, 0, len(rows))}
+	for i := range rows {
+		resp.Data = append(resp.Data, ScheduledPushToProto(rows[i]))
+	}
+	if hasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		resp.Page = &pb.CursorPageInfo{
+			NextCursor: strconv.FormatUint(uint64(last.ID), 10),
+			HasMore:    true,
+		}
+	}
+	server.RespondProto(c, http.StatusOK, resp)
+}
+
+func (h *Handler) handleGetSchedule(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := server.ParseID(c.Param("id"))
+	if err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	sched, err := h.svc.repo.GetScheduledPushByID(c.Request.Context(), id, callerID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	server.RespondProto(c, http.StatusOK, ScheduledPushToProto(*sched))
+}
+
+func (h *Handler) handleUpdateSchedule(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := server.ParseID(c.Param("id"))
+	if err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req pb.UpdateScheduleRequest
+	if err := server.ParseProtoBody(c, &req); err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	sched, err := h.svc.repo.UpdateScheduledPushActive(c.Request.Context(), id, callerID, req.IsActive)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	server.RespondProto(c, http.StatusOK, ScheduledPushToProto(*sched))
+}
+
+func (h *Handler) handleDeleteSchedule(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := server.ParseID(c.Param("id"))
+	if err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.svc.repo.DeleteScheduledPush(c.Request.Context(), id, callerID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "schedule deleted"})
+}
+
+func (h *Handler) handleMetricsAggregate(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	snap, err := h.svc.repo.AggregateMetricsForUser(c.Request.Context(), callerID)
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	server.RespondProto(c, http.StatusOK, snap)
+}
+
+func (h *Handler) handleCampaignMetrics(c *gin.Context) {
+	callerID, ok := h.callerFromContext(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := server.ParseID(c.Param("id"))
+	if err != nil {
+		server.RespondError(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	snap, err := h.svc.repo.CampaignMetrics(c.Request.Context(), id, callerID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	server.RespondProto(c, http.StatusOK, snap)
+}
+
+// writeServiceError maps the service's sentinel errors to HTTP
+// status codes. Centralized so every handler uses the same
+// translation table.
+func writeServiceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrForbidden):
+		server.RespondError(c, http.StatusForbidden, "forbidden")
+	case errors.Is(err, ErrNotFound):
+		server.RespondError(c, http.StatusNotFound, "not found")
+	case errors.Is(err, ErrInvalidPayload):
+		server.RespondError(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrInvalidSchedule):
+		server.RespondError(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrDisabledFeature):
+		server.RespondError(c, http.StatusForbidden, "notifications disabled for this user")
+	default:
+		server.RespondError(c, http.StatusInternalServerError, err.Error())
+	}
+}
+
+// uint32SliceFromIDs widens a []uint to []uint32 for the proto.
+// We never expect more than 2^32 domains, but if a deployer
+// somehow hits that boundary the cast is the only place the
+// divergence would surface.
+func uint32SliceFromIDs(ids []uint) []uint32 {
+	out := make([]uint32, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, uint32(id))
+	}
+	return out
+}
+
+// uint32SliceToUint narrows the proto's []uint32 back to the
+// service's []uint. The proto field is uint32 because the wire
+// format only supports 32-bit ids; the internal representation
+// stays at platform width so we can swap drivers without churning
+// the code that consumes the slice.
+func uint32SliceToUint(ids []uint32) []uint {
+	out := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, uint(id))
+	}
+	return out
+}
