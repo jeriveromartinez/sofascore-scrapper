@@ -20,8 +20,16 @@ UPDATE delivery_attempts SET message_id = UUID() WHERE message_id IS NULL;
 -- 3. Enforce NOT NULL now that every row has a UUID.
 ALTER TABLE delivery_attempts MODIFY COLUMN message_id VARCHAR(36) NOT NULL;
 
--- 4. Drop the old composite unique key (no longer the ack path).
+-- 4. Provide a dedicated supporting index for the FOREIGN KEY on
+--    push_message_id (created in migration 13) BEFORE dropping
+--    uq_push_device. Without this, MySQL refuses the DROP with
+--    Error 1553 ("Cannot drop index ... needed in a foreign key
+--    constraint") because uq_push_device is currently the only
+--    index on push_message_id in this table.
+CREATE INDEX idx_attempts_push_message ON delivery_attempts (push_message_id);
+
+-- 5. Drop the old composite unique key (no longer the ack path).
 DROP INDEX uq_push_device ON delivery_attempts;
 
--- 5. message_id is now the single UNIQUE key for ack lookups.
+-- 6. message_id is now the single UNIQUE key for ack lookups.
 CREATE UNIQUE INDEX uq_message_id ON delivery_attempts (message_id);
