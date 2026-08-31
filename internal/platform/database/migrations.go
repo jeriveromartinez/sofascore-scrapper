@@ -276,6 +276,31 @@ func repairDirtyMessageIdUniqMigration(ctx context.Context, conn *sql.Conn) erro
 		}
 	}
 
+	// Ensure the FK-supporting index idx_attempts_push_message exists.
+	// Migration 13 created delivery_attempts with a FOREIGN KEY on
+	// push_message_id whose only supporting index was uq_push_device.
+	// Migration 15's revised plan adds this dedicated index before
+	// dropping uq_push_device, so the FK keeps a valid supporting
+	// index in both clean and dirty-state paths. Creating it here
+	// keeps the dirty-state schema aligned with what a clean install
+	// would produce.
+	var pushMessageIdxCount int
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM information_schema.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'delivery_attempts'
+		  AND INDEX_NAME = 'idx_attempts_push_message'
+	`).Scan(&pushMessageIdxCount); err != nil {
+		return fmt.Errorf("inspect idx_attempts_push_message index: %w", err)
+	}
+	if pushMessageIdxCount == 0 {
+		if _, err := conn.ExecContext(ctx, `
+			CREATE INDEX idx_attempts_push_message ON delivery_attempts (push_message_id)
+		`); err != nil {
+			return fmt.Errorf("create idx_attempts_push_message index: %w", err)
+		}
+	}
+
 	// Drop the old composite index if it still exists. Idempotent.
 	var oldIdxCount int
 	if err := conn.QueryRowContext(ctx, `
@@ -287,10 +312,35 @@ func repairDirtyMessageIdUniqMigration(ctx context.Context, conn *sql.Conn) erro
 		return fmt.Errorf("inspect uq_push_device index: %w", err)
 	}
 	if oldIdxCount > 0 {
-		if _, err := conn.ExecContext(ctx, `
-			DROP INDEX uq_push_device ON delivery_attempts
-		`); err != nil {
-			return fmt.Errorf("drop uq_push_device index: %w", err)
+		// If a child table has a FOREIGN KEY that references
+		// delivery_attempts.(push_message_id, device_id), MySQL uses
+		// uq_push_device as the supporting index on the parent side.
+		// Dropping the index in that case fails with Error 1553
+		// ("Cannot drop index ... needed in a foreign key constraint").
+		// We keep both unique indexes in that scenario: the migration's
+		// intent (message_id is the new ack lookup key) is preserved by
+		// the new uq_message_id, and the FK is not broken. A follow-up
+		// migration can drop the FK and the legacy index once the
+		// application no longer needs the composite key.
+		var fkCount int
+		if err := conn.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE kcu
+			JOIN information_schema.TABLE_CONSTRAINTS tc
+			  ON kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+			 AND kcu.CONSTRAINT_NAME   = tc.CONSTRAINT_NAME
+			WHERE kcu.CONSTRAINT_SCHEMA = DATABASE()
+			  AND tc.CONSTRAINT_TYPE    = 'FOREIGN KEY'
+			  AND kcu.REFERENCED_TABLE_NAME  = 'delivery_attempts'
+			  AND kcu.REFERENCED_COLUMN_NAME IN ('push_message_id', 'device_id')
+		`).Scan(&fkCount); err != nil {
+			return fmt.Errorf("inspect FKs referencing delivery_attempts.push_device: %w", err)
+		}
+		if fkCount == 0 {
+			if _, err := conn.ExecContext(ctx, `
+				DROP INDEX uq_push_device ON delivery_attempts
+			`); err != nil {
+				return fmt.Errorf("drop uq_push_device index: %w", err)
+			}
 		}
 	}
 
