@@ -122,6 +122,20 @@ bootstrap invitation token (only valid while the `users` table is empty):
 sudo -u iptv bash -c 'set -a; . /etc/iptv/env; set +a; /opt/iptv/iptv bootstrap-invitation'
 ```
 
+In Docker, run the equivalent against the running container (the
+service is the same one — the bootstrap subcommand uses the env file
+the postinst generated, so it picks up the same MariaDB/Redis/JWT
+credentials as the live `iptv` binary):
+
+```bash
+docker exec -u root <container> bash -c 'sudo -u iptv bash -c "set -a; . /etc/iptv/env; set +a; /opt/iptv/iptv bootstrap-invitation"'
+```
+
+The token is printed to stdout, valid for 24h (Redis TTL), and
+single-use (consumed atomically by the registration handler).
+The subcommand refuses to issue a token when the `users` table is
+non-empty, so use it on a fresh install or after a full wipe.
+
 Then register via `POST /api/web/v1/users/register` (email + password +
 `invitation_token`).
 
