@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	lockID                    = "590872375"
-	apkSemverMigrationVersion = 5
-	maxUnsignedBigInt         = "18446744073709551615"
+	lockID                        = "590872375"
+	apkSemverMigrationVersion     = 5
+	messageIdUniqMigrationVersion = 15
+	maxUnsignedBigInt             = "18446744073709551615"
 )
 
 var apkLatestIndexColumns = []string{
@@ -208,6 +209,112 @@ func repairDirtyAPKSemverMigration(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 
+// repairDirtyMessageIdUniqMigration brings `delivery_attempts` to the
+// post-15 state from any partial state left by an interrupted or failed
+// run of migration 000015_message_id_uniq. The function is idempotent
+// at each step, so calling it from the clean pre-15 state is a no-op.
+//
+// Post-15 invariants the function enforces:
+//   - message_id column exists, type VARCHAR(36) NOT NULL.
+//   - Every existing row has a non-NULL message_id (backfilled with UUID()).
+//   - Composite index uq_push_device(push_message_id, device_id) is gone.
+//   - Unique index uq_message_id(message_id) exists.
+func repairDirtyMessageIdUniqMigration(ctx context.Context, conn *sql.Conn) error {
+	var (
+		colExists     int
+		colIsNullable sql.NullString
+		colDataType   sql.NullString
+		colCharMaxLen sql.NullInt64
+	)
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*), MAX(IS_NULLABLE), MAX(DATA_TYPE), MAX(CHARACTER_MAXIMUM_LENGTH)
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'delivery_attempts'
+		  AND COLUMN_NAME = 'message_id'
+	`).Scan(&colExists, &colIsNullable, &colDataType, &colCharMaxLen); err != nil {
+		return fmt.Errorf("inspect message_id column: %w", err)
+	}
+
+	if colExists == 0 {
+		// Pre-15 state: column not present. Add it NULLABLE so we can
+		// backfill without violating the future NOT NULL.
+		if _, err := conn.ExecContext(ctx, `
+			ALTER TABLE delivery_attempts ADD COLUMN message_id VARCHAR(36) NULL
+		`); err != nil {
+			return fmt.Errorf("add message_id column: %w", err)
+		}
+		colIsNullable = sql.NullString{String: "YES", Valid: true}
+	}
+
+	// Backfill any NULL message_id with a fresh UUID(). Idempotent: only
+	// touches rows where message_id is currently NULL.
+	if colIsNullable.Valid && colIsNullable.String == "YES" {
+		if _, err := conn.ExecContext(ctx, `
+			UPDATE delivery_attempts SET message_id = UUID() WHERE message_id IS NULL
+		`); err != nil {
+			return fmt.Errorf("backfill message_id: %w", err)
+		}
+	}
+
+	// Enforce NOT NULL. MODIFY is a no-op when the column is already NOT
+	// NULL with the same definition, so this is safe to run unconditionally
+	// once the column exists.
+	if colDataType.String != "varchar" || !colCharMaxLen.Valid || colCharMaxLen.Int64 != 36 {
+		// Column was added with a different definition (e.g. an operator
+		// added it manually). Reset to the migration's canonical shape.
+		if _, err := conn.ExecContext(ctx, `
+			ALTER TABLE delivery_attempts MODIFY COLUMN message_id VARCHAR(36) NOT NULL
+		`); err != nil {
+			return fmt.Errorf("normalize message_id definition: %w", err)
+		}
+	} else if colIsNullable.Valid && colIsNullable.String == "YES" {
+		if _, err := conn.ExecContext(ctx, `
+			ALTER TABLE delivery_attempts MODIFY COLUMN message_id VARCHAR(36) NOT NULL
+		`); err != nil {
+			return fmt.Errorf("enforce message_id NOT NULL: %w", err)
+		}
+	}
+
+	// Drop the old composite index if it still exists. Idempotent.
+	var oldIdxCount int
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM information_schema.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'delivery_attempts'
+		  AND INDEX_NAME = 'uq_push_device'
+	`).Scan(&oldIdxCount); err != nil {
+		return fmt.Errorf("inspect uq_push_device index: %w", err)
+	}
+	if oldIdxCount > 0 {
+		if _, err := conn.ExecContext(ctx, `
+			DROP INDEX uq_push_device ON delivery_attempts
+		`); err != nil {
+			return fmt.Errorf("drop uq_push_device index: %w", err)
+		}
+	}
+
+	// Create the new UNIQUE index on message_id if it doesn't exist.
+	var newIdxCount int
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM information_schema.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'delivery_attempts'
+		  AND INDEX_NAME = 'uq_message_id'
+	`).Scan(&newIdxCount); err != nil {
+		return fmt.Errorf("inspect uq_message_id index: %w", err)
+	}
+	if newIdxCount == 0 {
+		if _, err := conn.ExecContext(ctx, `
+			CREATE UNIQUE INDEX uq_message_id ON delivery_attempts (message_id)
+		`); err != nil {
+			return fmt.Errorf("create uq_message_id index: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func releaseMigrationLock(conn *sql.Conn) error {
 	var released sql.NullInt64
 	if err := conn.QueryRowContext(context.Background(), "SELECT RELEASE_LOCK(?)", lockID).Scan(&released); err != nil {
@@ -276,6 +383,15 @@ func Migrate(ctx context.Context, db *sql.DB) (retErr error) {
 	}
 	if versionErr == nil && version == apkSemverMigrationVersion && dirty {
 		if err := repairDirtyAPKSemverMigration(ctx, conn); err != nil {
+			return fmt.Errorf("repair dirty migration %d: %w", version, err)
+		}
+		if err := m.Force(int(version)); err != nil {
+			return fmt.Errorf("mark repaired migration %d clean: %w", version, err)
+		}
+		log.Printf("migrations: repaired dirty migration %d", version)
+	}
+	if versionErr == nil && version == messageIdUniqMigrationVersion && dirty {
+		if err := repairDirtyMessageIdUniqMigration(ctx, conn); err != nil {
 			return fmt.Errorf("repair dirty migration %d: %w", version, err)
 		}
 		if err := m.Force(int(version)); err != nil {
