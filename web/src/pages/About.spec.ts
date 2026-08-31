@@ -19,7 +19,7 @@ vi.mock("../store/services/BuildInfoService", () => {
   return { BuildInfoService: MockBuildInfoService, getBuildInfo };
 });
 
-import { BuildInfoService, getBuildInfo as mockGetBuildInfo } from "../store/services/BuildInfoService";
+import { BuildInfoService } from "../store/services/BuildInfoService";
 
 describe("About.vue", () => {
   beforeEach(() => {
@@ -28,7 +28,8 @@ describe("About.vue", () => {
   });
 
   it("shows the build version", async () => {
-    mockGetBuildInfo.mockResolvedValue(
+    const getBuildInfo = vi.mocked(new BuildInfoService().getBuildInfo);
+    getBuildInfo.mockResolvedValue(
       BuildInfo.create({ version: "v0.0.4", commit: "a0db9ad" }),
     );
     const wrapper = mount(About);
@@ -40,7 +41,8 @@ describe("About.vue", () => {
   });
 
   it("shows a loading hint when the store is not loaded", async () => {
-    mockGetBuildInfo.mockRejectedValue(new Error("network down"));
+    const getBuildInfo = vi.mocked(new BuildInfoService().getBuildInfo);
+    getBuildInfo.mockRejectedValue(new Error("network down"));
     const wrapper = mount(About);
     const store = useBuildInfoStore();
     await store.load();

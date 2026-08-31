@@ -23,7 +23,7 @@ vi.mock("../services/BuildInfoService", () => {
   return { BuildInfoService: MockBuildInfoService, getBuildInfo };
 });
 
-import { BuildInfoService, getBuildInfo as mockGetBuildInfo } from "../services/BuildInfoService";
+import { BuildInfoService } from "../services/BuildInfoService";
 
 describe("useBuildInfoStore", () => {
   beforeEach(() => {
@@ -39,7 +39,8 @@ describe("useBuildInfoStore", () => {
   });
 
   it("load() fetches and populates", async () => {
-    mockGetBuildInfo.mockResolvedValue(
+    const getBuildInfo = vi.mocked(new BuildInfoService().getBuildInfo);
+    getBuildInfo.mockResolvedValue(
       BuildInfo.create({ version: "v0.0.4", commit: "a0db9ad" }),
     );
     const store = useBuildInfoStore();
@@ -50,17 +51,19 @@ describe("useBuildInfoStore", () => {
   });
 
   it("load() is idempotent within a session", async () => {
-    mockGetBuildInfo.mockResolvedValue(
+    const getBuildInfo = vi.mocked(new BuildInfoService().getBuildInfo);
+    getBuildInfo.mockResolvedValue(
       BuildInfo.create({ version: "v0.0.4", commit: "a0db9ad" }),
     );
     const store = useBuildInfoStore();
     await store.load();
     await store.load();
-    expect(mockGetBuildInfo).toHaveBeenCalledTimes(1);
+    expect(getBuildInfo).toHaveBeenCalledTimes(1);
   });
 
   it("load() swallows errors (no version shown is acceptable)", async () => {
-    mockGetBuildInfo.mockRejectedValue(new Error("network down"));
+    const getBuildInfo = vi.mocked(new BuildInfoService().getBuildInfo);
+    getBuildInfo.mockRejectedValue(new Error("network down"));
     const store = useBuildInfoStore();
     await expect(store.load()).resolves.toBeUndefined();
     expect(store.version).toBe("");

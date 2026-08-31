@@ -19,7 +19,7 @@ vi.mock("../store/services/BuildInfoService", () => {
   return { BuildInfoService: MockBuildInfoService, getBuildInfo };
 });
 
-import { BuildInfoService, getBuildInfo as mockGetBuildInfo } from "../store/services/BuildInfoService";
+import { BuildInfoService } from "../store/services/BuildInfoService";
 
 function mountLayout(): ReturnType<typeof mount> {
   return mount(Layout, {
@@ -37,7 +37,8 @@ describe("layout.vue footer", () => {
   });
 
   it("shows the build version in the footer when loaded", async () => {
-    mockGetBuildInfo.mockResolvedValue(
+    const getBuildInfo = vi.mocked(new BuildInfoService().getBuildInfo);
+    getBuildInfo.mockResolvedValue(
       BuildInfo.create({ version: "v0.0.4", commit: "a0db9ad" }),
     );
     const wrapper = mountLayout();
@@ -49,7 +50,8 @@ describe("layout.vue footer", () => {
   });
 
   it("does not show the version when the store is not loaded", async () => {
-    mockGetBuildInfo.mockRejectedValue(new Error("network down"));
+    const getBuildInfo = vi.mocked(new BuildInfoService().getBuildInfo);
+    getBuildInfo.mockRejectedValue(new Error("network down"));
     const wrapper = mountLayout();
     const store = useBuildInfoStore();
     await store.load();
