@@ -287,10 +287,35 @@ func repairDirtyMessageIdUniqMigration(ctx context.Context, conn *sql.Conn) erro
 		return fmt.Errorf("inspect uq_push_device index: %w", err)
 	}
 	if oldIdxCount > 0 {
-		if _, err := conn.ExecContext(ctx, `
-			DROP INDEX uq_push_device ON delivery_attempts
-		`); err != nil {
-			return fmt.Errorf("drop uq_push_device index: %w", err)
+		// If a child table has a FOREIGN KEY that references
+		// delivery_attempts.(push_message_id, device_id), MySQL uses
+		// uq_push_device as the supporting index on the parent side.
+		// Dropping the index in that case fails with Error 1553
+		// ("Cannot drop index ... needed in a foreign key constraint").
+		// We keep both unique indexes in that scenario: the migration's
+		// intent (message_id is the new ack lookup key) is preserved by
+		// the new uq_message_id, and the FK is not broken. A follow-up
+		// migration can drop the FK and the legacy index once the
+		// application no longer needs the composite key.
+		var fkCount int
+		if err := conn.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE kcu
+			JOIN information_schema.TABLE_CONSTRAINTS tc
+			  ON kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+			 AND kcu.CONSTRAINT_NAME   = tc.CONSTRAINT_NAME
+			WHERE kcu.CONSTRAINT_SCHEMA = DATABASE()
+			  AND tc.CONSTRAINT_TYPE    = 'FOREIGN KEY'
+			  AND kcu.REFERENCED_TABLE_NAME  = 'delivery_attempts'
+			  AND kcu.REFERENCED_COLUMN_NAME IN ('push_message_id', 'device_id')
+		`).Scan(&fkCount); err != nil {
+			return fmt.Errorf("inspect FKs referencing delivery_attempts.push_device: %w", err)
+		}
+		if fkCount == 0 {
+			if _, err := conn.ExecContext(ctx, `
+				DROP INDEX uq_push_device ON delivery_attempts
+			`); err != nil {
+				return fmt.Errorf("drop uq_push_device index: %w", err)
+			}
 		}
 	}
 
