@@ -13,8 +13,8 @@ vi.mock("../store/services", () => ({
 }));
 
 const users: User[] = [
-  { id: 10, email: "a@x.com", createdAt: "", updatedAt: "", role: "user" },
-  { id: 20, email: "b@x.com", createdAt: "", updatedAt: "", role: "user" },
+  { id: 10, email: "a@x.com", createdAt: "", updatedAt: "", role: "user", notificationsEnabled: false, notificationsEnabledAt: "" },
+  { id: 20, email: "b@x.com", createdAt: "", updatedAt: "", role: "user", notificationsEnabled: false, notificationsEnabledAt: "" },
 ];
 
 const base: Domain = {

@@ -12,8 +12,6 @@ vi.mock("../store/services", () => ({
   },
 }));
 
-const flush = () => new Promise((r) => setTimeout(r, 0));
-
 const buildRouter = () =>
   createRouter({
     history: createMemoryHistory(),

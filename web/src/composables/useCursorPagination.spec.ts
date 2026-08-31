@@ -3,7 +3,6 @@ import { defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, RouterView } from "vue-router";
 import { mount } from "@vue/test-utils";
 import { useCursorPagination } from "./useCursorPagination";
-import type { UseCursorPaginationOptions } from "./useCursorPagination";
 
 function makeFetchSpy(responses: Array<{ data: unknown[]; nextCursor: string; hasMore: boolean }>) {
   const spy = vi.fn(async (_cursor: string | undefined, _size: number) => {
@@ -190,16 +189,6 @@ describe("useCursorPagination filters", () => {
   beforeEach(() => sessionStorage.clear());
   afterEach(() => sessionStorage.clear());
 
-  function makeOpts(filtersValue: Record<string, unknown>) {
-    const opts: UseCursorPaginationOptions<unknown> = {
-      routeName: "Test",
-      defaultSize: 10,
-      filters: () => filtersValue,
-      fetchPage: vi.fn(async () => ({ data: [], nextCursor: "", hasMore: false })),
-    };
-    return opts;
-  }
-
   it("setFilters resets to page 1, clears the cache for the PREVIOUS filter set, updates URL", async () => {
     // Mount with a ref-based filters getter so the URL and the local
     // filters can diverge (this is the events.vue usage pattern).
@@ -345,7 +334,7 @@ describe("useCursorPagination PR #45 regression — setFilters cache slot", () =
 
     // Re-apply the OLD filter set and verify the page-2 cursor is
     // still there (acceptance: round-trip preserves cache).
-    const _ = oldFilters; // silence unused
+    void oldFilters; // silence unused
   });
 
   it("round-trip A → B → A reuses A's cached page-2 cursor", async () => {
@@ -431,10 +420,9 @@ describe("useCursorPagination PR #45 regression — URL watcher filter changes",
     const fetch = vi.fn(async () => ({
       data: [], nextCursor: "", hasMore: false,
     }));
-    let composable!: ReturnType<typeof useCursorPagination<unknown>>;
     const Host = defineComponent({
       setup() {
-        composable = useCursorPagination<unknown>({
+        useCursorPagination<unknown>({
           routeName: "Test",
           defaultSize: 10,
           filters: () => filters.value,
@@ -472,10 +460,9 @@ describe("useCursorPagination PR #45 regression — URL watcher filter changes",
     const fetch = vi.fn(async () => ({
       data: [], nextCursor: "", hasMore: false,
     }));
-    let composable!: ReturnType<typeof useCursorPagination<unknown>>;
     const Host = defineComponent({
       setup() {
-        composable = useCursorPagination<unknown>({
+        useCursorPagination<unknown>({
           routeName: "Test",
           defaultSize: 10,
           filters: () => filters.value,

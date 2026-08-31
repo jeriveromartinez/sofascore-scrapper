@@ -76,7 +76,7 @@ describe("headerString", () => {
         return undefined;
       }
     }
-    const headers = new FakeAxiosHeaders({});
+    const headers = new FakeAxiosHeaders();
     expect(headerString(headers, "content-type")).toBe(
       "application/x-protobuf",
     );
