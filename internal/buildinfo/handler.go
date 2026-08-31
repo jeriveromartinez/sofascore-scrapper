@@ -19,6 +19,14 @@ type Handler struct {
 	logger *slog.Logger
 }
 
+// NewHandler returns a Handler with the given logger. The package
+// does not export the struct fields; callers must use this
+// constructor to keep the API consistent with the rest of the
+// project (e.g. apk.NewAdminHandler, users.NewHandler).
+func NewHandler(logger *slog.Logger) *Handler {
+	return &Handler{logger: logger}
+}
+
 // Register installs the route on the provided router.
 func (h *Handler) Register(r gin.IRouter) {
 	r.GET("/version", h.Handle)

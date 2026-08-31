@@ -199,6 +199,7 @@ func TestRouteCompatibility(t *testing.T) {
 		"GET /api/web/v1/playback",
 		"GET /api/web/v1/playback/page",
 		"GET /api/web/v1/stats/top-events",
+		"GET /api/web/v1/version",
 		"POST /api/web/v1/apk/upload",
 		"POST /api/web/v1/apk/upload/chunk",
 		"POST /api/web/v1/apk/upload/assemble",
@@ -236,7 +237,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 66 {
-		t.Fatalf("got %d routes, want 66 (the +1 is /api/app/v1/ws for the push realtime endpoint; the other new ones are the /api/admin/v1/pushes surface)", len(got))
+	if len(got) != 67 {
+		t.Fatalf("got %d routes, want 67", len(got))
 	}
 }
