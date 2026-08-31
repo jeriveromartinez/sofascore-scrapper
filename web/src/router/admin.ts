@@ -19,6 +19,12 @@ export const adminRoutes: CustomRouteRecordRaw[] = [
     component: () => import("../pages/pushes.vue"),
     icon: "bx-bell",
   },
+  {
+    name: "About",
+    path: "about",
+    component: () => import("../pages/About.vue"),
+    icon: "bx-info-circle",
+  },
 ];
 
 export default adminRoutes;
