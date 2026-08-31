@@ -50,9 +50,15 @@ mkdir -p "$out_dir"
 
 echo ">> Building $image with version $version"
 
+# Resolve the git commit short-hash to embed in the binary so the
+# web UI can show "Build / Version: vX.Y.Z / Commit: <hash>".
+commit=$(git -C "$repo_root" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
 docker build \
     -f "$repo_root/deployments/package/Dockerfile.builder" \
     --build-arg "DEB_VERSION=$version" \
+    --build-arg "VERSION=v$version" \
+    --build-arg "COMMIT=$commit" \
     -t "$image" \
     "$repo_root"
 

@@ -24,7 +24,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/sofascore-scrapper ./cmd/server
+ARG VERSION="v0.0.0-dev"
+ARG COMMIT="unknown"
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+    -ldflags="-s -w -X github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo.Version=${VERSION} -X github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo.Commit=${COMMIT}" \
+    -o /out/sofascore-scrapper ./cmd/server
 
 FROM ubuntu:22.04 AS package
 
