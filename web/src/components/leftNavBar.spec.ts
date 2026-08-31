@@ -13,6 +13,7 @@ const buildRouter = () =>
       { path: "/", name: "Events", component: { template: "<div />" } },
       { path: "/apk", name: "ApkAdmin", component: { template: "<div />" } },
       { path: "/pushes", name: "Pushes", component: { template: "<div />" } },
+      { path: "/about", name: "About", component: { template: "<div />" } },
       { path: "/users", name: "Users", component: { template: "<div />" } },
       { path: "/domains", name: "Domains", component: { template: "<div />" } },
       { path: "/devices", name: "Devices", component: { template: "<div />" } },
