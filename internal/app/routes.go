@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
@@ -162,6 +163,13 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 		})
 		pushHandler.RegisterRoutes(webV1, adminThenRl)
 	}
+
+	// Build info endpoint (version + commit baked into the binary).
+	// Public — no admin middleware — so curl/monitoring can hit it
+	// without a JWT. The spec for this PR calls for a public endpoint;
+	// if that changes, wrap with adminThenRl.
+	buildInfoHandler := buildinfo.NewHandler(slog.Default())
+	buildInfoHandler.Register(webV1)
 
 	// Realtime (WebSocket) endpoint for the Flutter client. The
 	// handler authenticates the device via APP-XIPTV (or ?token=)
