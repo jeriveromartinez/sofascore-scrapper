@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../store/pinia";
+import { useBuildInfoStore } from "../store/pinia/buildInfoStore";
 import leftNavBar from "./leftNavBar.vue";
 import themeSelector from "./themeSelector.vue";
 import { initializeLayout, cleanupLayout } from "../assets/js/init";
@@ -15,6 +16,8 @@ import "../assets/css/responsive.css";
 
 const router = useRouter();
 const authStore = useAuthStore();
+const buildInfo = useBuildInfoStore();
+buildInfo.load();
 const currentYear = new Date().getFullYear();
 
 function logout() {
@@ -191,6 +194,10 @@ onUnmounted(() => {
                 <div class="mb-2 mb-md-0">
                   &#169;
                   {{ currentYear }}, made with ❤️
+                  <small
+                    v-if="buildInfo.loaded"
+                    class="text-body-secondary ms-2"
+                  >· v{{ buildInfo.version }} · {{ buildInfo.commit }}</small>
                 </div>
                 <div class="d-none d-lg-inline-block">
                   <!-- <a
