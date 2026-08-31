@@ -17,6 +17,8 @@ const base: User = {
   updatedAt: "2024-01-01T00:00:00Z",
   email: "admin@x.com",
   role: "admin",
+  notificationsEnabled: false,
+  notificationsEnabledAt: "",
 };
 
 describe("UserFormModal", () => {
