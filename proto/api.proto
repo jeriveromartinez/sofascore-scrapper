@@ -606,6 +606,15 @@ message PushMetricsAggregate {
   string last_push_at = 16;                    // RFC3339; empty if never
 }
 
+// ========== Build info (added 2026-08-30) ==========
+
+message BuildInfo {
+  // Última etiqueta semver del build (ej: "v0.0.4"). Default "dev" si se compiló sin -ldflags.
+  string version = 1;
+  // SHA corto del commit con el que se compiló el binario (ej: "a0db9ad"). Default "unknown".
+  string commit = 2;
+}
+
 // ========== WebSocket frames (added 2026-08-28) ==========
 //
 // WsFrame is the single envelope used on the WebSocket connection. Every

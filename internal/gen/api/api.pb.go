@@ -5243,6 +5243,60 @@ func (x *PushMetricsAggregate) GetLastPushAt() string {
 	return ""
 }
 
+type BuildInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Última etiqueta semver del build (ej: "v0.0.4"). Default "dev" si se compiló sin -ldflags.
+	Version string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	// SHA corto del commit con el que se compiló el binario (ej: "a0db9ad"). Default "unknown".
+	Commit        string `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuildInfo) Reset() {
+	*x = BuildInfo{}
+	mi := &file_proto_api_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildInfo) ProtoMessage() {}
+
+func (x *BuildInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_api_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildInfo.ProtoReflect.Descriptor instead.
+func (*BuildInfo) Descriptor() ([]byte, []int) {
+	return file_proto_api_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *BuildInfo) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *BuildInfo) GetCommit() string {
+	if x != nil {
+		return x.Commit
+	}
+	return ""
+}
+
 // ========== WebSocket frames (added 2026-08-28) ==========
 //
 // WsFrame is the single envelope used on the WebSocket connection. Every
@@ -5266,7 +5320,7 @@ type WsFrame struct {
 
 func (x *WsFrame) Reset() {
 	*x = WsFrame{}
-	mi := &file_proto_api_proto_msgTypes[70]
+	mi := &file_proto_api_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5278,7 +5332,7 @@ func (x *WsFrame) String() string {
 func (*WsFrame) ProtoMessage() {}
 
 func (x *WsFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[70]
+	mi := &file_proto_api_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5291,7 +5345,7 @@ func (x *WsFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WsFrame.ProtoReflect.Descriptor instead.
 func (*WsFrame) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{70}
+	return file_proto_api_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *WsFrame) GetPayload() isWsFrame_Payload {
@@ -5405,7 +5459,7 @@ type WsHello struct {
 
 func (x *WsHello) Reset() {
 	*x = WsHello{}
-	mi := &file_proto_api_proto_msgTypes[71]
+	mi := &file_proto_api_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5417,7 +5471,7 @@ func (x *WsHello) String() string {
 func (*WsHello) ProtoMessage() {}
 
 func (x *WsHello) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[71]
+	mi := &file_proto_api_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5430,7 +5484,7 @@ func (x *WsHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WsHello.ProtoReflect.Descriptor instead.
 func (*WsHello) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{71}
+	return file_proto_api_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *WsHello) GetDeviceId() uint64 {
@@ -5466,7 +5520,7 @@ type WsPush struct {
 
 func (x *WsPush) Reset() {
 	*x = WsPush{}
-	mi := &file_proto_api_proto_msgTypes[72]
+	mi := &file_proto_api_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5478,7 +5532,7 @@ func (x *WsPush) String() string {
 func (*WsPush) ProtoMessage() {}
 
 func (x *WsPush) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[72]
+	mi := &file_proto_api_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5491,7 +5545,7 @@ func (x *WsPush) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WsPush.ProtoReflect.Descriptor instead.
 func (*WsPush) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{72}
+	return file_proto_api_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *WsPush) GetPushId() uint64 {
@@ -5581,7 +5635,7 @@ type WsPushAck struct {
 
 func (x *WsPushAck) Reset() {
 	*x = WsPushAck{}
-	mi := &file_proto_api_proto_msgTypes[73]
+	mi := &file_proto_api_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5593,7 +5647,7 @@ func (x *WsPushAck) String() string {
 func (*WsPushAck) ProtoMessage() {}
 
 func (x *WsPushAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[73]
+	mi := &file_proto_api_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5606,7 +5660,7 @@ func (x *WsPushAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WsPushAck.ProtoReflect.Descriptor instead.
 func (*WsPushAck) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{73}
+	return file_proto_api_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *WsPushAck) GetMessageId() string {
@@ -5632,7 +5686,7 @@ type WsPing struct {
 
 func (x *WsPing) Reset() {
 	*x = WsPing{}
-	mi := &file_proto_api_proto_msgTypes[74]
+	mi := &file_proto_api_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5644,7 +5698,7 @@ func (x *WsPing) String() string {
 func (*WsPing) ProtoMessage() {}
 
 func (x *WsPing) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[74]
+	mi := &file_proto_api_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5657,7 +5711,7 @@ func (x *WsPing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WsPing.ProtoReflect.Descriptor instead.
 func (*WsPing) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{74}
+	return file_proto_api_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *WsPing) GetSentAt() int64 {
@@ -5676,7 +5730,7 @@ type WsPong struct {
 
 func (x *WsPong) Reset() {
 	*x = WsPong{}
-	mi := &file_proto_api_proto_msgTypes[75]
+	mi := &file_proto_api_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5688,7 +5742,7 @@ func (x *WsPong) String() string {
 func (*WsPong) ProtoMessage() {}
 
 func (x *WsPong) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[75]
+	mi := &file_proto_api_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5701,7 +5755,7 @@ func (x *WsPong) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WsPong.ProtoReflect.Descriptor instead.
 func (*WsPong) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{75}
+	return file_proto_api_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *WsPong) GetSentAt() int64 {
@@ -5721,7 +5775,7 @@ type WsError struct {
 
 func (x *WsError) Reset() {
 	*x = WsError{}
-	mi := &file_proto_api_proto_msgTypes[76]
+	mi := &file_proto_api_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5733,7 +5787,7 @@ func (x *WsError) String() string {
 func (*WsError) ProtoMessage() {}
 
 func (x *WsError) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_api_proto_msgTypes[76]
+	mi := &file_proto_api_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5746,7 +5800,7 @@ func (x *WsError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WsError.ProtoReflect.Descriptor instead.
 func (*WsError) Descriptor() ([]byte, []int) {
-	return file_proto_api_proto_rawDescGZIP(), []int{76}
+	return file_proto_api_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *WsError) GetCode() string {
@@ -6212,7 +6266,10 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x10top_app_versions\x18\x0e \x03(\v2\x1a.sofascore.AppVersionCountR\x0etopAppVersions\x12G\n" +
 	"\x14hourly_histogram_30d\x18\x0f \x03(\v2\x15.sofascore.HourBucketR\x12hourlyHistogram30d\x12 \n" +
 	"\flast_push_at\x18\x10 \x01(\tR\n" +
-	"lastPushAt\"\x9a\x02\n" +
+	"lastPushAt\"=\n" +
+	"\tBuildInfo\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
+	"\x06commit\x18\x02 \x01(\tR\x06commit\"\x9a\x02\n" +
 	"\aWsFrame\x12*\n" +
 	"\x05hello\x18\x01 \x01(\v2\x12.sofascore.WsHelloH\x00R\x05hello\x12'\n" +
 	"\x04push\x18\x02 \x01(\v2\x11.sofascore.WsPushH\x00R\x04push\x121\n" +
@@ -6295,7 +6352,7 @@ func file_proto_api_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_api_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_proto_api_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
+var file_proto_api_proto_msgTypes = make([]protoimpl.MessageInfo, 81)
 var file_proto_api_proto_goTypes = []any{
 	(PushCategory)(0),                      // 0: sofascore.PushCategory
 	(PushPriority)(0),                      // 1: sofascore.PushPriority
@@ -6372,16 +6429,17 @@ var file_proto_api_proto_goTypes = []any{
 	(*AppVersionCount)(nil),                // 72: sofascore.AppVersionCount
 	(*HourBucket)(nil),                     // 73: sofascore.HourBucket
 	(*PushMetricsAggregate)(nil),           // 74: sofascore.PushMetricsAggregate
-	(*WsFrame)(nil),                        // 75: sofascore.WsFrame
-	(*WsHello)(nil),                        // 76: sofascore.WsHello
-	(*WsPush)(nil),                         // 77: sofascore.WsPush
-	(*WsPushAck)(nil),                      // 78: sofascore.WsPushAck
-	(*WsPing)(nil),                         // 79: sofascore.WsPing
-	(*WsPong)(nil),                         // 80: sofascore.WsPong
-	(*WsError)(nil),                        // 81: sofascore.WsError
-	nil,                                    // 82: sofascore.PushPayload.DataEntry
-	nil,                                    // 83: sofascore.PushMessage.DataEntry
-	nil,                                    // 84: sofascore.WsPush.DataEntry
+	(*BuildInfo)(nil),                      // 75: sofascore.BuildInfo
+	(*WsFrame)(nil),                        // 76: sofascore.WsFrame
+	(*WsHello)(nil),                        // 77: sofascore.WsHello
+	(*WsPush)(nil),                         // 78: sofascore.WsPush
+	(*WsPushAck)(nil),                      // 79: sofascore.WsPushAck
+	(*WsPing)(nil),                         // 80: sofascore.WsPing
+	(*WsPong)(nil),                         // 81: sofascore.WsPong
+	(*WsError)(nil),                        // 82: sofascore.WsError
+	nil,                                    // 83: sofascore.PushPayload.DataEntry
+	nil,                                    // 84: sofascore.PushMessage.DataEntry
+	nil,                                    // 85: sofascore.WsPush.DataEntry
 }
 var file_proto_api_proto_depIdxs = []int32{
 	12, // 0: sofascore.UserList.users:type_name -> sofascore.User
@@ -6419,7 +6477,7 @@ var file_proto_api_proto_depIdxs = []int32{
 	17, // 32: sofascore.ApkPage.page:type_name -> sofascore.CursorPageInfo
 	0,  // 33: sofascore.PushPayload.category:type_name -> sofascore.PushCategory
 	1,  // 34: sofascore.PushPayload.priority:type_name -> sofascore.PushPriority
-	82, // 35: sofascore.PushPayload.data:type_name -> sofascore.PushPayload.DataEntry
+	83, // 35: sofascore.PushPayload.data:type_name -> sofascore.PushPayload.DataEntry
 	61, // 36: sofascore.CreateImmediatePushRequest.payload:type_name -> sofascore.PushPayload
 	61, // 37: sofascore.CreateScheduleRequest.payload:type_name -> sofascore.PushPayload
 	2,  // 38: sofascore.CreateScheduleRequest.schedule_type:type_name -> sofascore.PushScheduleType
@@ -6430,7 +6488,7 @@ var file_proto_api_proto_depIdxs = []int32{
 	17, // 43: sofascore.ScheduledPushPage.page:type_name -> sofascore.CursorPageInfo
 	0,  // 44: sofascore.PushMessage.category:type_name -> sofascore.PushCategory
 	1,  // 45: sofascore.PushMessage.priority:type_name -> sofascore.PushPriority
-	83, // 46: sofascore.PushMessage.data:type_name -> sofascore.PushMessage.DataEntry
+	84, // 46: sofascore.PushMessage.data:type_name -> sofascore.PushMessage.DataEntry
 	67, // 47: sofascore.PushMessagePage.data:type_name -> sofascore.PushMessage
 	17, // 48: sofascore.PushMessagePage.page:type_name -> sofascore.CursorPageInfo
 	4,  // 49: sofascore.FailureBreakdown.reason:type_name -> sofascore.DeliveryFailureReason
@@ -6438,15 +6496,15 @@ var file_proto_api_proto_depIdxs = []int32{
 	71, // 51: sofascore.PushMetricsAggregate.top_platforms:type_name -> sofascore.PlatformCount
 	72, // 52: sofascore.PushMetricsAggregate.top_app_versions:type_name -> sofascore.AppVersionCount
 	73, // 53: sofascore.PushMetricsAggregate.hourly_histogram_30d:type_name -> sofascore.HourBucket
-	76, // 54: sofascore.WsFrame.hello:type_name -> sofascore.WsHello
-	77, // 55: sofascore.WsFrame.push:type_name -> sofascore.WsPush
-	78, // 56: sofascore.WsFrame.push_ack:type_name -> sofascore.WsPushAck
-	79, // 57: sofascore.WsFrame.ping:type_name -> sofascore.WsPing
-	80, // 58: sofascore.WsFrame.pong:type_name -> sofascore.WsPong
-	81, // 59: sofascore.WsFrame.error:type_name -> sofascore.WsError
+	77, // 54: sofascore.WsFrame.hello:type_name -> sofascore.WsHello
+	78, // 55: sofascore.WsFrame.push:type_name -> sofascore.WsPush
+	79, // 56: sofascore.WsFrame.push_ack:type_name -> sofascore.WsPushAck
+	80, // 57: sofascore.WsFrame.ping:type_name -> sofascore.WsPing
+	81, // 58: sofascore.WsFrame.pong:type_name -> sofascore.WsPong
+	82, // 59: sofascore.WsFrame.error:type_name -> sofascore.WsError
 	0,  // 60: sofascore.WsPush.category:type_name -> sofascore.PushCategory
 	1,  // 61: sofascore.WsPush.priority:type_name -> sofascore.PushPriority
-	84, // 62: sofascore.WsPush.data:type_name -> sofascore.WsPush.DataEntry
+	85, // 62: sofascore.WsPush.data:type_name -> sofascore.WsPush.DataEntry
 	63, // [63:63] is the sub-list for method output_type
 	63, // [63:63] is the sub-list for method input_type
 	63, // [63:63] is the sub-list for extension type_name
@@ -6459,7 +6517,7 @@ func file_proto_api_proto_init() {
 	if File_proto_api_proto != nil {
 		return
 	}
-	file_proto_api_proto_msgTypes[70].OneofWrappers = []any{
+	file_proto_api_proto_msgTypes[71].OneofWrappers = []any{
 		(*WsFrame_Hello)(nil),
 		(*WsFrame_Push)(nil),
 		(*WsFrame_PushAck)(nil),
@@ -6473,7 +6531,7 @@ func file_proto_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_api_proto_rawDesc), len(file_proto_api_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   80,
+			NumMessages:   81,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
