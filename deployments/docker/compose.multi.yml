@@ -1,3 +1,12 @@
+# Staging / load-test stack: three backends behind nginx, with
+# Prometheus scraping them. Persistent volumes — state survives
+# `docker compose down`.
+#
+# Usage:
+#   docker compose -f deployments/docker/compose.multi.yml up --build
+#   curl http://localhost/health/live
+#   # Prometheus metrics: http://localhost:9090
+
 services:
   mariadb:
     image: mariadb:10.11
@@ -161,7 +170,6 @@ services:
     volumes:
       - prometheus_data:/prometheus
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ../prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     networks:
       - internal
 
