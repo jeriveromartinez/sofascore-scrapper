@@ -2,11 +2,13 @@
 # (.deb files are mounted at runtime into /tmp/dist/).
 #
 # Build:
-#   docker build -f deployments/docker/Dockerfile.test-ubuntu2404 -t iptv-chain-test .
+#   docker build -f deployments/docker/Dockerfile.test -t iptv-chain-test .
 # Run:
 #   docker run --rm -p 8080:8080 \
 #       -v "$PWD/dist:/tmp/dist:ro" \
 #       iptv-chain-test
+# Chain-test driver:
+#   docker exec iptv-chain-test bash /usr/local/bin/chain-test.sh
 
 FROM ubuntu:24.04
 
@@ -22,12 +24,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # The chain driver.
-COPY deployments/docker/test-migration-chain.sh /usr/local/bin/test-migration-chain.sh
-RUN chmod +x /usr/local/bin/test-migration-chain.sh
+COPY deployments/docker/chain-test.sh /usr/local/bin/chain-test.sh
+RUN chmod +x /usr/local/bin/chain-test.sh
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=10 \
     CMD wget -qO- http://localhost:8080/health/live || exit 1
 
-ENTRYPOINT ["/usr/local/bin/test-migration-chain.sh"]
+ENTRYPOINT ["/usr/local/bin/chain-test.sh"]

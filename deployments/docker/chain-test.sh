@@ -1,7 +1,7 @@
 #!/bin/bash
-# Test driver: install every iptv .deb in /tmp/dist in order (oldest
-# filename first), start the iptv binary, wait for /health/live, then
-# stop the binary and move on to the next version.
+# Chain-test driver: install every iptv .deb in /tmp/dist in order
+# (oldest filename first), start the iptv binary, wait for /health/live,
+# then stop the binary and move on to the next version.
 #
 # Versions that fail to start (e.g. 0.0.5 shipped with a duplicate
 # migration file that was fixed in 0.0.6) are logged and skipped. The
