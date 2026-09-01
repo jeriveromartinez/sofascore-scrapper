@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-
-# Builds the .deb package via Docker.
+# Builds the .deb package via Docker. No host Go/Node toolchain
+# required — the build runs entirely inside iptv-deb-builder.
 #
 # Usage:
 #   ./deployments/package/build-deb.sh [-h|--help] [version]
 #
-#   version  defaults to the latest git tag with a leading 'v' stripped
-#             (fallback 0.1.0 when no tag exists).
-# Output lands in dist/iptv_<version>_amd64.deb
+# Output: dist/iptv_<version>_amd64.deb
+
+set -Eeuo pipefail
 
 usage() {
-    sed -n '2,11p' "$0"
+    sed -n '2,7p' "$0"
 }
 
-if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
     exit 0
 fi
@@ -24,13 +23,13 @@ repo_root=$(cd "$script_dir/../.." && pwd)
 
 resolve_version() {
     local explicit="${1:-}"
-    if [ -n "$explicit" ]; then
+    if [[ -n "$explicit" ]]; then
         printf '%s\n' "$explicit"
         return
     fi
     local tag
     tag=$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || true)
-    if [ -n "$tag" ]; then
+    if [[ -n "$tag" ]]; then
         printf '%s\n' "${tag#v}"
         return
     fi
@@ -50,8 +49,8 @@ mkdir -p "$out_dir"
 
 echo ">> Building $image with version $version"
 
-# Resolve the git commit short-hash to embed in the binary so the
-# web UI can show "Build / Version: vX.Y.Z / Commit: <hash>".
+# Embed the git commit short-hash so the web UI can show
+# "Build / Version: vX.Y.Z / Commit: <hash>".
 commit=$(git -C "$repo_root" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 docker build \
@@ -64,8 +63,8 @@ docker build \
 
 echo ">> Extracting .deb to $out_dir"
 
-# Use docker create + docker cp to avoid MSYS path mangling of /bin/sh on
-# Windows/Git Bash hosts.
+# docker create + docker cp avoids MSYS path mangling of /bin/sh on
+# Windows / Git Bash hosts.
 container=$(docker create "$image")
 trap 'docker rm "$container" >/dev/null 2>&1 || true' EXIT
 docker cp "$container:/iptv.deb" "$out_dir/iptv_${version}_amd64.deb"
