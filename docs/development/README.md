@@ -70,6 +70,8 @@ proto/api.proto            # wire format source of truth
 web/                       # Vue admin dashboard
 deployments/               # Docker compose + .deb packaging
 docs/                      # documentation
+scripts/                   # Operator / dev smoke scripts (auth_smoke, …)
+tests/                     # Integration and load tests (k6, Go integration)
 ```
 
 ## Building
@@ -142,6 +144,51 @@ docker compose -f deployments/docker/compose.dev.yml up --build
 
 The same compose file is used for the dev loop and for the staging
 stack (multi-instance via `compose.multi.yml`).
+
+### Auth round-trip smoke test
+
+`scripts/auth_smoke/` is a tiny Go program that exercises every
+`/api/web/v1/users/*` endpoint with the real protobuf wire format. It
+needs a running backend (any of the three Docker setups above, or a
+natively-run `go run ./cmd/server`) and a bootstrap invitation token you
+paste into the source file:
+
+```bash
+# 1. Get the token
+go run ./cmd/server bootstrap-invitation           # native
+# or
+docker exec iptv-prod sudo -u iptv /opt/iptv/iptv bootstrap-invitation # .deb
+
+# 2. Paste the token into scripts/auth_smoke/main.go
+
+# 3. Run the round-trip
+go run ./scripts/auth_smoke/
+```
+
+The script prints each step's status (register 201, get-users 200,
+invitation 201, refresh 200, logout 200) and is the recommended way to
+verify the auth stack works end-to-end. It uses a unique
+`admin-<unix-ts>@test.local` email so re-runs don't collide with
+already-registered users.
+
+For the full production-like deploy (Ubuntu 24.04 + real `.deb` +
+MariaDB + Redis + systemd-style env), see
+[`../operations/production-like-local-deploy.md`](../operations/production-like-local-deploy.md).
+
+### Auth wire format
+
+Every `/api/web/v1/users/*` endpoint accepts and returns **protobuf
+binary**, not JSON. The `Content-Type` for both request and response is
+`application/x-protobuf`. The Vue dashboard and the Android client use
+the generated bindings (`web/src/api/`, `flutter-apptv/lib/api/`) and
+get this for free; if you `curl` these endpoints, you need to encode the
+request with `google.golang.org/protobuf/proto.Marshal` and decode the
+response with `proto.Unmarshal`. Sending JSON results in
+`{"error":"email and password are required"}` because `proto.Unmarshal`
+silently ignores the JSON bytes and the handler sees zero-valued fields.
+
+`/api/app/v1/crash-report` is the exception — it accepts JSON because
+clients are crash reporters on Android, not generated bindings.
 
 ### Load test
 
