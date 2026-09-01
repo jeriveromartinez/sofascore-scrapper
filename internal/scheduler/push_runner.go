@@ -51,8 +51,8 @@ func startPushSchedules(ctx context.Context, svc *push.Service, locker redisplat
 	}
 	r := &pushRunner{svc: svc, locker: locker, logger: logger}
 
-	const spec = "*/30 * * * * *" // every 30 seconds
-	c := cron.New()
+	const spec = "*/30 * * * * *" // every 30 seconds; 6-field spec requires WithSeconds
+	c := cron.New(cron.WithSeconds())
 	if _, err := c.AddFunc(spec, func() {
 		r.tick(ctx)
 	}); err != nil {
