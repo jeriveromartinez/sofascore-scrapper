@@ -84,8 +84,9 @@ out of scope (see "What it does not do" below).
 - Health endpoints: `/health/live` (always 200 if process alive) and
   `/health/ready` (checks DB + Redis).
 - Prometheus metrics at `/metrics`; optional pprof endpoint.
-- Native production deploy via `deployments/native/deploy.sh` with atomic
-  rollback to the previous binary.
+- Production deploy via the Ubuntu `.deb` package (see
+  [`docs/operations/deb-package.md`](../operations/deb-package.md))
+  with rollback via `apt install iptv=<previous-version>`.
 
 ## Hosting requirements
 
