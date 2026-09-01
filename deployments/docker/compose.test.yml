@@ -1,3 +1,11 @@
+# CI / integration test stack: one backend, tmpfs MariaDB + Redis so
+# each run starts clean. A `bootstrap-invitation` one-shot seeds an
+# invite token into a shared volume for tests that need to register
+# the first admin.
+#
+# Usage:
+#   docker compose -f deployments/docker/compose.test.yml up --build --abort-on-container-exit
+
 services:
   mariadb:
     image: mariadb:10.11
@@ -28,7 +36,7 @@ services:
     networks:
       - test-net
 
-  backend-init:
+  bootstrap-invitation:
     build:
       context: ../..
       dockerfile: deployments/docker/Dockerfile.test
@@ -64,7 +72,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      backend-init:
+      bootstrap-invitation:
         condition: service_completed_successfully
     environment:
       DB_HOST: mariadb
