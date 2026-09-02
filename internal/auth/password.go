@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"golang.org/x/crypto/bcrypt"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
