@@ -60,8 +60,8 @@ type Service struct {
 	domainRepo DomainLister
 	userRepo   UserGetter
 	parser     cron.Parser
-	logger  *slog.Logger
-	metrics *Metrics
+	logger     *slog.Logger
+	metrics    *Metrics
 }
 
 // NewService wires a Service. All dependencies are required.
