@@ -6,9 +6,10 @@ sofascore-scrapper platform.
 ## Two deployment paths
 
 | Path | Use when | Doc |
-|---|---|---|
+|---|---|
 | **Docker Compose for testing** | Local dev, CI, load testing, pre-prod | See [Docker Compose](#docker-compose-for-testing) below |
 | **Ubuntu `.deb` for production** | Production on Ubuntu 22.04/24.04 amd64 | [`deb-package.md`](deb-package.md) |
+| **Production-like Docker (.deb on Ubuntu 24.04)** | Validate a single `.deb` build locally before pushing | [`production-like-local-deploy.md`](production-like-local-deploy.md) |
 
 Production deploys go through the `.deb` package only. Native binary
 deploys are not supported.
