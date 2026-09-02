@@ -124,10 +124,3 @@ func postProtoWithAuth(ctx context.Context, url string, body []byte, token strin
 	b, _ := io.ReadAll(resp.Body)
 	return &httpResp{status: resp.StatusCode, body: b}, nil
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
