@@ -9,7 +9,6 @@ import (
 	"os"
 	"testing"
 
-	_ "github.com/golang-migrate/migrate/v4/database/mysql"
 	dbplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
