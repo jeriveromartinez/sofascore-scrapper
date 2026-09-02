@@ -13,9 +13,9 @@ const (
 
 type User struct {
 	gorm.Model
-	Email    string `gorm:"uniqueIndex;not null"`
-	Password string `gorm:"not null"`
-	Role     string `gorm:"size:20;not null;default:user"`
+	Email    string `gorm:"size:191;uniqueIndex:idx_users_email;not null"`
+	Password string `gorm:"size:255;not null"`
+	Role     string `gorm:"size:20;not null;default:'user'"`
 
 	// Push-notifications per-user feature toggle. Default false: the
 	// user must opt in before they can create pushes or receive the
