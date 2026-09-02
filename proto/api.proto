@@ -124,6 +124,7 @@ message DeviceRegisterRequest {
   // domain exists; per-user ownership is not enforced at register time
   // because the Flutter app does not authenticate as a user).
   uint32 domain_id = 5;
+  string package_id = 6;
 }
 
 message Device {
@@ -136,11 +137,8 @@ message Device {
   int64 last_seen = 7;
   string version = 8;
   string iptv_url = 9;
-  // Domain the device is associated with (added 2026-08-28). Drives the
-  // push audience filter: a push to domain X only reaches devices whose
-  // domain_id == X. 0 means "unassigned"; such devices are excluded from
-  // push delivery.
   uint32 domain_id = 10;
+  string package_id = 11;
 }
 
 message DeviceList {

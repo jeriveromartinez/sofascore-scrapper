@@ -73,23 +73,15 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 		if token == "" {
 			token = c.Query(queryToken)
 		}
-		if token == "" {
-			cfg.Logger.Info("realtime: upgrade rejected, missing token",
-				slog.String("client_ip", c.ClientIP()))
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
 
 		dev, err := cfg.Authenticator.AuthenticateToken(c.Request.Context(), token)
 		if err != nil {
 			if errors.Is(err, ErrInvalidToken) {
-				cfg.Logger.Info("realtime: upgrade rejected, invalid token",
-					slog.String("client_ip", c.ClientIP()))
+				cfg.Logger.Info("realtime: upgrade rejected, invalid token", slog.String("client_ip", c.ClientIP()))
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
-			cfg.Logger.Error("realtime: auth lookup failed",
-				slog.String("error", err.Error()))
+			cfg.Logger.Error("realtime: auth lookup failed", slog.String("error", err.Error()))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -213,7 +205,7 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 // ping/pong/keepalive which gorilla handles via the control
 // channel). Any read error closes the connection.
 func readLoop(conn *Connection, logger *slog.Logger) {
-	defer conn.Close(1000, "read loop exit")
+	// defer conn.Close(1000, "read loop exit")
 
 	_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
 	conn.ws.SetPongHandler(func(string) error {
@@ -229,6 +221,7 @@ func readLoop(conn *Connection, logger *slog.Logger) {
 					slog.Uint64("device_id", conn.DeviceID()),
 					slog.String("error", err.Error()))
 			}
+			conn.Close(1000, err.Error())
 			return
 		}
 		// We only act on binary application frames. Text frames and

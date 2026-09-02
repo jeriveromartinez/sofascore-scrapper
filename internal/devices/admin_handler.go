@@ -132,8 +132,8 @@ func (h *AdminHandler) handleGetAllDevices(c *gin.Context) {
 
 func (h *AdminHandler) handleUpdateDevice(c *gin.Context) {
 	var req pb.DeviceRegisterRequest
-	if err := server.ParseProtoBody(c, &req); err != nil || req.Name == "" {
-		server.RespondError(c, http.StatusBadRequest, "name is required")
+	if err := server.ParseProtoBody(c, &req); err != nil || req.Name == "" || req.PackageId == "" {
+		server.RespondError(c, http.StatusBadRequest, "name and package_id are required")
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *AdminHandler) handleUpdateDevice(c *gin.Context) {
 		return
 	}
 
-	updatedDevice, err := h.repo.Update(req.Token, req.Platform, req.Name)
+	updatedDevice, err := h.repo.Update(req.Token, req.Platform, req.Name, req.PackageId)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

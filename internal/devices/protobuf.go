@@ -16,6 +16,7 @@ func DeviceToProto(d Device) *pb.Device {
 		Name:      d.Name,
 		Version:   d.Version,
 		LastSeen:  d.LastSeen,
+		PackageId: d.PackageId,
 	}
 	if d.DomainID != nil {
 		pb.DomainId = uint32(*d.DomainID)

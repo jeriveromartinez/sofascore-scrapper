@@ -2,8 +2,11 @@ package devices
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 	"gorm.io/gorm"
 )
 
@@ -17,23 +20,32 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// Register upserts a device by token. If the row already exists, only
-// the explicitly provided fields are refreshed; a nil domainID does
-// NOT clear an existing domain_id, so a re-register from the Flutter
-// app does not wipe the operator's domain assignment.
-func (r *Repository) Register(userID, domainID *uint, token, platform, name, version string) (*Device, error) {
-	device := &Device{
-		UserID:   userID,
-		Token:    token,
-		Platform: platform,
-		Name:     name,
-		Version:  version,
-		LastSeen: time.Now().Unix(),
+func (r *Repository) Register(userID *uint, token, platform, name, version, packageId string) (*Device, error) {
+	if packageId == "" || token == "" || name == "" {
+		return nil, gorm.ErrInvalidData
 	}
-	assign := Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version}
-	if domainID != nil {
-		assign.DomainID = domainID
+
+	var apkDev apk.ApkVersion
+	if r.db.Model(&apk.ApkVersion{}).Where("package_name like ?", packageId).First(&apkDev).Error != nil || apkDev.ID == 0 || apkDev.IPTVUrl == "" {
+		return nil, gorm.ErrInvalidData
 	}
+
+	var domainStr string
+	parts := strings.Split(apkDev.IPTVUrl, "://")
+	if len(parts) > 1 {
+		domainStr = parts[1]
+	} else {
+		domainStr = apkDev.IPTVUrl
+	}
+
+	var domain domains.Domain
+	if r.db.Model(&domains.Domain{}).Where("domain like ?", "%"+domainStr).First(&domain).Error != nil || domain.ID == 0 {
+		return nil, gorm.ErrInvalidData
+	}
+
+	device := &Device{UserID: userID, Token: token, Platform: platform, Name: name, Version: version, LastSeen: time.Now().Unix(), PackageId: packageId, DomainID: &domain.ID}
+	assign := Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version, PackageId: packageId, DomainID: &domain.ID}
+
 	result := r.db.Where(Device{Token: token}).Assign(assign).FirstOrCreate(device)
 	return device, result.Error
 }
@@ -88,7 +100,7 @@ func (r *Repository) FindByToken(token string) (*Device, error) {
 	return &device, nil
 }
 
-func (r *Repository) Update(token, platform, name string) (*Device, error) {
+func (r *Repository) Update(token, platform, name, packageId string) (*Device, error) {
 	var device Device
 	if err := r.db.Where("token = ?", token).First(&device).Error; err != nil {
 		return nil, err
@@ -96,6 +108,7 @@ func (r *Repository) Update(token, platform, name string) (*Device, error) {
 
 	device.Platform = platform
 	device.Name = name
+	device.PackageId = packageId
 	if err := r.db.Save(&device).Error; err != nil {
 		return nil, err
 	}

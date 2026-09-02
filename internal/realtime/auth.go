@@ -26,9 +26,7 @@ type Authenticator struct {
 // NewAuthenticator returns a new Authenticator. The db must be a
 // fully wired GORM instance whose schema includes the devices
 // table.
-func NewAuthenticator(db *gorm.DB) *Authenticator {
-	return &Authenticator{db: db}
-}
+func NewAuthenticator(db *gorm.DB) *Authenticator { return &Authenticator{db: db} }
 
 // AuthenticateToken looks up a device by token. It returns
 // ErrInvalidToken when the row is missing, so the caller can

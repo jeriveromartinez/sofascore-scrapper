@@ -22,18 +22,12 @@ func (h *AppHandler) RegisterRoutes(group *gin.RouterGroup) {
 
 func (h *AppHandler) handleRegisterDevice(c *gin.Context) {
 	var req pb.DeviceRegisterRequest
-	if err := server.ParseProtoBody(c, &req); err != nil || req.Token == "" {
-		server.RespondError(c, http.StatusBadRequest, "token is required")
+	if err := server.ParseProtoBody(c, &req); err != nil || req.Token == "" || req.PackageId == "" {
+		server.RespondError(c, http.StatusBadRequest, "token and package_id are required")
 		return
 	}
 
-	var domainID *uint
-	if req.DomainId != 0 {
-		id := uint(req.DomainId)
-		domainID = &id
-	}
-
-	device, err := h.repo.Register(nil, domainID, req.Token, req.Platform, req.Name, req.Version)
+	device, err := h.repo.Register(nil, req.Token, req.Platform, req.Name, req.Version, req.PackageId)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
