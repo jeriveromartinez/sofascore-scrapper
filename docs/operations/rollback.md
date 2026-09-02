@@ -38,14 +38,15 @@ gunzip -c /var/backups/iptv/iptv-<date>.sql.gz | wc -l
 sudo systemctl stop iptv.service
 
 # Drop and recreate the database (the schema is recreated by the
-# binary on startup, but migrations need a clean slate).
+# binary on startup via GORM AutoMigrate; no separate migrations to
+# run).
 sudo mariadb -uroot -e "DROP DATABASE IF EXISTS iptv"
 sudo mariadb -uroot -e "CREATE DATABASE iptv CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 
 # Restore the dump.
 gunzip -c /var/backups/iptv/iptv-<date>.sql.gz | sudo mariadb -uroot iptv
 
-# Restart the service (it will run migrations if any are pending).
+# Restart the service (it will run AutoMigrate and seed the default admin).
 sudo systemctl start iptv.service
 
 # Verify.
@@ -85,22 +86,42 @@ sudo systemctl restart iptv.service
 If the older version expects a different schema than the current DB
 holds, restore the database from backup instead.
 
-## Migration policy
+## Schema policy
 
-- Every migration has a paired `.down.sql` file under `migrations/`.
-- Migrations are embedded in the binary via `go:embed` and run
-  automatically on startup using `golang-migrate/v4`.
-- Migrations run **forward only** in production. `.down.sql` files
-  exist for symmetry and for test fixtures; they are not invoked at
-  runtime.
-- Destructive migrations (e.g. `000003_reset_playback_and_stats`)
-  have empty `.down.sql` files to prevent accidental reversal that
-  would not restore data.
+Schema is managed by GORM AutoMigrate (see
+`internal/platform/database/automigrate.go`). The canonical model
+definitions live with the Go structs; there is no separate SQL
+migration directory or version-tracking table.
 
-If `schema_migrations.dirty = true`, the next startup will refuse to
-run. Clear the dirty flag after manual inspection:
+- The schema source of truth is the struct tags (`gorm:"..."`) on the
+  domain models under `internal/*/model.go`.
+- AutoMigrate runs on every server boot unless `SKIP_MIGRATE=true`
+  is set (see [`runbook.md`](runbook.md) → First Boot).
+- AutoMigrate is **additive only**: it adds missing tables and
+  columns but never drops or alters existing ones. Schema changes
+  that need destructive operations (rename, type change, drop) must
+  be applied manually to the live DB before deploying the new
+  binary, then left in place. There is no rollback path because
+  AutoMigrate does not record what it did.
+- On a downgrade, the older binary expects the older schema. If the
+  downgrade crosses a destructive-change boundary, restore the
+  database from backup instead of relying on the binary's
+  AutoMigrate.
 
-```bash
-sudo mariadb -uroot iptv -e "UPDATE schema_migrations SET dirty = 0"
-sudo systemctl restart iptv.service
-```
+## Default admin after a destructive restore
+
+`SeedDefaultAdmin` runs on every normal boot (gated by
+`SKIP_MIGRATE`). It is idempotent: it only creates the default
+admin when the `users` table is empty. So:
+
+- After a `DROP DATABASE` + restore-from-backup cycle, the restored
+  dump carries the user data; the seeder is a no-op.
+- After a `DROP DATABASE` + no-restore cycle (deliberate wipe),
+  the seeder creates `admin@local` on the next boot. To avoid the
+  hardcoded default password instead, run
+  `./sofascore-scrapper bootstrap-invitation` *before* the first
+  normal boot so the first human registers through the invitation
+  flow.
+
+See [`runbook.md`](runbook.md) → First Boot and Bootstrap via
+invitation for both paths.
