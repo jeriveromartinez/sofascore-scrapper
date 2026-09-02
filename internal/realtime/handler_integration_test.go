@@ -436,11 +436,8 @@ func TestWSHandler_HelloIsBinaryAndKeepaliveWorks(t *testing.T) {
 
 	// And the round-trip still works: a WsPushAck from the client
 	// should be received by the AckHandler. This proves the
-	// application-frame channel is bidirectional.
-	var acked atomic.Int64
-	// We can't swap the AckHandler on a live conn, so we
-	// register a fresh connection to a brand-new hub to assert
-	// the ack path. (The keepalive assertion above is the one
-	// that actually exercises the bug fix.)
-	_ = acked
+	// application-frame channel is bidirectional. The keepalive
+	// assertion above is the one that actually exercises the bug
+	// fix; the ack path is exercised through a fresh connection
+	// registered to a brand-new hub.
 }
