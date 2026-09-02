@@ -64,7 +64,11 @@ func (r *Repository) InsertDeliveryAttempts(ctx context.Context, attempts []Deli
 // acked_at + latency_ms (now - sent_at). Lookup is by the
 // transport message_id (UUID v4), which is UNIQUE on the table.
 // Latency is computed in Go (not via SQL) for MariaDB/SQLite parity.
-func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string, ackedAt time.Time) error {
+//
+// Returns the computed latency in milliseconds (0 when the row's
+// sent_at was nil, e.g. defensive guard against a half-written
+// attempt). Callers feed this into the latency histogram.
+func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string, ackedAt time.Time) (int, error) {
 	// Read sent_at first to compute latency. If sent_at is null
 	// (which should never happen but is a defensive guard), skip
 	// the latency update entirely.
@@ -72,23 +76,28 @@ func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string
 	if err := r.db.WithContext(ctx).
 		Where("message_id = ?", messageID).
 		First(&existing).Error; err != nil {
-		return err
+		return 0, err
 	}
+	var latencyMS int
 	updates := map[string]any{
 		"state":          StateDelivered,
 		"acked_at":       ackedAt,
 		"failure_reason": nil,
 	}
 	if existing.SentAt != nil {
-		latencyMS := ackedAt.Sub(*existing.SentAt).Milliseconds()
-		if latencyMS < 0 {
-			latencyMS = 0
+		ms := ackedAt.Sub(*existing.SentAt).Milliseconds()
+		if ms < 0 {
+			ms = 0
 		}
-		updates["latency_ms"] = int(latencyMS)
+		latencyMS = int(ms)
+		updates["latency_ms"] = latencyMS
 	}
-	return r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
+	if err := r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
 		Where("message_id = ?", messageID).
-		Updates(updates).Error
+		Updates(updates).Error; err != nil {
+		return 0, err
+	}
+	return latencyMS, nil
 }
 
 // MarkDeliveryFailed flips the row to FAILED and records the

@@ -205,8 +205,12 @@ func TestRepository_MarkDeliverySent_Delivered_Failed(t *testing.T) {
 		t.Fatalf("insert attempts: %v", err)
 	}
 	ackedAt := now.Add(50 * time.Millisecond)
-	if err := repo.MarkDeliveryDelivered(ctx, "test-msg-1", ackedAt); err != nil {
+	latencyMS, err := repo.MarkDeliveryDelivered(ctx, "test-msg-1", ackedAt)
+	if err != nil {
 		t.Fatalf("mark delivered: %v", err)
+	}
+	if latencyMS < 40 || latencyMS > 200 {
+		t.Errorf("returned latency_ms = %d, want ~50", latencyMS)
 	}
 	var got DeliveryAttempt
 	if err := db.First(&got, "push_message_id = ? AND device_id = ?", msg.ID, devs[0]).Error; err != nil {

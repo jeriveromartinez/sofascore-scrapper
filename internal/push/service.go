@@ -159,6 +159,7 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 			State:         StateSent,
 			SentAt:        &now,
 		})
+		s.metrics.IncDispatched(string(SourceImmediate))
 	}
 	if err := s.repo.InsertDeliveryAttempts(ctx, attempts); err != nil {
 		return nil, nil, fmt.Errorf("insert delivery attempts: %w", err)
@@ -175,9 +176,14 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 						slog.String("message_id", pushFrames[dev.ID].MessageId),
 						slog.String("error", markErr.Error()))
 				}
+				s.metrics.IncFailed(FailureDeviceOffline)
+				s.logger.Info("push: ws delivery skipped",
+					slog.Uint64("push_id", uint64(msg.ID)),
+					slog.Uint64("device_id", uint64(dev.ID)),
+					slog.String("reason", string(FailureDeviceOffline)))
 				continue
 			}
-			s.logger.Warn("push: publish failed",
+			s.logger.Warn("push: ws publish failed",
 				slog.Uint64("push_id", uint64(msg.ID)),
 				slog.Uint64("device_id", uint64(dev.ID)),
 				slog.String("error", err.Error()))
@@ -186,6 +192,12 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 					slog.String("message_id", pushFrames[dev.ID].MessageId),
 					slog.String("error", markErr.Error()))
 			}
+			s.metrics.IncFailed(FailureInternalError)
+		} else {
+			s.logger.Info("push: ws publish queued",
+				slog.Uint64("push_id", uint64(msg.ID)),
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("message_id", pushFrames[dev.ID].MessageId))
 		}
 	}
 	return msg, deviceIDs, nil
@@ -252,7 +264,20 @@ func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, do
 // DELIVERED. The messageID is the client-side transport UUID v4
 // (Tasks 8-9) that uniquely identifies the delivery attempt.
 func (s *Service) OnAck(ctx context.Context, messageID string) error {
-	return s.repo.MarkDeliveryDelivered(ctx, messageID, time.Now())
+	ackedAt := time.Now()
+	latencyMS, err := s.repo.MarkDeliveryDelivered(ctx, messageID, ackedAt)
+	if err != nil {
+		s.logger.Warn("push: ack persistence failed",
+			slog.String("message_id", messageID),
+			slog.String("error", err.Error()))
+		return err
+	}
+	s.metrics.IncDelivered()
+	s.metrics.ObserveLatency(latencyMS)
+	s.logger.Info("push: ws delivery acked",
+		slog.String("message_id", messageID),
+		slog.Int("latency_ms", latencyMS))
+	return nil
 }
 
 // DispatchScheduled fires a single scheduled push. It is called
@@ -355,6 +380,7 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 			State:         StateSent,
 			SentAt:        &now,
 		})
+		s.metrics.IncDispatched(string(msg.Source))
 	}
 	if err := s.repo.InsertDeliveryAttempts(ctx, attempts); err != nil {
 		return fmt.Errorf("insert delivery attempts: %w", err)
@@ -367,9 +393,14 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 						slog.String("message_id", pushFrames[dev.ID].MessageId),
 						slog.String("error", markErr.Error()))
 				}
+				s.metrics.IncFailed(FailureDeviceOffline)
+				s.logger.Info("push: ws delivery skipped",
+					slog.Uint64("push_id", uint64(msg.ID)),
+					slog.Uint64("device_id", uint64(dev.ID)),
+					slog.String("reason", string(FailureDeviceOffline)))
 				continue
 			}
-			s.logger.Warn("push: publish failed",
+			s.logger.Warn("push: ws publish failed",
 				slog.Uint64("push_id", uint64(msg.ID)),
 				slog.Uint64("device_id", uint64(dev.ID)),
 				slog.String("error", err.Error()))
@@ -378,6 +409,12 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 					slog.String("message_id", pushFrames[dev.ID].MessageId),
 					slog.String("error", markErr.Error()))
 			}
+			s.metrics.IncFailed(FailureInternalError)
+		} else {
+			s.logger.Info("push: ws publish queued",
+				slog.Uint64("push_id", uint64(msg.ID)),
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("message_id", pushFrames[dev.ID].MessageId))
 		}
 	}
 	return nil
@@ -520,14 +557,24 @@ func deviceIDsOf(devs []devices.Device) []uint {
 // message_id is a globally unique UUID v4 string. It is persisted
 // in delivery_attempts.message_id (UNIQUE) and echoed by the
 // client in WsPushAck.
+//
+// Every field carried by pb.PushPayload must be mapped: clients
+// (e.g. the Flutter app) gate their local notification rendering
+// on priority/image_url/deep_link, so dropping any of them silently
+// hides the push from the user even though the bytes were delivered
+// on the socket. (Bug fix: B1.)
 func buildWsPush(pushID uint64, payload *pb.PushPayload) *pb.WsPush {
 	return &pb.WsPush{
-		PushId:    pushID,
-		MessageId: nextMessageID(),
-		Category:  payload.GetCategory(),
-		Title:     payload.GetTitle(),
-		Body:      payload.GetBody(),
-		Data:      payload.GetData(),
-		SentAt:    time.Now().UnixMilli(),
+		PushId:     pushID,
+		MessageId:  nextMessageID(),
+		Category:   payload.GetCategory(),
+		Title:      payload.GetTitle(),
+		Body:       payload.GetBody(),
+		ImageUrl:   payload.GetImageUrl(),
+		DeepLink:   payload.GetDeepLink(),
+		Priority:   payload.GetPriority(),
+		TtlSeconds: payload.GetTtlSeconds(),
+		Data:       payload.GetData(),
+		SentAt:     time.Now().UnixMilli(),
 	}
 }

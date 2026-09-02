@@ -107,20 +107,39 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 			cfg.Logger.Info("realtime: connection closed",
 				slog.Uint64("device_id", uint64(dev.ID)),
 				slog.String("reason", reason))
-		})
+		}, cfg.Logger)
 		if dev.DomainID != nil {
 			conn.domainID = uint32(*dev.DomainID)
 		}
 
 		// Send the WsHello synchronously so the client knows the
-		// upgrade completed before its first read.
+		// upgrade completed before its first read. If this write
+		// fails (network wedge, client tore down the socket right
+		// after the upgrade handshake, etc.) the connection is
+		// useless: register nothing, log the failure so it shows
+		// up in dashboards, and let the socket be garbage-collected
+		// by the underlying server. (Bug fix: B2 — previously the
+		// error was discarded and a doomed connection was still
+		// registered, which silently stranded every subsequent push.)
 		hello := &pbWsHello{
 			DeviceId:   uint64(dev.ID),
 			ServerTime: time.Now().Unix(),
 		}
-		if raw, err := encodeFrame(hello.toProto()); err == nil {
-			_ = ws.SetWriteDeadline(time.Now().Add(writeWait))
-			_ = ws.WriteMessage(websocket.BinaryMessage, raw)
+		helloRaw, err := encodeFrame(hello.toProto())
+		if err != nil {
+			cfg.Logger.Warn("realtime: WsHello encode failed, not registering connection",
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("error", err.Error()))
+			_ = ws.Close()
+			return
+		}
+		_ = ws.SetWriteDeadline(time.Now().Add(writeWait))
+		if werr := ws.WriteMessage(websocket.BinaryMessage, helloRaw); werr != nil {
+			cfg.Logger.Warn("realtime: WsHello write failed, not registering connection",
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("error", werr.Error()))
+			_ = ws.Close()
+			return
 		}
 
 		cfg.Hub.Register(uint64(dev.ID), conn)
@@ -150,8 +169,14 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 			}
 			_ = conn.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.ws.WriteMessage(websocket.BinaryMessage, raw); err != nil {
-				logger.Debug("realtime: write failed",
+				// Upgraded from Debug -> Warn: a write failure here
+				// means a push was enqueued for a socket that turned
+				// dead between enqueue and write. The push service has
+				// already logged the push_id; this line ties it to the
+				// device and the byte count for cross-referencing.
+				logger.Warn("realtime: ws frame write failed",
 					slog.Uint64("device_id", conn.DeviceID()),
+					slog.Int("bytes", len(raw)),
 					slog.String("error", err.Error()))
 				conn.Close(1011, "write error")
 				return
@@ -161,6 +186,9 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 			pingFrame := (pbWsPing{SentAt: time.Now().UnixMilli()}).toProto()
 			raw, err := encodeFrame(pingFrame)
 			if err != nil {
+				logger.Warn("realtime: ws ping encode failed",
+					slog.Uint64("device_id", conn.DeviceID()),
+					slog.String("error", err.Error()))
 				continue
 			}
 			// Application frame (WsFrame with oneof=ping) instead of
@@ -170,6 +198,9 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 			// Keeping the keepalive inside the proto envelope lets both
 			// peers share a single framing model.
 			if err := conn.ws.WriteMessage(websocket.BinaryMessage, raw); err != nil {
+				logger.Warn("realtime: ws ping write failed",
+					slog.Uint64("device_id", conn.DeviceID()),
+					slog.String("error", err.Error()))
 				conn.Close(1011, "ping write error")
 				return
 			}

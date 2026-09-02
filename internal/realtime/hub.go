@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"errors"
+	"log/slog"
 	"sync"
 
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
@@ -131,6 +132,16 @@ func (h *Hub) DeliverToLocal(deviceID uint64, payload FramePayload) error {
 	case c.send <- raw:
 		return nil
 	default:
+		// Send buffer saturated — log it so operators can correlate
+		// with a slow client (the most common cause). The push
+		// service will mark the row as device_offline; the warning
+		// here is the only signal that the disconnect was triggered
+		// by backpressure rather than the socket dying on its own.
+		if c.logger != nil {
+			c.logger.Warn("realtime: ws send buffer full, closing connection",
+				slog.Uint64("device_id", c.deviceID),
+				slog.Int("buffer_cap", cap(c.send)))
+		}
 		c.Close(1011, "send buffer full")
 		return ErrDeviceNotConnected
 	}
