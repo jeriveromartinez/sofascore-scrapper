@@ -13,7 +13,6 @@ Day-to-day procedures for the on-call operator. Pair this with
 | `iptv_redis_outage` | See [Redis Outage Behavior](#redis-outage-behavior) |
 | `iptv_apk_storage_full` | `du -sh /opt/iptv/apk_storage/*`; prune old upload chunks |
 | `iptv_scrape_403` | SofaScore is blocking this IP. Cosmetic; scraper retries on next tick. |
-| `iptv_migration_dirty` | `SELECT * FROM iptv.schema_migrations` — should be `dirty=false`. If dirty, see [`rollback.md`](rollback.md). |
 
 ## Redis outage behavior
 
@@ -79,7 +78,7 @@ sudo journalctl -u iptv.service --since "1 hour ago"
 
 # Database
 sudo mariadb -uroot iptv -e "SHOW TABLES"
-sudo mariadb -uroot iptv -e "SELECT * FROM schema_migrations"
+sudo mariadb -uroot iptv -e "SHOW CREATE TABLE users\\G"
 sudo mariadb -uroot iptv -e "SHOW PROCESSLIST"
 
 # Storage
@@ -114,3 +113,18 @@ To skip migration and seeding entirely (when managing schema externally):
 ```bash
 SKIP_MIGRATE=true ./sofascore-scrapper
 ```
+
+## Bootstrap via invitation
+
+If you prefer that the first operator register through the normal
+invitation flow rather than logging in as `admin@local`, run:
+
+```bash
+./sofascore-scrapper bootstrap-invitation
+```
+
+The command prints the invitation token (also visible in the logs)
+and refuses to run once `users` already has a row, so it must run
+before the server's first normal boot. Start the server afterward
+and the first human registers at `/register` using the token; that
+account becomes the sole admin via the existing first-user rule.
