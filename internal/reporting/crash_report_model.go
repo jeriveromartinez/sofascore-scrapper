@@ -21,6 +21,6 @@ type CrashReport struct {
 	Error      string       `json:"error"`
 	StackTrace string       `json:"stackTrace"`
 	Context    string       `json:"context"`
-	App        AppReport    `json:"app" gorm:"embedded"`
-	Device     DeviceReport `json:"device" gorm:"embedded"`
+	App        AppReport    `json:"app" gorm:"embedded;embeddedPrefix:app_"`
+	Device     DeviceReport `json:"device" gorm:"embedded;embeddedPrefix:device_"`
 }

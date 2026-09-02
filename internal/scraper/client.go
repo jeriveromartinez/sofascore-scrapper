@@ -334,7 +334,7 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 		case http.StatusOK:
 			return body, nil
 
-		case http.StatusUnauthorized:
+		case http.StatusUnauthorized, http.StatusForbidden:
 			if !refreshedCookie {
 				refreshedCookie = true
 				if refreshErr := c.refreshCookies(ctx); refreshErr != nil {
@@ -345,7 +345,7 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 				}
 				continue
 			}
-			return nil, fmt.Errorf("scraper: HTTP 401")
+			return nil, fmt.Errorf("scraper: HTTP %d", resp.StatusCode)
 
 		case http.StatusTooManyRequests:
 			if ra := parseRetryAfter(resp.Header.Get("Retry-After")); ra > 0 {
