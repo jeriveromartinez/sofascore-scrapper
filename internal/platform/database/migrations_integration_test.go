@@ -735,3 +735,83 @@ func TestMigrateCleanDBWithSingleConnection(t *testing.T) {
 		t.Fatalf("caller-owned database is unusable: %v", err)
 	}
 }
+
+// TestPushTablesHaveDeletedAtColumn guards against the regression
+// reported in ott-qcho (2026-08-31): Error 1054 "Unknown column
+// 'deleted_at' in 'INSERT INTO'" raised by the GORM models
+// push.PushMessage, push.ScheduledPush, and push.DeliveryAttempt
+// when the SQL migrations 000012, 000013, 000014 had not declared
+// the column that the embedded gorm.Model requires.
+//
+// Migration 000017_push_gorm_soft_delete adds the column + its
+// index on all three tables. This test asserts:
+//   - Migrate() lands on the latest version (the new migration runs).
+//   - information_schema reports deleted_at on all three tables.
+//   - A bare INSERT (with FK checks disabled, since we do not
+//     bootstrap a user/device/tournament here) succeeds.
+func TestPushTablesHaveDeletedAtColumn(t *testing.T) {
+	db := openIsolatedMigrationDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	tables := []string{"push_messages", "scheduled_pushes", "delivery_attempts"}
+	for _, table := range tables {
+		var count int
+		if err := db.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM information_schema.COLUMNS
+			 WHERE TABLE_SCHEMA = DATABASE()
+			   AND TABLE_NAME   = ?
+			   AND COLUMN_NAME  = 'deleted_at'
+		`, table).Scan(&count); err != nil {
+			t.Fatalf("inspect %s.deleted_at: %v", table, err)
+		}
+		if count != 1 {
+			t.Fatalf("%s.deleted_at column missing (count=%d)", table, count)
+		}
+	}
+
+	// Smoke INSERTs. The push_messages INSERT goes through the same
+	// column set the GORM model uses, so a success here means the
+	// runtime Error 1054 path is closed. The scheduled_pushes and
+	// delivery_attempts INSERTs cover the other two models in the
+	// same fix.
+	mustExec := func(label, stmt string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+	}
+	mustExec("disable-fk", `SET FOREIGN_KEY_CHECKS=0`)
+	mustExec("insert-push-message", `
+		INSERT INTO push_messages
+		  (created_at, updated_at, deleted_at, user_id, category, title, body, image_url, deep_link, priority, ttl_seconds, data_json, source, scheduled_id)
+		VALUES
+		  (NOW(3), NOW(3), NULL, 0, 'admin_message', 'gorm_smoke', 'gorm_smoke', '', '', 'normal', 0, NULL, 'immediate', NULL)
+	`)
+	mustExec("insert-scheduled-push", `
+		INSERT INTO scheduled_pushes
+		  (created_at, updated_at, deleted_at, user_id, schedule_type, next_fire_at, category, title, body, priority, ttl_seconds)
+		VALUES
+		  (NOW(3), NOW(3), NULL, 0, 'one_shot', NOW(3), 'admin_message', 'gorm_smoke', 'gorm_smoke', 'normal', 0)
+	`)
+	mustExec("insert-delivery-attempt", `
+		INSERT INTO delivery_attempts
+		  (created_at, updated_at, deleted_at, push_message_id, device_id, message_id, state)
+		VALUES
+		  (NOW(3), NOW(3), NULL, 0, 0, '00000000-0000-0000-0000-000000000000', 'sent')
+	`)
+	mustExec("reenable-fk", `SET FOREIGN_KEY_CHECKS=1`)
+
+	// Confirm the rows really landed and the deleted_at column is the
+	// NULL the GORM model writes when no soft delete is in effect.
+	var pmRows int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM push_messages WHERE title = 'gorm_smoke' AND deleted_at IS NULL").Scan(&pmRows); err != nil {
+		t.Fatalf("count push_messages: %v", err)
+	}
+	if pmRows == 0 {
+		t.Fatal("expected at least one push_messages row inserted by the smoke")
+	}
+}

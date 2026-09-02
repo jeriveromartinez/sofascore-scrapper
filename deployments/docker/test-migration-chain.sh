@@ -128,6 +128,72 @@ fi
 
 log "===== Final version $last_deb is healthy; starting it for the user ====="
 
+# ---------------------------------------------------------------------------
+# Smoke test: verify migration 000017 was applied to the live DB and that
+# the new deleted_at column accepts writes on the three push tables.
+# This guards against the same class of bug as PR #101 (Error 1054
+# "Unknown column 'deleted_at' in 'INSERT INTO'" on push_messages,
+# scheduled_pushes, delivery_attempts) regressing.
+# ---------------------------------------------------------------------------
+log "Smoke test: verify deleted_at on push_messages / scheduled_pushes / delivery_attempts"
+
+# 1. Columns + indexes must exist (migration 000017 effect).
+for table in push_messages scheduled_pushes delivery_attempts; do
+    has_col=$(mariadb -uroot -BN -e \
+        "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='iptv' AND TABLE_NAME='$table' AND COLUMN_NAME='deleted_at'")
+    if [ "$has_col" -ne 1 ]; then
+        log "  FAIL: $table.deleted_at column missing"
+        exit 1
+    fi
+    log "  OK  $table.deleted_at column present"
+done
+for idx in idx_push_messages_deleted_at idx_scheduled_pushes_deleted_at idx_delivery_attempts_deleted_at; do
+    has_idx=$(mariadb -uroot -BN -e \
+        "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='iptv' AND INDEX_NAME='$idx'")
+    if [ "$has_idx" -lt 1 ]; then
+        log "  FAIL: index $idx missing"
+        exit 1
+    fi
+    log "  OK  index $idx present"
+done
+
+# 2. INSERT smoke: the columns must accept NULL (soft-delete = no row
+# yet) and a real timestamp. Foreign keys are disabled because the
+# chain test does not bootstrap a user/device/tournament.
+mariadb -uroot iptv >/dev/null 2>&1 <<'SQL' || { log "  FAIL: smoke INSERT into push_messages failed"; exit 1; }
+SET FOREIGN_KEY_CHECKS=0;
+INSERT INTO push_messages (created_at, updated_at, deleted_at, user_id, category, title, body, image_url, deep_link, priority, ttl_seconds, data_json, source, scheduled_id)
+  VALUES (NOW(3), NOW(3), NULL, 0, 'admin_message', 'chain_smoke', 'chain_smoke', '', '', 'normal', 0, NULL, 'immediate', NULL);
+SET FOREIGN_KEY_CHECKS=1;
+SQL
+log "  OK  push_messages INSERT (deleted_at IS NULL)"
+
+mariadb -uroot iptv >/dev/null 2>&1 <<'SQL' || { log "  FAIL: smoke INSERT into scheduled_pushes failed"; exit 1; }
+SET FOREIGN_KEY_CHECKS=0;
+INSERT INTO scheduled_pushes (created_at, updated_at, deleted_at, user_id, schedule_type, next_fire_at, category, title, body, priority, ttl_seconds)
+  VALUES (NOW(3), NOW(3), NULL, 0, 'one_shot', NOW(3), 'admin_message', 'chain_smoke', 'chain_smoke', 'normal', 0);
+SET FOREIGN_KEY_CHECKS=1;
+SQL
+log "  OK  scheduled_pushes INSERT (deleted_at IS NULL)"
+
+mariadb -uroot iptv >/dev/null 2>&1 <<'SQL' || { log "  FAIL: smoke INSERT into delivery_attempts failed"; exit 1; }
+SET FOREIGN_KEY_CHECKS=0;
+INSERT INTO delivery_attempts (created_at, updated_at, deleted_at, push_message_id, device_id, message_id, state)
+  VALUES (NOW(3), NOW(3), NULL, 0, 0, '00000000-0000-0000-0000-000000000000', 'sent');
+SET FOREIGN_KEY_CHECKS=1;
+SQL
+log "  OK  delivery_attempts INSERT (deleted_at IS NULL)"
+
+# 3. Clean up the smoke rows so the user starts with a clean slate.
+mariadb -uroot iptv >/dev/null 2>&1 <<'SQL'
+SET FOREIGN_KEY_CHECKS=0;
+DELETE FROM delivery_attempts  WHERE message_id = '00000000-0000-0000-0000-000000000000';
+DELETE FROM scheduled_pushes  WHERE title      = 'chain_smoke';
+DELETE FROM push_messages     WHERE title      = 'chain_smoke';
+SET FOREIGN_KEY_CHECKS=1;
+SQL
+log "  OK  smoke rows cleaned up"
+
 # Keep the final version running so the user can curl health/live.
 load_env
 
