@@ -7,8 +7,8 @@ import (
 
 type DeviceTournament struct {
 	gorm.Model
-	DeviceID     uint            `gorm:"not null;index:idx_device_tournament,unique" json:"device_id"`
-	TournamentID uint            `gorm:"not null;index:idx_device_tournament,unique" json:"tournament_id"`
-	Device       *devices.Device `gorm:"foreignKey:DeviceID" json:"device,omitempty"`
-	Tournament   *Tournament     `gorm:"foreignKey:TournamentID" json:"tournament,omitempty"`
+	DeviceID     uint            `gorm:"column:device_id;not null;uniqueIndex:idx_device_tournament,priority:1;foreignKey:DeviceID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"device_id"`
+	TournamentID uint            `gorm:"column:tournament_id;not null;uniqueIndex:idx_device_tournament,priority:2;foreignKey:TournamentID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"tournament_id"`
+	Device       *devices.Device `gorm:"foreignKey:DeviceID;references:ID" json:"device,omitempty"`
+	Tournament   *Tournament     `gorm:"foreignKey:TournamentID;references:ID" json:"tournament,omitempty"`
 }
