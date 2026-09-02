@@ -41,7 +41,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 func TestSeedDefaultAdmin_EmptyDBCreatesAdmin(t *testing.T) {
 	db := newTestDB(t)
 	// Ensure empty
-		if err := db.Exec("DELETE FROM users").Error; err != nil {
+	if err := db.Exec("DELETE FROM users").Error; err != nil {
 		t.Fatalf("truncate users: %v", err)
 	}
 	if err := seeder.SeedDefaultAdmin(context.Background(), db); err != nil {
