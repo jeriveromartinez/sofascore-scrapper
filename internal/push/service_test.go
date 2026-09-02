@@ -218,3 +218,58 @@ func TestService_PusherDispatch_PerDeviceErrors(t *testing.T) {
 		t.Fatal("service is nil")
 	}
 }
+
+// TestBuildWsPush_PopulatesEveryPayloadField is a regression
+// guard. Before B1 was fixed, buildWsPush silently dropped
+// image_url, deep_link, priority, and ttl_seconds on the wire,
+// which made the Flutter app silently filter out notifications
+// that gated on those fields. The test pins every field carried
+// by pb.PushPayload so a future refactor cannot drop any again.
+func TestBuildWsPush_PopulatesEveryPayloadField(t *testing.T) {
+	payload := &pb.PushPayload{
+		Category:   pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
+		Title:      "Hello",
+		Body:       "World",
+		ImageUrl:   "https://example.test/banner.png",
+		DeepLink:   "iptv://event/42",
+		Priority:   pb.PushPriority_PUSH_PRIORITY_HIGH,
+		TtlSeconds: 3600,
+		Data:       map[string]string{"k": "v"},
+	}
+
+	frame := buildWsPush(99, payload)
+
+	if frame.PushId != 99 {
+		t.Errorf("PushId = %d, want 99", frame.PushId)
+	}
+	if frame.Category != payload.Category {
+		t.Errorf("Category = %v, want %v", frame.Category, payload.Category)
+	}
+	if frame.Title != payload.Title {
+		t.Errorf("Title = %q, want %q", frame.Title, payload.Title)
+	}
+	if frame.Body != payload.Body {
+		t.Errorf("Body = %q, want %q", frame.Body, payload.Body)
+	}
+	if frame.ImageUrl != payload.ImageUrl {
+		t.Errorf("ImageUrl = %q, want %q (regression: this field was silently dropped before B1)", frame.ImageUrl, payload.ImageUrl)
+	}
+	if frame.DeepLink != payload.DeepLink {
+		t.Errorf("DeepLink = %q, want %q (regression: this field was silently dropped before B1)", frame.DeepLink, payload.DeepLink)
+	}
+	if frame.Priority != payload.Priority {
+		t.Errorf("Priority = %v, want %v (regression: this field was silently dropped before B1)", frame.Priority, payload.Priority)
+	}
+	if frame.TtlSeconds != payload.TtlSeconds {
+		t.Errorf("TtlSeconds = %d, want %d (regression: this field was silently dropped before B1)", frame.TtlSeconds, payload.TtlSeconds)
+	}
+	if frame.Data["k"] != "v" {
+		t.Errorf("Data[k] = %q, want %q", frame.Data["k"], "v")
+	}
+	if frame.MessageId == "" {
+		t.Error("MessageId is empty, want a UUID v4")
+	}
+	if frame.SentAt <= 0 {
+		t.Error("SentAt is zero, want unix ms")
+	}
+}

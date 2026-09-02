@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"log/slog"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -40,11 +41,16 @@ type Connection struct {
 
 	ackHandler AckHandler
 	closeHook  CloseHandler
+	// logger is used for WS send-path diagnostics (e.g. the hub
+	// logs when the send buffer saturates and a connection is
+	// force-closed). nil-safe: callers may pass nil in unit tests
+	// and the hub will skip the log line.
+	logger *slog.Logger
 }
 
 // newConnection constructs a Connection. ws may be nil in unit tests
 // that exercise the hub without a real socket.
-func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn, ack AckHandler, closeHook CloseHandler) *Connection {
+func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn, ack AckHandler, closeHook CloseHandler, logger *slog.Logger) *Connection {
 	return &Connection{
 		deviceID:   deviceID,
 		userID:     userID,
@@ -54,6 +60,7 @@ func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn,
 		closed:     make(chan struct{}),
 		ackHandler: ack,
 		closeHook:  closeHook,
+		logger:     logger,
 	}
 }
 
