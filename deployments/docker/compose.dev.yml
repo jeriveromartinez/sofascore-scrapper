@@ -1,8 +1,17 @@
+# Local development stack: one backend, one MariaDB, one Redis.
+# Persistent volumes — state survives `docker compose down`.
+#
+# Usage:
+#   cp .env.example .env       # set DB_PASSWORD, JWT_SECRET
+#   docker compose -f deployments/docker/compose.dev.yml up --build
+#   # In another terminal:
+#   curl http://localhost:8080/health/live
+
 services:
   mariadb:
     image: mariadb:10.11
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-dev}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       MARIADB_DATABASE: ${DB_NAME:-sofascore}
     volumes:
       - mariadb_data:/var/lib/mysql
@@ -43,7 +52,7 @@ services:
       DB_HOST: mariadb
       DB_PORT: 3306
       DB_USER: root
-      DB_PASSWORD: ${DB_PASSWORD:-dev}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_NAME: ${DB_NAME:-sofascore}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}

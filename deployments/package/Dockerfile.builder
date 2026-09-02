@@ -1,10 +1,20 @@
-# Builder image: compiles the Go backend, builds the Vue dashboard, and
-# assembles a .deb package for Ubuntu (systemd service included).
+# Builder image: compiles the Go backend, builds the Vue dashboard,
+# and assembles a .deb package for Ubuntu (systemd service included).
 #
 # Build:
-#   docker build -f deployments/package/Dockerfile.builder -t iptv-deb-builder .
-#   docker run --rm -v "$PWD/dist:/out" iptv-deb-builder
-# Output: dist/iptv_<version>_amd64.deb
+#   docker build -f deployments/package/Dockerfile.builder \
+#     --build-arg DEB_VERSION=<x.y.z> \
+#     --build-arg VERSION=v<x.y.z> \
+#     --build-arg COMMIT=<git-sha> \
+#     -t iptv-deb-builder:<x.y.z> .
+#
+# Extract artifact:
+#   container=$(docker create iptv-deb-builder:<x.y.z>)
+#   docker cp "${container}:/iptv.deb" dist/iptv_<x.y.z>_amd64.deb
+#   docker rm "$container"
+#
+# Output: a static linux/amd64 binary, the compiled Vue dashboard,
+# a systemd unit, and a single .deb package at /iptv.deb.
 
 FROM node:22-alpine AS build-vue
 
@@ -40,13 +50,13 @@ RUN apt-get update \
 
 WORKDIR /pkg
 
-# Package metadata and maintainer scripts
+# Package metadata and maintainer scripts.
 COPY deployments/package/control ./DEBIAN/control
 COPY deployments/package/postinst.sh ./DEBIAN/postinst
 COPY deployments/package/prerm.sh ./DEBIAN/prerm
 COPY deployments/package/iptv.service ./lib/systemd/system/iptv.service
 
-# Binaries and dashboard
+# Binaries and dashboard.
 COPY --from=build-go /out/sofascore-scrapper ./opt/iptv/iptv
 COPY --from=build-vue /app/web/dist ./opt/iptv/web/dist
 

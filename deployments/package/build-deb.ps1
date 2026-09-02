@@ -1,15 +1,14 @@
 <#
 .SYNOPSIS
-    Builds the .deb package via Docker (Windows equivalent of build-deb.sh).
+    Builds the .deb package via Docker. PowerShell mirror of build-deb.sh.
 
 .DESCRIPTION
-    Mirrors deployments/package/build-deb.sh so the same workflow runs on
-    Windows / PowerShell Core. Resolves the .deb version from the latest
-    git tag (stripping a leading 'v'), builds the iptv-deb-builder Docker
-    image, and extracts iptv.deb into dist/iptv_<version>_amd64.deb.
+    No host Go/Node toolchain required — the build runs entirely inside
+    the iptv-deb-builder image.
 
 .PARAMETER Version
-    Explicit version override. When omitted, uses the latest git tag.
+    Explicit version override. Defaults to the latest git tag (with the
+    leading 'v' stripped); falls back to 0.1.0 when there are no tags.
 
 .EXAMPLE
     .\deployments\package\build-deb.ps1
@@ -59,18 +58,23 @@ if (-not (Test-Path $outDir)) {
 
 Write-Host ">> Building $image with version $resolvedVersion"
 
+$commit = & git -C $RepoRoot rev-parse --short HEAD 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $commit) {
+    $commit = 'unknown'
+}
+
 $dockerfile = Join-Path $RepoRoot 'deployments\package\Dockerfile.builder'
 & docker build `
     -f $dockerfile `
     --build-arg "DEB_VERSION=$resolvedVersion" `
+    --build-arg "VERSION=v$resolvedVersion" `
+    --build-arg "COMMIT=$commit" `
     -t $image `
     $RepoRoot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ">> Extracting .deb to $outDir"
 
-# Use docker create + docker cp to avoid PowerShell path-mangling on the
-# container-side paths (mirrors the rationale in build-deb.sh).
 $container = & docker create $image
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 try {

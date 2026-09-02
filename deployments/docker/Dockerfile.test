@@ -1,21 +1,35 @@
-FROM golang:1.25-alpine AS builder
+# Test image: Ubuntu 24.04 + MariaDB + Redis, runs the .deb chain
+# (.deb files are mounted at runtime into /tmp/dist/).
+#
+# Build:
+#   docker build -f deployments/docker/Dockerfile.test -t iptv-chain-test .
+# Run:
+#   docker run --rm -p 8080:8080 \
+#       -v "$PWD/dist:/tmp/dist:ro" \
+#       iptv-chain-test
+# Chain-test driver:
+#   docker exec iptv-chain-test bash /usr/local/bin/chain-test.sh
 
-WORKDIR /app
+FROM ubuntu:24.04
 
-COPY go.mod go.sum ./
-RUN go mod download
+ENV DEBIAN_FRONTEND=noninteractive
 
-COPY . .
-RUN CGO_ENABLED=0 go build -o /out/sofascore-scrapper ./cmd/server
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        mariadb-server \
+        redis-server \
+        sudo \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
 
-FROM alpine:3.20
+# The chain driver.
+COPY deployments/docker/chain-test.sh /usr/local/bin/chain-test.sh
+RUN chmod +x /usr/local/bin/chain-test.sh
 
-RUN apk add --no-cache ca-certificates wget
+EXPOSE 8080
 
-WORKDIR /app
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=10 \
+    CMD wget -qO- http://localhost:8080/health/live || exit 1
 
-COPY --from=builder /out/sofascore-scrapper .
-COPY deployments/docker/entrypoint.test.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/chain-test.sh"]
