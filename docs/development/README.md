@@ -36,7 +36,7 @@ backend is running.
 
 ## Stack
 
-- **Backend:** Go 1.25, Gin, GORM (MariaDB), go-redis, golang-migrate, robfig/cron
+- **Backend:** Go 1.25, Gin, GORM (MariaDB), go-redis, robfig/cron
 - **Frontend:** Vue 3, Vite, Pinia, TypeScript, Playwright (E2E), Vitest (unit)
 - **Wire format:** Protocol Buffers v3; single source of truth in [`proto/api.proto`](../../proto/api.proto)
 
@@ -65,7 +65,6 @@ internal/                  # Go packages (one per domain)
   testing/                 # test fixtures
   tournaments/             # tournament CRUD + device assignments
   users/                   # user CRUD + roles
-migrations/                # SQL migrations (numbered pairs)
 proto/api.proto            # wire format source of truth
 web/                       # Vue admin dashboard
 deployments/               # Docker compose + .deb packaging
