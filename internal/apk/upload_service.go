@@ -16,14 +16,14 @@ import (
 )
 
 type UploadPublication struct {
-	ID        uint      `gorm:"primaryKey"`
-	UploadID  string    `gorm:"uniqueIndex;size:36;not null;column:upload_id"`
+	ID        uint      `gorm:"primaryKey;autoIncrement"`
+	UploadID  string    `gorm:"uniqueIndex:idx_upload_id;size:36;not null;column:upload_id"`
 	TempPath  string    `gorm:"size:1024;not null;column:temp_path"`
 	FinalPath string    `gorm:"size:1024;not null;default:'';column:final_path"`
-	Status    string    `gorm:"size:20;not null;default:'assembling';column:status"`
-	UserID    uint      `gorm:"not null;default:0;column:user_id"`
-	CreatedAt time.Time `gorm:"not null;autoCreateTime"`
-	UpdatedAt time.Time `gorm:"not null;autoUpdateTime"`
+	Status    string    `gorm:"size:20;not null;default:'assembling';index:idx_status;column:status"`
+	UserID    uint      `gorm:"not null;default:0;index:idx_user_id;column:user_id"`
+	CreatedAt time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;autoCreateTime"`
+	UpdatedAt time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
 }
 
 func (UploadPublication) TableName() string {
