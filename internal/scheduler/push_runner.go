@@ -116,7 +116,7 @@ func (r *pushRunner) tick(ctx context.Context) {
 		return
 	}
 	for i := range schedules {
-		targets, terr := r.svc.Repo().GetScheduledPushTargets(ctx, schedules[i].ID)
+		targets, terr := r.svc.GetScheduledPushTargets(ctx, schedules[i].ID)
 		if terr != nil {
 			r.failedTotal.Add(1)
 			r.logger.Error("push runner: list targets",
