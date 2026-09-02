@@ -85,12 +85,11 @@ func (s *Service) SetMetrics(m *Metrics) {
 	s.metrics = m
 }
 
-// Repo exposes the underlying repository. Used by the scheduler
-// runner to fetch join-table rows (target domains) before calling
-// DispatchScheduled. Kept narrow so callers don't start relying
-// on it for business-logic paths.
-func (s *Service) Repo() *Repository {
-	return s.repo
+// GetScheduledPushTargets returns the join rows linking a schedule
+// to its target domains. Exposed so callers (notably the scheduler
+// push runner) don't have to reach through Repo() to fetch them.
+func (s *Service) GetScheduledPushTargets(ctx context.Context, schedID uint) ([]ScheduledPushTarget, error) {
+	return s.repo.GetScheduledPushTargets(ctx, schedID)
 }
 
 // CreateImmediate validates the request, persists a push_messages

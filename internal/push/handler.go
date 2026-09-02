@@ -139,17 +139,24 @@ func (h *Handler) handleList(c *gin.Context) {
 	resp := &pb.PushMessagePage{
 		Data: make([]*pb.PushMessage, 0, len(rows)),
 	}
-	for i := range rows {
-		targets, terr := h.svc.repo.GetPushMessageTargets(c.Request.Context(), rows[i].ID)
+	if len(rows) > 0 {
+		ids := make([]uint, len(rows))
+		for i := range rows {
+			ids[i] = rows[i].ID
+		}
+		targetsByID, terr := h.svc.repo.GetPushMessageTargetsByMessageIDs(c.Request.Context(), ids)
 		if terr != nil {
 			server.RespondError(c, http.StatusInternalServerError, terr.Error())
 			return
 		}
-		domainIDs := make([]uint32, 0, len(targets))
-		for _, t := range targets {
-			domainIDs = append(domainIDs, uint32(t.DomainID))
+		for i := range rows {
+			targets := targetsByID[rows[i].ID]
+			domainIDs := make([]uint32, 0, len(targets))
+			for _, t := range targets {
+				domainIDs = append(domainIDs, uint32(t.DomainID))
+			}
+			resp.Data = append(resp.Data, PushMessageToProto(rows[i], domainIDs))
 		}
-		resp.Data = append(resp.Data, PushMessageToProto(rows[i], domainIDs))
 	}
 	if hasMore && len(rows) > 0 {
 		// Cursor is the id of the last row. The frontend passes it
@@ -209,17 +216,24 @@ func (h *Handler) handleListSchedules(c *gin.Context) {
 		return
 	}
 	resp := &pb.ScheduledPushPage{Data: make([]*pb.ScheduledPush, 0, len(rows))}
-	for i := range rows {
-		targets, terr := h.svc.repo.GetScheduledPushTargets(c.Request.Context(), rows[i].ID)
+	if len(rows) > 0 {
+		ids := make([]uint, len(rows))
+		for i := range rows {
+			ids[i] = rows[i].ID
+		}
+		targetsByID, terr := h.svc.repo.GetScheduledPushTargetsByScheduledIDs(c.Request.Context(), ids)
 		if terr != nil {
 			server.RespondError(c, http.StatusInternalServerError, terr.Error())
 			return
 		}
-		domainIDs := make([]uint32, 0, len(targets))
-		for _, t := range targets {
-			domainIDs = append(domainIDs, uint32(t.DomainID))
+		for i := range rows {
+			targets := targetsByID[rows[i].ID]
+			domainIDs := make([]uint32, 0, len(targets))
+			for _, t := range targets {
+				domainIDs = append(domainIDs, uint32(t.DomainID))
+			}
+			resp.Data = append(resp.Data, ScheduledPushToProto(rows[i], domainIDs))
 		}
-		resp.Data = append(resp.Data, ScheduledPushToProto(rows[i], domainIDs))
 	}
 	if hasMore && len(rows) > 0 {
 		last := rows[len(rows)-1]

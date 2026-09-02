@@ -172,6 +172,47 @@ func (r *Repository) GetScheduledPushTargets(ctx context.Context, schedID uint) 
 	return rows, err
 }
 
+// GetPushMessageTargetsByMessageIDs returns the join rows for many
+// push messages in a single query. The result is keyed by message id
+// so list handlers can fetch N rows with 1 round-trip instead of N.
+// Empty or nil input returns an empty (non-nil) map.
+func (r *Repository) GetPushMessageTargetsByMessageIDs(ctx context.Context, messageIDs []uint) (map[uint][]PushMessageTarget, error) {
+	out := make(map[uint][]PushMessageTarget, len(messageIDs))
+	if len(messageIDs) == 0 {
+		return out, nil
+	}
+	var rows []PushMessageTarget
+	if err := r.db.WithContext(ctx).
+		Where("push_message_id IN ?", messageIDs).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.PushMessageID] = append(out[row.PushMessageID], row)
+	}
+	return out, nil
+}
+
+// GetScheduledPushTargetsByScheduledIDs is the schedule equivalent of
+// GetPushMessageTargetsByMessageIDs. Returns a map keyed by schedule id.
+// Empty or nil input returns an empty (non-nil) map.
+func (r *Repository) GetScheduledPushTargetsByScheduledIDs(ctx context.Context, schedIDs []uint) (map[uint][]ScheduledPushTarget, error) {
+	out := make(map[uint][]ScheduledPushTarget, len(schedIDs))
+	if len(schedIDs) == 0 {
+		return out, nil
+	}
+	var rows []ScheduledPushTarget
+	if err := r.db.WithContext(ctx).
+		Where("scheduled_push_id IN ?", schedIDs).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ScheduledPushID] = append(out[row.ScheduledPushID], row)
+	}
+	return out, nil
+}
+
 // MarkScheduledPushFired deactivates a one_shot (is_active=false)
 // and stamps last_fired_at. For recurring schedules the runner
 // calls RescheduleRecurring instead.

@@ -253,7 +253,19 @@ func TestHandleGetEventsPage_FromInUserTZ(t *testing.T) {
 
 func TestHandleGetEventsPage_FromInNonUTCBoundary(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
-	anchor := time.Date(2026, 8, 26, 3, 30, 0, 0, time.UTC)
+	// Anchor the test to "30 minutes before TZ midnight, today", computed
+	// at runtime so the scenario keeps working as the wall clock advances.
+	// America/Santo_Domingo is UTC-4, so TZ midnight is 04:00 UTC. Picking
+	// the anchor at midnight - 30m in UTC puts event A (anchor-30m) before
+	// TZ midnight (excluded by the from filter) and event B (anchor+1h)
+	// after TZ midnight (included).
+	loc, err := time.LoadLocation("America/Santo_Domingo")
+	if err != nil {
+		t.Fatalf("load tz: %v", err)
+	}
+	nowInTZ := time.Now().In(loc)
+	midnightUTC := time.Date(nowInTZ.Year(), nowInTZ.Month(), nowInTZ.Day(), 0, 0, 0, 0, loc).UTC()
+	anchor := midnightUTC.Add(-30 * time.Minute)
 	if err := db.Create(&Event{
 		SofaScoreEventId: 5000, StartTimestamp: anchor.Add(-30 * time.Minute).UnixMilli(),
 		Sport: "football", StatusType: "notstarted",

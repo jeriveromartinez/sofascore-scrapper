@@ -65,10 +65,6 @@ func runBootstrapInvitation(cfg config.Config) {
 		slog.Error("failed to automigrate", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	if err := seeder.SeedDefaultAdmin(context.Background(), db); err != nil {
-		slog.Error("failed to seed default admin", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
 
 	var count int64
 	if err := db.Model(&struct{ gorm.Model }{}).Table("users").Count(&count).Error; err != nil {
