@@ -108,9 +108,10 @@ business logic.
 | Every other `/api/web/v1/*` endpoint without auth | 401 |
 
 After the battery, `crash_reports` should contain one row per successful
-test (plus the 80 in the rate-limit run), and the `crash_reports` columns
-should match the schema in `migrations/000013_crash_reports.*` (with
-`app_*` and `device_*` prefixes after the embedded-prefix fix).
+test (plus the 80 in the rate-limit run). The `crash_reports` columns
+are managed by GORM AutoMigrate (`app_*` and `device_*` prefixes on the
+embedded `AppReport` / `DeviceReport` structs in
+`internal/realtime/model.go`).
 
 Tail the live output:
 
