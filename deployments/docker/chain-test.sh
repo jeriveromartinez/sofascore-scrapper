@@ -127,15 +127,17 @@ if [ "$last_status" != "OK" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Smoke test: verify migration 000017 was applied to the live DB and that
-# the new deleted_at column accepts writes on the three push tables.
-# This guards against the same class of bug as PR #101 (Error 1054
-# "Unknown column 'deleted_at' in 'INSERT INTO'" on push_messages,
-# scheduled_pushes, delivery_attempts) regressing.
+# Smoke test: verify that the schema created by GORM AutoMigrate
+# includes the deleted_at column on push_messages / scheduled_pushes /
+# delivery_attempts and the matching indexes. This guards against the
+# same class of bug as PR #101 (Error 1054 "Unknown column 'deleted_at'
+# in 'INSERT INTO'" on those three tables) regressing when AutoMigrate
+# stops creating them.
 # ---------------------------------------------------------------------------
 log "Smoke test: verify deleted_at on push_messages / scheduled_pushes / delivery_attempts"
 
-# 1. Columns + indexes must exist (migration 000017 effect).
+# 1. Columns + indexes must exist (created by AutoMigrate from
+#    gorm.Model.DeletedAt in push/model.go).
 for table in push_messages scheduled_pushes delivery_attempts; do
     has_col=$(mariadb -uroot -BN -e \
         "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='iptv' AND TABLE_NAME='$table' AND COLUMN_NAME='deleted_at'")
