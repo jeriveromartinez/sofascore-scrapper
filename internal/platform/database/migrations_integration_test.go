@@ -224,6 +224,39 @@ func TestMigrateIdempotent(t *testing.T) {
 	}
 }
 
+// TestCrashReportsHasEmbeddedColumns protects against the production
+// regression that motivated migration 000016: the GORM model
+// `reporting.CrashReport` writes embedded `AppReport` /
+// `DeviceReport` fields as bare column names (`name`, `version`,
+// `os_version`, ...) because the struct does not declare
+// `embeddedPrefix`. The original 000001 baseline created only the
+// prefixed columns (`app_name`, ...), so every crash report from a
+// real device failed with `Error 1054: Unknown column 'name' in
+// 'INSERT INTO'`. The test asserts both column sets exist after
+// Migrate() runs.
+func TestCrashReportsHasEmbeddedColumns(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	wantBare := []string{"name", "version", "build", "environment", "platform", "os_version", "locale"}
+	for _, col := range wantBare {
+		var exists int
+		if err := db.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM information_schema.COLUMNS
+			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crash_reports' AND COLUMN_NAME = ?
+		`, col).Scan(&exists); err != nil {
+			t.Errorf("check column %q: %v", col, err)
+			continue
+		}
+		if exists != 1 {
+			t.Errorf("crash_reports column %q missing (GORM model writes it on every crash-report POST)", col)
+		}
+	}
+}
+
 func TestStatusTypeColumnExists(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

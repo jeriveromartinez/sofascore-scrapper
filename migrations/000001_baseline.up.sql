@@ -181,6 +181,14 @@ CREATE TABLE IF NOT EXISTS `content_stats` (
     INDEX `idx_content_stats_deleted_at` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- The bare `name`, `version`, `build`, `environment`, `platform`,
+-- `os_version`, `locale` columns match what the GORM model
+-- `reporting.CrashReport` writes (the `AppReport` / `DeviceReport`
+-- embedded structs with `gorm:"embedded"` and no `embeddedPrefix`).
+-- The `app_*` / `device_*` columns are kept for historical
+-- dashboards; production installations that pre-date 000016 only
+-- have the prefixed set, and the migration 16 adds the bare columns
+-- non-destructively.
 CREATE TABLE IF NOT EXISTS `crash_reports` (
     `id` bigint unsigned AUTO_INCREMENT,
     `created_at` datetime(3) NULL,
@@ -190,6 +198,13 @@ CREATE TABLE IF NOT EXISTS `crash_reports` (
     `error` longtext,
     `stack_trace` longtext,
     `context` longtext,
+    `name` longtext,
+    `version` longtext,
+    `build` longtext,
+    `environment` longtext,
+    `platform` longtext,
+    `os_version` longtext,
+    `locale` longtext,
     `app_name` longtext,
     `app_version` longtext,
     `app_build` longtext,
