@@ -116,7 +116,19 @@ func (r *pushRunner) tick(ctx context.Context) {
 		return
 	}
 	for i := range schedules {
-		if err := r.svc.DispatchScheduled(ctx, &schedules[i]); err != nil {
+		targets, terr := r.svc.Repo().GetScheduledPushTargets(ctx, schedules[i].ID)
+		if terr != nil {
+			r.failedTotal.Add(1)
+			r.logger.Error("push runner: list targets",
+				slog.Uint64("schedule_id", uint64(schedules[i].ID)),
+				slog.String("error", terr.Error()))
+			continue
+		}
+		domainIDs := make([]uint, 0, len(targets))
+		for _, t := range targets {
+			domainIDs = append(domainIDs, t.DomainID)
+		}
+		if err := r.svc.DispatchScheduled(ctx, &schedules[i], domainIDs); err != nil {
 			r.failedTotal.Add(1)
 			r.logger.Error("push runner: dispatch",
 				slog.Uint64("schedule_id", uint64(schedules[i].ID)),

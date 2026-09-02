@@ -14,6 +14,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/seeder"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +30,11 @@ func main() {
 
 	if len(os.Args) > 1 && os.Args[1] == "bootstrap-invitation" {
 		runBootstrapInvitation(cfg)
+		return
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		runMigrate(cfg)
 		return
 	}
 
@@ -55,8 +61,12 @@ func runBootstrapInvitation(cfg config.Config) {
 	}
 	defer sqlDB.Close()
 
-	if err := database.Migrate(context.Background(), sqlDB); err != nil {
-		slog.Error("failed to migrate database", slog.String("error", err.Error()))
+	if err := database.AutoMigrateAll(db); err != nil {
+		slog.Error("failed to automigrate", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	if err := seeder.SeedDefaultAdmin(context.Background(), db); err != nil {
+		slog.Error("failed to seed default admin", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
@@ -86,4 +96,23 @@ func runBootstrapInvitation(cfg config.Config) {
 	}
 
 	fmt.Println(token)
+}
+
+func runMigrate(cfg config.Config) {
+	db, sqlDB, err := database.Open(cfg.Database)
+	if err != nil {
+		slog.Error("failed to open database", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer sqlDB.Close()
+
+	if err := database.AutoMigrateAll(db); err != nil {
+		slog.Error("failed to automigrate", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	if err := seeder.SeedDefaultAdmin(context.Background(), db); err != nil {
+		slog.Error("failed to seed default admin", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	slog.Info("migrate: schema synced and default admin seeded")
 }

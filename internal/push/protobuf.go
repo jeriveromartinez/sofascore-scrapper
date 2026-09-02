@@ -120,14 +120,10 @@ func PayloadFromProto(p *pb.PushPayload) (category Category, title, body, imageU
 }
 
 // PushMessageToProto converts a domain PushMessage to a pb.PushMessage
-// for the REST response. Domains are flattened to a list of IDs; the
-// caller is expected to preload the Domains association before
-// calling this helper.
-func PushMessageToProto(m PushMessage) *pb.PushMessage {
-	domainIDs := make([]uint32, 0, len(m.Domains))
-	for _, d := range m.Domains {
-		domainIDs = append(domainIDs, uint32(d.ID))
-	}
+// for the REST response. The caller passes in domainIDs because the
+// PushMessage struct no longer carries a preloaded Domains slice
+// (the join table PushMessageTarget is the source of truth).
+func PushMessageToProto(m PushMessage, domainIDs []uint32) *pb.PushMessage {
 	out := &pb.PushMessage{
 		Id:         uint32(m.ID),
 		CreatedAt:  formatDateTime(m.CreatedAt),
@@ -150,12 +146,9 @@ func PushMessageToProto(m PushMessage) *pb.PushMessage {
 }
 
 // ScheduledPushToProto converts a domain ScheduledPush to a
-// pb.ScheduledPush. Domains must be preloaded.
-func ScheduledPushToProto(s ScheduledPush) *pb.ScheduledPush {
-	domainIDs := make([]uint32, 0, len(s.Domains))
-	for _, d := range s.Domains {
-		domainIDs = append(domainIDs, uint32(d.ID))
-	}
+// pb.ScheduledPush. The caller passes in domainIDs (sourced from
+// the ScheduledPushTarget join table).
+func ScheduledPushToProto(s ScheduledPush, domainIDs []uint32) *pb.ScheduledPush {
 	out := &pb.ScheduledPush{
 		Id:           uint32(s.ID),
 		CreatedAt:    formatDateTime(s.CreatedAt),

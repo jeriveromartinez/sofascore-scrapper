@@ -85,6 +85,14 @@ func (s *Service) SetMetrics(m *Metrics) {
 	s.metrics = m
 }
 
+// Repo exposes the underlying repository. Used by the scheduler
+// runner to fetch join-table rows (target domains) before calling
+// DispatchScheduled. Kept narrow so callers don't start relying
+// on it for business-logic paths.
+func (s *Service) Repo() *Repository {
+	return s.repo
+}
+
 // CreateImmediate validates the request, persists a push_messages
 // row + delivery_attempts snapshot, and publishes a WsPush to every
 // audience device over the realtime hub.
@@ -256,6 +264,10 @@ func (s *Service) OnAck(ctx context.Context, messageID string) error {
 // outcomes. The schedule is then either deactivated (one_shot) or
 // rescheduled (recurring).
 //
+// The caller (scheduler runner) is responsible for fetching the
+// schedule's target domainIDs from the join table and passing them
+// in. This keeps the schedule struct free of m2m preloads.
+//
 // Unlike CreateImmediate, this method does NOT re-validate the
 // per-user feature toggle or domain ownership. The schedule is
 // the source of truth: if the user disabled notifications after
@@ -264,12 +276,8 @@ func (s *Service) OnAck(ctx context.Context, messageID string) error {
 // time, not at fire time). The audience filter still runs and the
 // rows are still snapshotted, so a deactivated user can
 // reactivate and immediately see the metrics.
-func (s *Service) DispatchScheduled(ctx context.Context, schedule *ScheduledPush) error {
+func (s *Service) DispatchScheduled(ctx context.Context, schedule *ScheduledPush, domainIDs []uint) error {
 	now := time.Now()
-	domainIDs := make([]uint, 0, len(schedule.Domains))
-	for _, d := range schedule.Domains {
-		domainIDs = append(domainIDs, d.ID)
-	}
 	msg := &PushMessage{
 		UserID:      schedule.UserID,
 		Category:    schedule.Category,

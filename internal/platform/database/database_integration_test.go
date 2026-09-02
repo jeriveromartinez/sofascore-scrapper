@@ -10,6 +10,13 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
 )
 
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 func TestOpenAppliesPoolConfig(t *testing.T) {
 	cfg := config.Database{
 		Host:            envOr("DB_HOST", "localhost"),

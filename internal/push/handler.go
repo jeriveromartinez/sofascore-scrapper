@@ -106,7 +106,16 @@ func (h *Handler) handleGet(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	server.RespondProto(c, http.StatusOK, PushMessageToProto(*msg))
+	targets, err := h.svc.repo.GetPushMessageTargets(c.Request.Context(), msg.ID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	domainIDs := make([]uint32, 0, len(targets))
+	for _, t := range targets {
+		domainIDs = append(domainIDs, uint32(t.DomainID))
+	}
+	server.RespondProto(c, http.StatusOK, PushMessageToProto(*msg, domainIDs))
 }
 
 func (h *Handler) handleList(c *gin.Context) {
@@ -131,7 +140,16 @@ func (h *Handler) handleList(c *gin.Context) {
 		Data: make([]*pb.PushMessage, 0, len(rows)),
 	}
 	for i := range rows {
-		resp.Data = append(resp.Data, PushMessageToProto(rows[i]))
+		targets, terr := h.svc.repo.GetPushMessageTargets(c.Request.Context(), rows[i].ID)
+		if terr != nil {
+			server.RespondError(c, http.StatusInternalServerError, terr.Error())
+			return
+		}
+		domainIDs := make([]uint32, 0, len(targets))
+		for _, t := range targets {
+			domainIDs = append(domainIDs, uint32(t.DomainID))
+		}
+		resp.Data = append(resp.Data, PushMessageToProto(rows[i], domainIDs))
 	}
 	if hasMore && len(rows) > 0 {
 		// Cursor is the id of the last row. The frontend passes it
@@ -170,7 +188,7 @@ func (h *Handler) handleCreateSchedule(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	server.RespondProto(c, http.StatusCreated, ScheduledPushToProto(*sched))
+	server.RespondProto(c, http.StatusCreated, ScheduledPushToProto(*sched, req.DomainIds))
 }
 
 func (h *Handler) handleListSchedules(c *gin.Context) {
@@ -192,7 +210,16 @@ func (h *Handler) handleListSchedules(c *gin.Context) {
 	}
 	resp := &pb.ScheduledPushPage{Data: make([]*pb.ScheduledPush, 0, len(rows))}
 	for i := range rows {
-		resp.Data = append(resp.Data, ScheduledPushToProto(rows[i]))
+		targets, terr := h.svc.repo.GetScheduledPushTargets(c.Request.Context(), rows[i].ID)
+		if terr != nil {
+			server.RespondError(c, http.StatusInternalServerError, terr.Error())
+			return
+		}
+		domainIDs := make([]uint32, 0, len(targets))
+		for _, t := range targets {
+			domainIDs = append(domainIDs, uint32(t.DomainID))
+		}
+		resp.Data = append(resp.Data, ScheduledPushToProto(rows[i], domainIDs))
 	}
 	if hasMore && len(rows) > 0 {
 		last := rows[len(rows)-1]
@@ -220,7 +247,16 @@ func (h *Handler) handleGetSchedule(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	server.RespondProto(c, http.StatusOK, ScheduledPushToProto(*sched))
+	targets, terr := h.svc.repo.GetScheduledPushTargets(c.Request.Context(), sched.ID)
+	if terr != nil {
+		writeServiceError(c, terr)
+		return
+	}
+	domainIDs := make([]uint32, 0, len(targets))
+	for _, t := range targets {
+		domainIDs = append(domainIDs, uint32(t.DomainID))
+	}
+	server.RespondProto(c, http.StatusOK, ScheduledPushToProto(*sched, domainIDs))
 }
 
 func (h *Handler) handleUpdateSchedule(c *gin.Context) {
@@ -244,7 +280,16 @@ func (h *Handler) handleUpdateSchedule(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	server.RespondProto(c, http.StatusOK, ScheduledPushToProto(*sched))
+	targets, terr := h.svc.repo.GetScheduledPushTargets(c.Request.Context(), sched.ID)
+	if terr != nil {
+		writeServiceError(c, terr)
+		return
+	}
+	domainIDs := make([]uint32, 0, len(targets))
+	for _, t := range targets {
+		domainIDs = append(domainIDs, uint32(t.DomainID))
+	}
+	server.RespondProto(c, http.StatusOK, ScheduledPushToProto(*sched, domainIDs))
 }
 
 func (h *Handler) handleDeleteSchedule(c *gin.Context) {

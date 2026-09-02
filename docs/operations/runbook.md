@@ -90,3 +90,27 @@ ls -lah /opt/iptv
 redis-cli ping
 redis-cli INFO clients
 ```
+
+## First Boot
+
+On a fresh database (where `users` is empty), the server auto-seeds a default administrator:
+
+- **Email:** `admin@local`
+- **Password:** `admin1234`
+- **Role:** `admin`
+
+> **WARNING:** The default password is hardcoded and known. **Change it on first login.** Operators who want a different password must `DELETE FROM users WHERE email = 'admin@local'` after the first boot and re-invoke the bootstrap flow.
+
+To pre-apply schema and exit (no server), run:
+
+```bash
+./sofascore-scrapper migrate
+```
+
+This runs `AutoMigrateAll` and the seeder, then exits 0.
+
+To skip migration and seeding entirely (when managing schema externally):
+
+```bash
+SKIP_MIGRATE=true ./sofascore-scrapper
+```

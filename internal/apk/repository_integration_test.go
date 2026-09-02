@@ -3,14 +3,11 @@
 package apk
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"testing"
 
-	_ "github.com/golang-migrate/migrate/v4/database/mysql"
-	dbplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -54,7 +51,7 @@ func ensureIntegrationSchema(t *testing.T, sqlDB *sql.DB, db *gorm.DB) {
 	if db.Migrator().HasTable(&ApkVersion{}) {
 		return
 	}
-	if err := dbplatform.Migrate(context.Background(), sqlDB); err != nil {
+	if err := db.AutoMigrate(&ApkVersion{}, &UploadPublication{}); err != nil {
 		t.Fatalf("migrate integration database: %v", err)
 	}
 }

@@ -144,10 +144,30 @@ func (r *Repository) InsertScheduledPushWithTargets(ctx context.Context, s *Sche
 func (r *Repository) ListDueScheduledPushes(ctx context.Context, now time.Time, limit int) ([]ScheduledPush, error) {
 	var rows []ScheduledPush
 	err := r.db.WithContext(ctx).
-		Preload("Domains").
 		Where("is_active = ? AND next_fire_at <= ?", true, now).
 		Order("next_fire_at ASC").
 		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
+// GetPushMessageTargets returns the join rows linking a push to
+// its target domains. Callers flatten this to []uint{uint32(...)}
+// when building the proto response.
+func (r *Repository) GetPushMessageTargets(ctx context.Context, pushID uint) ([]PushMessageTarget, error) {
+	var rows []PushMessageTarget
+	err := r.db.WithContext(ctx).
+		Where("push_message_id = ?", pushID).
+		Find(&rows).Error
+	return rows, err
+}
+
+// GetScheduledPushTargets returns the join rows linking a schedule
+// to its target domains.
+func (r *Repository) GetScheduledPushTargets(ctx context.Context, schedID uint) ([]ScheduledPushTarget, error) {
+	var rows []ScheduledPushTarget
+	err := r.db.WithContext(ctx).
+		Where("scheduled_push_id = ?", schedID).
 		Find(&rows).Error
 	return rows, err
 }
@@ -185,14 +205,14 @@ func (r *Repository) DeactivateAllForUser(ctx context.Context, userID uint) erro
 		Update("is_active", false).Error
 }
 
-// GetPushMessageByID fetches a single push with its target domains
-// preloaded. Returns ErrNotFound-equivalent (gorm.ErrRecordNotFound)
-// when the row does not exist OR the user_id does not match (the
-// latter prevents enumeration of other users' pushes).
+// GetPushMessageByID fetches a single push. Returns
+// ErrNotFound-equivalent (gorm.ErrRecordNotFound) when the row does
+// not exist OR the user_id does not match (the latter prevents
+// enumeration of other users' pushes). Target domains are fetched
+// separately via GetPushMessageTargets.
 func (r *Repository) GetPushMessageByID(ctx context.Context, id, userID uint) (*PushMessage, error) {
 	var m PushMessage
 	err := r.db.WithContext(ctx).
-		Preload("Domains").
 		Where("id = ? AND user_id = ?", id, userID).
 		First(&m).Error
 	if err != nil {
@@ -206,10 +226,10 @@ func (r *Repository) GetPushMessageByID(ctx context.Context, id, userID uint) (*
 // rows are returned in created_at DESC order. Pagination is
 // cursor-based: pass the last id from a previous page to fetch the
 // next N older rows. hasMore=true means there is at least one more
-// row beyond the returned slice.
+// row beyond the returned slice. Target domains are fetched
+// separately via GetPushMessageTargets.
 func (r *Repository) ListPushMessagesByUser(ctx context.Context, userID uint, source string, limit int) ([]PushMessage, bool, error) {
 	q := r.db.WithContext(ctx).
-		Preload("Domains").
 		Where("user_id = ?", userID).
 		Order("id DESC")
 	if source == "immediate" || source == "scheduled" {
@@ -228,10 +248,10 @@ func (r *Repository) ListPushMessagesByUser(ctx context.Context, userID uint, so
 
 // ListScheduledPushesByUser is the schedule equivalent of
 // ListPushMessagesByUser. is_active rows are kept (the dashboard
-// shows deactivated ones with a "paused" badge).
+// shows deactivated ones with a "paused" badge). Target domains
+// are fetched separately via GetScheduledPushTargets.
 func (r *Repository) ListScheduledPushesByUser(ctx context.Context, userID uint, limit int) ([]ScheduledPush, bool, error) {
 	q := r.db.WithContext(ctx).
-		Preload("Domains").
 		Where("user_id = ?", userID).
 		Order("id DESC")
 	var rows []ScheduledPush
@@ -247,11 +267,11 @@ func (r *Repository) ListScheduledPushesByUser(ctx context.Context, userID uint,
 
 // GetScheduledPushByID fetches a single schedule. Same ownership
 // guard as GetPushMessageByID: a row owned by a different user
-// returns ErrRecordNotFound.
+// returns ErrRecordNotFound. Target domains are fetched separately
+// via GetScheduledPushTargets.
 func (r *Repository) GetScheduledPushByID(ctx context.Context, id, userID uint) (*ScheduledPush, error) {
 	var s ScheduledPush
 	err := r.db.WithContext(ctx).
-		Preload("Domains").
 		Where("id = ? AND user_id = ?", id, userID).
 		First(&s).Error
 	if err != nil {

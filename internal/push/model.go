@@ -106,27 +106,29 @@ const (
 // zero joins at delivery time.
 type PushMessage struct {
 	gorm.Model
-	UserID      uint             `gorm:"index;not null"`
-	User        *users.User      `gorm:"foreignKey:UserID"`
-	Category    Category         `gorm:"size:32;not null"`
-	Title       string           `gorm:"size:200;not null"`
-	Body        string           `gorm:"size:2000;not null"`
-	ImageURL    string           `gorm:"size:500"`
-	DeepLink    string           `gorm:"size:500"`
-	Priority    Priority         `gorm:"size:16;not null;default:normal"`
-	TTLSeconds  int              `gorm:"not null;default:0"`
-	DataJSON    StringJSON       `gorm:"type:json"`        // free-form metadata; nil = empty
-	Source      Source           `gorm:"size:16;not null"` // "immediate" | "scheduled"
-	ScheduledID *uint            `gorm:"index"`            // non-nil only when Source == scheduled
-	Domains     []domains.Domain `gorm:"many2many:push_message_targets;joinForeignKey:push_message_id;joinReferences:domain_id"`
+	UserID      uint        `gorm:"column:user_id;not null;index:idx_push_messages_user_created,priority:1;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	User        *users.User `gorm:"foreignKey:UserID;references:ID"`
+	Category    Category    `gorm:"column:category;size:32;not null"`
+	Title       string      `gorm:"column:title;size:200;not null"`
+	Body        string      `gorm:"column:body;size:2000;not null"`
+	ImageURL    string      `gorm:"column:image_url;size:500"`
+	DeepLink    string      `gorm:"column:deep_link;size:500"`
+	Priority    Priority    `gorm:"column:priority;size:16;not null;default:'normal'"`
+	TTLSeconds  int         `gorm:"column:ttl_seconds;not null;default:0"`
+	DataJSON    StringJSON  `gorm:"column:data_json;type:json"`
+	Source      Source      `gorm:"column:source;size:16;not null"`
+	ScheduledID *uint       `gorm:"column:scheduled_id;null;foreignKey:ScheduledID;references:ID;constraint:OnDelete:SET_NULL"`
+	CreatedAt   time.Time   `gorm:"column:created_at;not null;index:idx_push_messages_user_created,priority:2"`
 }
 
 // PushMessageTarget is the join table between a push and its
 // audience domains. Modeled explicitly so we can add metadata later
 // (e.g. "sent at" per target) without a migration.
 type PushMessageTarget struct {
-	PushMessageID uint `gorm:"primaryKey;not null"`
-	DomainID      uint `gorm:"primaryKey;not null"`
+	PushMessageID uint          `gorm:"column:push_message_id;primaryKey;not null;foreignKey:PushMessageID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	DomainID      uint          `gorm:"column:domain_id;primaryKey;not null;foreignKey:DomainID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	PushMessage   *PushMessage  `gorm:"foreignKey:PushMessageID;references:ID"`
+	Domain        *domains.Domain `gorm:"foreignKey:DomainID;references:ID"`
 }
 
 // ScheduledPush is a push that fires automatically — either at a
@@ -135,30 +137,31 @@ type PushMessageTarget struct {
 // after each fire.
 type ScheduledPush struct {
 	gorm.Model
-	UserID       uint             `gorm:"index;not null"`
-	User         *users.User      `gorm:"foreignKey:UserID"`
-	ScheduleType ScheduleType     `gorm:"size:16;not null"`
-	RunAt        *time.Time       `gorm:"null"`           // one_shot only
-	CronExpr     string           `gorm:"size:64"`        // recurring only
-	NextFireAt   time.Time        `gorm:"index;not null"` // what the runner polls
-	LastFiredAt  *time.Time       `gorm:"null"`
-	IsActive     bool             `gorm:"not null;default:true;index"`
-	Category     Category         `gorm:"size:32;not null"`
-	Title        string           `gorm:"size:200;not null"`
-	Body         string           `gorm:"size:2000;not null"`
-	ImageURL     string           `gorm:"size:500"`
-	DeepLink     string           `gorm:"size:500"`
-	Priority     Priority         `gorm:"size:16;not null;default:normal"`
-	TTLSeconds   int              `gorm:"not null;default:0"`
-	DataJSON     StringJSON       `gorm:"type:json"`
-	Domains      []domains.Domain `gorm:"many2many:scheduled_push_targets;joinForeignKey:scheduled_push_id;joinReferences:domain_id"`
+	UserID       uint        `gorm:"column:user_id;not null;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	User         *users.User `gorm:"foreignKey:UserID;references:ID"`
+	ScheduleType ScheduleType `gorm:"column:schedule_type;size:16;not null"`
+	RunAt        *time.Time  `gorm:"column:run_at;null"`
+	CronExpr     string      `gorm:"column:cron_expr;size:64"`
+	NextFireAt   time.Time   `gorm:"column:next_fire_at;not null;index:idx_schedules_active_next,priority:2"`
+	LastFiredAt  *time.Time  `gorm:"column:last_fired_at;null"`
+	IsActive     bool        `gorm:"column:is_active;not null;default:true;index:idx_schedules_active_next,priority:1"`
+	Category     Category    `gorm:"column:category;size:32;not null"`
+	Title        string      `gorm:"column:title;size:200;not null"`
+	Body         string      `gorm:"column:body;size:2000;not null"`
+	ImageURL     string      `gorm:"column:image_url;size:500"`
+	DeepLink     string      `gorm:"column:deep_link;size:500"`
+	Priority     Priority    `gorm:"column:priority;size:16;not null;default:'normal'"`
+	TTLSeconds   int         `gorm:"column:ttl_seconds;not null;default:0"`
+	DataJSON     StringJSON  `gorm:"column:data_json;type:json"`
 }
 
 // ScheduledPushTarget is the join table between a scheduled_push and
 // its audience domains.
 type ScheduledPushTarget struct {
-	ScheduledPushID uint `gorm:"primaryKey;not null"`
-	DomainID        uint `gorm:"primaryKey;not null"`
+	ScheduledPushID uint            `gorm:"column:scheduled_push_id;primaryKey;not null;foreignKey:ScheduledPushID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	DomainID        uint            `gorm:"column:domain_id;primaryKey;not null;foreignKey:DomainID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	ScheduledPush   *ScheduledPush  `gorm:"foreignKey:ScheduledPushID;references:ID"`
+	Domain          *domains.Domain `gorm:"foreignKey:DomainID;references:ID"`
 }
 
 // DeliveryAttempt is one row per (push, device) — the universe of
@@ -166,14 +169,15 @@ type ScheduledPushTarget struct {
 // lifecycle progresses: sent → delivered | failed.
 type DeliveryAttempt struct {
 	gorm.Model
-	PushMessageID uint          `gorm:"uniqueIndex:uq_push_device;not null"`
-	DeviceID      uint          `gorm:"uniqueIndex:uq_push_device;not null"`
-	MessageID     string        `gorm:"size:36;uniqueIndex;not null"` // UUID v4; UNIQUE for ack lookup (Task 7)
-	State         DeliveryState `gorm:"size:16;not null;index"`
-	FailureReason FailureReason `gorm:"size:32"`
-	SentAt        *time.Time    `gorm:"null"`
-	AckedAt       *time.Time    `gorm:"null"`
-	LatencyMS     *int          `gorm:"null"`
+	PushMessageID uint          `gorm:"column:push_message_id;not null;index:idx_attempts_push_message,priority:1;foreignKey:PushMessageID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	DeviceID      uint          `gorm:"column:device_id;not null;index:idx_attempts_device_created,priority:1;foreignKey:DeviceID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	MessageID     string        `gorm:"column:message_id;size:36;uniqueIndex:uq_message_id;not null"`
+	State         DeliveryState `gorm:"column:state;size:16;not null;index:idx_attempts_state_created,priority:1"`
+	FailureReason FailureReason `gorm:"column:failure_reason;size:32;null"`
+	SentAt        *time.Time    `gorm:"column:sent_at;null"`
+	AckedAt       *time.Time    `gorm:"column:acked_at;null"`
+	LatencyMS     *int          `gorm:"column:latency_ms;null"`
+	CreatedAt     time.Time     `gorm:"column:created_at;not null;index:idx_attempts_state_created,priority:2;index:idx_attempts_device_created,priority:2;index:idx_attempts_push_message,priority:2"`
 }
 
 // StringJSON is a nullable map[string]string stored as a JSON column.

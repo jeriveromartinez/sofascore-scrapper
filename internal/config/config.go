@@ -57,6 +57,10 @@ type Config struct {
 	HTTP              HTTP
 	ScrapeBatchSize   int
 	ScrapeConcurrency int
+	// SkipMigrate, when true, skips database AutoMigrate and the
+	// default-admin seeder on startup. Used when the operator manages
+	// schema externally or wants a hot path with no DB write.
+	SkipMigrate bool
 }
 
 func Load() (Config, error) {
@@ -77,6 +81,7 @@ func Load() (Config, error) {
 		ImageStoragePath:  getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
 		ScrapeBatchSize:   getInt("SCRAPE_BATCH_SIZE", 500),
 		ScrapeConcurrency: getInt("SCRAPE_CONCURRENCY", 8),
+		SkipMigrate:       getBool("SKIP_MIGRATE", false),
 		Database: Database{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "3306"),

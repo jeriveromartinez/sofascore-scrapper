@@ -111,12 +111,12 @@ func TestRepository_InsertPushMessageWithTargets(t *testing.T) {
 	}
 
 	// Re-read and assert both targets persisted.
-	var got PushMessage
-	if err := db.Preload("Domains").First(&got, msg.ID).Error; err != nil {
-		t.Fatalf("re-read: %v", err)
+	var targets []PushMessageTarget
+	if err := db.Where("push_message_id = ?", msg.ID).Find(&targets).Error; err != nil {
+		t.Fatalf("re-read targets: %v", err)
 	}
-	if len(got.Domains) != 2 {
-		t.Errorf("domains persisted = %d, want 2", len(got.Domains))
+	if len(targets) != 2 {
+		t.Errorf("targets persisted = %d, want 2", len(targets))
 	}
 }
 

@@ -8,18 +8,18 @@ import (
 
 type Device struct {
 	gorm.Model
-	UserID   *uint
-	Token    string `gorm:"uniqueIndex;not null"`
-	Platform string
-	Name     string
-	LastSeen int64
-	Version  string
-	Manager  *users.User `gorm:"foreignKey:UserID"`
+	UserID    *uint          `gorm:"column:user_id;index:idx_devices_user_id"`
+	Token     string         `gorm:"column:token;size:191;uniqueIndex:idx_devices_token;not null"`
+	Platform  string         `gorm:"column:platform;type:longtext"`
+	Name      string         `gorm:"column:name;type:longtext"`
+	LastSeen  int64          `gorm:"column:last_seen"`
+	Version   string         `gorm:"column:version;type:longtext"`
+	Manager   *users.User    `gorm:"foreignKey:UserID;references:ID"`
 
 	// DomainID links the device to a user-owned domain. Push audiences
 	// are matched on this column. Nullable: a device registered before
 	// the push feature shipped (or that never picked a domain) stays
 	// NULL and is excluded from push delivery.
-	DomainID *uint           `gorm:"index;null"`
-	Domain   *domains.Domain `gorm:"foreignKey:DomainID"`
+	DomainID  *uint          `gorm:"column:domain_id;index:idx_devices_domain_id;null;foreignKey:DomainID;references:ID;constraint:OnDelete:SET_NULL,OnUpdate:CASCADE"`
+	Domain    *domains.Domain `gorm:"foreignKey:DomainID;references:ID"`
 }

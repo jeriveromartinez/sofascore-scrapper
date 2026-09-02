@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/seeder"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"github.com/prometheus/client_golang/prometheus"
@@ -77,8 +79,13 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	if err := database.Migrate(context.Background(), sqlDB); err != nil {
-		return nil, err
+	if !cfg.SkipMigrate {
+		if err := database.AutoMigrateAll(db); err != nil {
+			return nil, fmt.Errorf("automigrate: %w", err)
+		}
+		if err := seeder.SeedDefaultAdmin(context.Background(), db); err != nil {
+			return nil, fmt.Errorf("seed default admin: %w", err)
+		}
 	}
 
 	redisClient, err := redisplatform.New(context.Background(), cfg.Redis)
