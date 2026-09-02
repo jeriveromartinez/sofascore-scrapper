@@ -32,7 +32,6 @@ WORKDIR /app
 
 COPY --from=build-go /out/sofascore-scrapper .
 COPY --from=build-vue /app/web/dist ./web/dist
-COPY migrations/ ./migrations/
 COPY deployments/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh && chown -R appuser:appgroup /app
