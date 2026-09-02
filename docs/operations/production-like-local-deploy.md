@@ -123,29 +123,14 @@ tail -f /var/log/iptv.log
 
 ## Bootstrap the first admin
 
-The `.deb` install does **not** create an admin — that is the operator's
-job, done via a one-shot invitation token. The token is only valid while
-the `users` table is empty.
+The server **auto-seeds** a default admin on first boot if the `users` table is empty:
 
-```bash
-# Inside the container, as user iptv, with /etc/iptv/env loaded
-docker exec iptv-prod bash -c '
-    cd /opt/iptv &&
-    set -a && . /etc/iptv/env && set +a &&
-    sudo -u iptv -E /opt/iptv/iptv bootstrap-invitation
-'
-# token printed to stdout, e.g.: -DBOp-QnEtYgvQPuooSHSSIwSHNMBCXNjl3D71jT8XM
-```
+- Email: `admin@local`
+- Password: `admin1234` (change on first login)
 
-The same command works on a real production host:
+To re-trigger seeding (e.g. after deleting the admin), `DELETE FROM users` and restart the server, or run `./sofascore-scrapper migrate` on a fresh DB.
 
-```bash
-sudo -u iptv bash -c 'set -a; . /etc/iptv/env; set +a; /opt/iptv/iptv bootstrap-invitation'
-```
-
-The token has a 24-hour TTL and is stored hashed (SHA-256) in Redis under
-`auth:invitation:<hex>`. It can only be consumed once; the Lua script in
-`internal/auth/invitation.go` atomically deletes the key on success.
+The legacy `bootstrap-invitation` command still works but only on a database with zero users — useful only right after `DELETE FROM users`.
 
 ## Register the admin (auth wire format is protobuf)
 
