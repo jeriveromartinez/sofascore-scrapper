@@ -6,11 +6,16 @@ import (
 )
 
 const (
-	// bcryptCost is the work factor for new password hashes. Cost 12
-	// is the project target for 2026 hardware (≈400 ms per hash on a
+	// BcryptCost is the work factor for new password hashes. Cost 12
+	// is the project target for 2026 hardware (~400 ms per hash on a
 	// modern CPU). Existing cost-10 hashes are re-hashed lazily on
 	// the next successful login via VerifyAndUpgrade.
-	bcryptCost = 12
+	//
+	// Exported so the seeder package can use the same value without
+	// duplicating it. The users package cannot import this (cycle
+	// auth -> users in handler.go); users.repository.bcryptCost is a
+	// local mirror that must be bumped together with this constant.
+	BcryptCost = 12
 )
 
 // ValidatePassword is the storage-agnostic policy check used by
@@ -32,7 +37,7 @@ func CheckPassword(hash, password string) bool {
 // project's standard cost. Callers should NOT re-hash the output —
 // it is safe to store directly.
 func HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
 	if err != nil {
 		return "", err
 	}
@@ -48,7 +53,7 @@ func HashPassword(password string) (string, error) {
 // Behavior summary:
 //   - wrong password          -> newHash = "", err = bcrypt.ErrMismatchedHashAndPassword
 //   - correct + current cost  -> newHash = "", err = nil
-//   - correct + legacy cost    -> newHash = re-hashed at bcryptCost, err = nil
+//   - correct + legacy cost    -> newHash = re-hashed at BcryptCost, err = nil
 func VerifyAndUpgrade(hash, password string) (newHash string, err error) {
 	if err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
 		return "", err
@@ -63,7 +68,7 @@ func VerifyAndUpgrade(hash, password string) (newHash string, err error) {
 		// default than rejecting a valid login.
 		return "", nil
 	}
-	if cost >= bcryptCost {
+	if cost >= BcryptCost {
 		return "", nil
 	}
 	upgraded, err := HashPassword(password)
