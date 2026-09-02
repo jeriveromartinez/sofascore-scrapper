@@ -373,3 +373,173 @@ func TestRepository_DeactivateAllForUser(t *testing.T) {
 		t.Errorf("active after deactivate = %d, want 0", n)
 	}
 }
+
+// TestRepository_GetPushMessageTargetsByMessageIDs covers the
+// batch-fetch path used by the list handler: a single IN query
+// returns targets for many push messages at once instead of N
+// per-row queries.
+func TestRepository_GetPushMessageTargetsByMessageIDs(t *testing.T) {
+	db := newRepoDB(t)
+	uid, d1, _ := seedUserDomainDevice(t, db, 0)
+	d2 := &domains.Domain{Domain: "batch-msg.iptv.example", UserID: uid}
+	if err := db.Create(d2).Error; err != nil {
+		t.Fatalf("seed d2: %v", err)
+	}
+
+	repo := NewRepository(db)
+	ctx := context.Background()
+	now := time.Now()
+
+	// Two pushes, each with two targets; a third push with no
+	// targets; a fourth we'll reference by ID but never insert.
+	mk := func(title string) *PushMessage {
+		return &PushMessage{
+			UserID: uid, Category: CategoryAdminMessage,
+			Title: title, Body: "x",
+			Priority: PriorityNormal, Source: SourceImmediate,
+		}
+	}
+	m1, m2, m3 := mk("m1"), mk("m2"), mk("m3")
+	if err := repo.InsertPushMessageWithTargets(ctx, m1, []uint{d1, d2.ID}, &now); err != nil {
+		t.Fatalf("insert m1: %v", err)
+	}
+	if err := repo.InsertPushMessageWithTargets(ctx, m2, []uint{d1, d2.ID}, &now); err != nil {
+		t.Fatalf("insert m2: %v", err)
+	}
+	if err := repo.InsertPushMessageWithTargets(ctx, m3, nil, &now); err != nil {
+		t.Fatalf("insert m3: %v", err)
+	}
+
+	// 1. Empty input returns an empty non-nil map and no error.
+	empty, err := repo.GetPushMessageTargetsByMessageIDs(ctx, nil)
+	if err != nil {
+		t.Fatalf("empty (nil): %v", err)
+	}
+	if empty == nil {
+		t.Fatal("empty map must be non-nil")
+	}
+	if len(empty) != 0 {
+		t.Errorf("empty map size = %d, want 0", len(empty))
+	}
+	empty2, err := repo.GetPushMessageTargetsByMessageIDs(ctx, []uint{})
+	if err != nil {
+		t.Fatalf("empty (slice): %v", err)
+	}
+	if empty2 == nil {
+		t.Fatal("empty map must be non-nil")
+	}
+
+	// 2. Mixed input: two IDs with targets, one without, one bogus.
+	// The batch method only inserts keys for IDs that have at least
+	// one matching target row. An ID that exists but has zero
+	// targets (and a bogus ID) is simply absent from the map;
+	// consumers must treat a missing key the same as an empty
+	// slice.
+	bogus := m1.ID + 9999
+	got, err := repo.GetPushMessageTargetsByMessageIDs(ctx, []uint{m1.ID, m2.ID, m3.ID, bogus})
+	if err != nil {
+		t.Fatalf("batch: %v", err)
+	}
+	if len(got[m1.ID]) != 2 {
+		t.Errorf("m1 targets = %d, want 2", len(got[m1.ID]))
+	}
+	if len(got[m2.ID]) != 2 {
+		t.Errorf("m2 targets = %d, want 2", len(got[m2.ID]))
+	}
+	if _, ok := got[m3.ID]; ok {
+		t.Errorf("m3 (no targets) should not be a key in the map (got %v)", got[m3.ID])
+	}
+	if v, ok := got[bogus]; ok {
+		t.Errorf("bogus id %d should not appear in map; got %v", bogus, v)
+	}
+
+	// 3. Target rows reference the right domain IDs.
+	want := map[uint]bool{d1: true, d2.ID: true}
+	for _, tgt := range got[m1.ID] {
+		if !want[tgt.DomainID] {
+			t.Errorf("m1 has unexpected domain_id %d", tgt.DomainID)
+		}
+		if tgt.PushMessageID != m1.ID {
+			t.Errorf("m1 target has push_message_id %d, want %d", tgt.PushMessageID, m1.ID)
+		}
+	}
+}
+
+// TestRepository_GetScheduledPushTargetsByScheduledIDs is the
+// schedule equivalent of the push-message batch test.
+func TestRepository_GetScheduledPushTargetsByScheduledIDs(t *testing.T) {
+	db := newRepoDB(t)
+	uid, d1, _ := seedUserDomainDevice(t, db, 0)
+	d2 := &domains.Domain{Domain: "batch-sched.iptv.example", UserID: uid}
+	if err := db.Create(d2).Error; err != nil {
+		t.Fatalf("seed d2: %v", err)
+	}
+
+	repo := NewRepository(db)
+	ctx := context.Background()
+	runAt := time.Now().UTC()
+
+	// Two schedules each targeting d1+d2, one with no targets.
+	mk := func(title string) *ScheduledPush {
+		return &ScheduledPush{
+			UserID: uid, ScheduleType: ScheduleTypeOneShot,
+			RunAt: &runAt, NextFireAt: runAt,
+			IsActive: true, Category: CategoryAdminMessage,
+			Title: title, Body: "x", Priority: PriorityNormal,
+		}
+	}
+	s1, s2, s3 := mk("s1"), mk("s2"), mk("s3")
+	if err := repo.InsertScheduledPushWithTargets(ctx, s1, []uint{d1, d2.ID}); err != nil {
+		t.Fatalf("insert s1: %v", err)
+	}
+	if err := repo.InsertScheduledPushWithTargets(ctx, s2, []uint{d1, d2.ID}); err != nil {
+		t.Fatalf("insert s2: %v", err)
+	}
+	if err := repo.InsertScheduledPushWithTargets(ctx, s3, nil); err != nil {
+		t.Fatalf("insert s3: %v", err)
+	}
+
+	// 1. Empty input.
+	empty, err := repo.GetScheduledPushTargetsByScheduledIDs(ctx, nil)
+	if err != nil {
+		t.Fatalf("empty: %v", err)
+	}
+	if empty == nil {
+		t.Fatal("empty map must be non-nil")
+	}
+	if len(empty) != 0 {
+		t.Errorf("empty size = %d, want 0", len(empty))
+	}
+
+	// 2. Mixed input. As with the push-message batch, only IDs
+	// with at least one target row appear in the map; the
+	// no-targets ID and the bogus ID are absent.
+	bogus := s1.ID + 9999
+	got, err := repo.GetScheduledPushTargetsByScheduledIDs(ctx, []uint{s1.ID, s2.ID, s3.ID, bogus})
+	if err != nil {
+		t.Fatalf("batch: %v", err)
+	}
+	if len(got[s1.ID]) != 2 {
+		t.Errorf("s1 targets = %d, want 2", len(got[s1.ID]))
+	}
+	if len(got[s2.ID]) != 2 {
+		t.Errorf("s2 targets = %d, want 2", len(got[s2.ID]))
+	}
+	if _, ok := got[s3.ID]; ok {
+		t.Errorf("s3 (no targets) should not be a key in the map (got %v)", got[s3.ID])
+	}
+	if v, ok := got[bogus]; ok {
+		t.Errorf("bogus id %d should not appear; got %v", bogus, v)
+	}
+
+	// 3. Each row references the right domain IDs.
+	want := map[uint]bool{d1: true, d2.ID: true}
+	for _, tgt := range got[s1.ID] {
+		if !want[tgt.DomainID] {
+			t.Errorf("s1 has unexpected domain_id %d", tgt.DomainID)
+		}
+		if tgt.ScheduledPushID != s1.ID {
+			t.Errorf("s1 target has scheduled_push_id %d, want %d", tgt.ScheduledPushID, s1.ID)
+		}
+	}
+}
