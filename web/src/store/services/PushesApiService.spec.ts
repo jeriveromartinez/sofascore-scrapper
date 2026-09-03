@@ -63,7 +63,6 @@ function payload(partial: Partial<PushPayload> = {}): PushPayload {
     title: "",
     body: "",
     imageUrl: "",
-    deepLink: "",
     ttlSeconds: 0,
     data: {},
     ...partial,

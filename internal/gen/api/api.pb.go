@@ -4131,10 +4131,9 @@ type PushPayload struct {
 	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	Body          string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	ImageUrl      string                 `protobuf:"bytes,4,opt,name=image_url,json=imageUrl,proto3" json:"image_url,omitempty"`
-	DeepLink      string                 `protobuf:"bytes,5,opt,name=deep_link,json=deepLink,proto3" json:"deep_link,omitempty"`
-	Priority      PushPriority           `protobuf:"varint,6,opt,name=priority,proto3,enum=sofascore.PushPriority" json:"priority,omitempty"`
-	TtlSeconds    int32                  `protobuf:"varint,7,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`                                            // 0 = no TTL
-	Data          map[string]string      `protobuf:"bytes,8,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // free-form metadata
+	Priority      PushPriority           `protobuf:"varint,5,opt,name=priority,proto3,enum=sofascore.PushPriority" json:"priority,omitempty"`
+	TtlSeconds    int32                  `protobuf:"varint,6,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`                                            // 0 = no TTL
+	Data          map[string]string      `protobuf:"bytes,7,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // free-form metadata
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4193,13 +4192,6 @@ func (x *PushPayload) GetBody() string {
 func (x *PushPayload) GetImageUrl() string {
 	if x != nil {
 		return x.ImageUrl
-	}
-	return ""
-}
-
-func (x *PushPayload) GetDeepLink() string {
-	if x != nil {
-		return x.DeepLink
 	}
 	return ""
 }
@@ -4611,12 +4603,11 @@ type PushMessage struct {
 	Title         string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
 	Body          string                 `protobuf:"bytes,6,opt,name=body,proto3" json:"body,omitempty"`
 	ImageUrl      string                 `protobuf:"bytes,7,opt,name=image_url,json=imageUrl,proto3" json:"image_url,omitempty"`
-	DeepLink      string                 `protobuf:"bytes,8,opt,name=deep_link,json=deepLink,proto3" json:"deep_link,omitempty"`
-	Priority      PushPriority           `protobuf:"varint,9,opt,name=priority,proto3,enum=sofascore.PushPriority" json:"priority,omitempty"`
-	TtlSeconds    int32                  `protobuf:"varint,10,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	Data          map[string]string      `protobuf:"bytes,11,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Source        string                 `protobuf:"bytes,12,opt,name=source,proto3" json:"source,omitempty"`                               // "immediate" | "scheduled"
-	ScheduledId   uint32                 `protobuf:"varint,13,opt,name=scheduled_id,json=scheduledId,proto3" json:"scheduled_id,omitempty"` // 0 when source == "immediate"
+	Priority      PushPriority           `protobuf:"varint,8,opt,name=priority,proto3,enum=sofascore.PushPriority" json:"priority,omitempty"`
+	TtlSeconds    int32                  `protobuf:"varint,9,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	Data          map[string]string      `protobuf:"bytes,10,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Source        string                 `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`                               // "immediate" | "scheduled"
+	ScheduledId   uint32                 `protobuf:"varint,12,opt,name=scheduled_id,json=scheduledId,proto3" json:"scheduled_id,omitempty"` // 0 when source == "immediate"
 	DomainIds     []uint32               `protobuf:"varint,14,rep,packed,name=domain_ids,json=domainIds,proto3" json:"domain_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4697,13 +4688,6 @@ func (x *PushMessage) GetBody() string {
 func (x *PushMessage) GetImageUrl() string {
 	if x != nil {
 		return x.ImageUrl
-	}
-	return ""
-}
-
-func (x *PushMessage) GetDeepLink() string {
-	if x != nil {
-		return x.DeepLink
 	}
 	return ""
 }
@@ -5542,10 +5526,9 @@ type WsPush struct {
 	Title         string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
 	Body          string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
 	ImageUrl      string                 `protobuf:"bytes,6,opt,name=image_url,json=imageUrl,proto3" json:"image_url,omitempty"`
-	DeepLink      string                 `protobuf:"bytes,7,opt,name=deep_link,json=deepLink,proto3" json:"deep_link,omitempty"`
-	Priority      PushPriority           `protobuf:"varint,8,opt,name=priority,proto3,enum=sofascore.PushPriority" json:"priority,omitempty"`
-	TtlSeconds    int32                  `protobuf:"varint,9,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	Data          map[string]string      `protobuf:"bytes,10,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Priority      PushPriority           `protobuf:"varint,7,opt,name=priority,proto3,enum=sofascore.PushPriority" json:"priority,omitempty"`
+	TtlSeconds    int32                  `protobuf:"varint,8,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	Data          map[string]string      `protobuf:"bytes,9,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	SentAt        int64                  `protobuf:"varint,11,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"` // unix milliseconds; client uses for latency
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -5619,13 +5602,6 @@ func (x *WsPush) GetBody() string {
 func (x *WsPush) GetImageUrl() string {
 	if x != nil {
 		return x.ImageUrl
-	}
-	return ""
-}
-
-func (x *WsPush) GetDeepLink() string {
-	if x != nil {
-		return x.DeepLink
 	}
 	return ""
 }
@@ -6190,17 +6166,16 @@ const file_proto_api_proto_rawDesc = "" +
 	" \x01(\tR\rdownloadToken\x12!\n" +
 	"\fdownload_url\x18\v \x01(\tR\vdownloadUrl\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\f \x01(\tR\tcreatedAt\"\xeb\x02\n" +
+	"created_at\x18\f \x01(\tR\tcreatedAt\"\xce\x02\n" +
 	"\vPushPayload\x123\n" +
 	"\bcategory\x18\x01 \x01(\x0e2\x17.sofascore.PushCategoryR\bcategory\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\tR\x04body\x12\x1b\n" +
-	"\timage_url\x18\x04 \x01(\tR\bimageUrl\x12\x1b\n" +
-	"\tdeep_link\x18\x05 \x01(\tR\bdeepLink\x123\n" +
-	"\bpriority\x18\x06 \x01(\x0e2\x17.sofascore.PushPriorityR\bpriority\x12\x1f\n" +
-	"\vttl_seconds\x18\a \x01(\x05R\n" +
+	"\timage_url\x18\x04 \x01(\tR\bimageUrl\x123\n" +
+	"\bpriority\x18\x05 \x01(\x0e2\x17.sofascore.PushPriorityR\bpriority\x12\x1f\n" +
+	"\vttl_seconds\x18\x06 \x01(\x05R\n" +
 	"ttlSeconds\x124\n" +
-	"\x04data\x18\b \x03(\v2 .sofascore.PushPayload.DataEntryR\x04data\x1a7\n" +
+	"\x04data\x18\a \x03(\v2 .sofascore.PushPayload.DataEntryR\x04data\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"m\n" +
@@ -6239,7 +6214,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"\apayload\x18\f \x01(\v2\x16.sofascore.PushPayloadR\apayload\"p\n" +
 	"\x11ScheduledPushPage\x12,\n" +
 	"\x04data\x18\x01 \x03(\v2\x18.sofascore.ScheduledPushR\x04data\x12-\n" +
-	"\x04page\x18\x02 \x01(\v2\x19.sofascore.CursorPageInfoR\x04page\"\x8d\x04\n" +
+	"\x04page\x18\x02 \x01(\v2\x19.sofascore.CursorPageInfoR\x04page\"\xf0\x03\n" +
 	"\vPushMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
@@ -6248,15 +6223,14 @@ const file_proto_api_proto_rawDesc = "" +
 	"\bcategory\x18\x04 \x01(\x0e2\x17.sofascore.PushCategoryR\bcategory\x12\x14\n" +
 	"\x05title\x18\x05 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x06 \x01(\tR\x04body\x12\x1b\n" +
-	"\timage_url\x18\a \x01(\tR\bimageUrl\x12\x1b\n" +
-	"\tdeep_link\x18\b \x01(\tR\bdeepLink\x123\n" +
-	"\bpriority\x18\t \x01(\x0e2\x17.sofascore.PushPriorityR\bpriority\x12\x1f\n" +
-	"\vttl_seconds\x18\n" +
-	" \x01(\x05R\n" +
+	"\timage_url\x18\a \x01(\tR\bimageUrl\x123\n" +
+	"\bpriority\x18\b \x01(\x0e2\x17.sofascore.PushPriorityR\bpriority\x12\x1f\n" +
+	"\vttl_seconds\x18\t \x01(\x05R\n" +
 	"ttlSeconds\x124\n" +
-	"\x04data\x18\v \x03(\v2 .sofascore.PushMessage.DataEntryR\x04data\x12\x16\n" +
-	"\x06source\x18\f \x01(\tR\x06source\x12!\n" +
-	"\fscheduled_id\x18\r \x01(\rR\vscheduledId\x12\x1d\n" +
+	"\x04data\x18\n" +
+	" \x03(\v2 .sofascore.PushMessage.DataEntryR\x04data\x12\x16\n" +
+	"\x06source\x18\v \x01(\tR\x06source\x12!\n" +
+	"\fscheduled_id\x18\f \x01(\rR\vscheduledId\x12\x1d\n" +
 	"\n" +
 	"domain_ids\x18\x0e \x03(\rR\tdomainIds\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
@@ -6320,7 +6294,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"\aWsHello\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\x04R\bdeviceId\x12\x1f\n" +
 	"\vserver_time\x18\x02 \x01(\x03R\n" +
-	"serverTime\"\xb2\x03\n" +
+	"serverTime\"\x95\x03\n" +
 	"\x06WsPush\x12\x17\n" +
 	"\apush_id\x18\x01 \x01(\x04R\x06pushId\x12\x1d\n" +
 	"\n" +
@@ -6328,13 +6302,11 @@ const file_proto_api_proto_rawDesc = "" +
 	"\bcategory\x18\x03 \x01(\x0e2\x17.sofascore.PushCategoryR\bcategory\x12\x14\n" +
 	"\x05title\x18\x04 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x05 \x01(\tR\x04body\x12\x1b\n" +
-	"\timage_url\x18\x06 \x01(\tR\bimageUrl\x12\x1b\n" +
-	"\tdeep_link\x18\a \x01(\tR\bdeepLink\x123\n" +
-	"\bpriority\x18\b \x01(\x0e2\x17.sofascore.PushPriorityR\bpriority\x12\x1f\n" +
-	"\vttl_seconds\x18\t \x01(\x05R\n" +
+	"\timage_url\x18\x06 \x01(\tR\bimageUrl\x123\n" +
+	"\bpriority\x18\a \x01(\x0e2\x17.sofascore.PushPriorityR\bpriority\x12\x1f\n" +
+	"\vttl_seconds\x18\b \x01(\x05R\n" +
 	"ttlSeconds\x12/\n" +
-	"\x04data\x18\n" +
-	" \x03(\v2\x1b.sofascore.WsPush.DataEntryR\x04data\x12\x17\n" +
+	"\x04data\x18\t \x03(\v2\x1b.sofascore.WsPush.DataEntryR\x04data\x12\x17\n" +
 	"\asent_at\x18\v \x01(\x03R\x06sentAt\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

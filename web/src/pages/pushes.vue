@@ -101,7 +101,6 @@ const compose = reactive({
   title: "",
   body: "",
   imageUrl: "",
-  deepLink: "",
   ttlSeconds: 0,
   loading: false,
   error: "",
@@ -123,7 +122,6 @@ function resetCompose(): void {
   compose.title = "";
   compose.body = "";
   compose.imageUrl = "";
-  compose.deepLink = "";
   compose.ttlSeconds = 0;
   compose.error = "";
 }
@@ -140,7 +138,6 @@ async function sendCompose(): Promise<void> {
       title: compose.title.trim(),
       body: compose.body.trim(),
       imageUrl: compose.imageUrl.trim(),
-      deepLink: compose.deepLink.trim(),
       ttlSeconds: Number(compose.ttlSeconds) || 0,
       data: {},
     },
@@ -300,7 +297,6 @@ async function createSchedule(): Promise<void> {
       title: scheduleForm.title.trim(),
       body: scheduleForm.body.trim(),
       imageUrl: "",
-      deepLink: "",
       ttlSeconds: 0,
       data: {},
     },
@@ -696,17 +692,6 @@ watch(activeTab, (tab) => {
                 type="url"
                 class="form-control"
                 placeholder="https://..."
-              />
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label" for="pushes-compose-deeplink">Deep link</label>
-              <input
-                id="pushes-compose-deeplink"
-                v-model="compose.deepLink"
-                type="text"
-                class="form-control"
-                placeholder="/events/123"
               />
             </div>
 

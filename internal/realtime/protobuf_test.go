@@ -50,7 +50,6 @@ func TestEncodeDecodePush(t *testing.T) {
 		Title:      "Goal!",
 		Body:       "Real Madrid 1 - 0 Barcelona",
 		ImageUrl:   "https://cdn.example.com/img.png",
-		DeepLink:   "ott://match/123",
 		Priority:   pb.PushPriority_PUSH_PRIORITY_HIGH,
 		TtlSeconds: 300,
 		Data:       map[string]string{"match_id": "123", "league": "laliga"},

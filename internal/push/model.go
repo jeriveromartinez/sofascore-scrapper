@@ -112,7 +112,6 @@ type PushMessage struct {
 	Title       string      `gorm:"column:title;size:200;not null"`
 	Body        string      `gorm:"column:body;size:2000;not null"`
 	ImageURL    string      `gorm:"column:image_url;size:500"`
-	DeepLink    string      `gorm:"column:deep_link;size:500"`
 	Priority    Priority    `gorm:"column:priority;size:16;not null;default:'normal'"`
 	TTLSeconds  int         `gorm:"column:ttl_seconds;not null;default:0"`
 	DataJSON    StringJSON  `gorm:"column:data_json;type:json"`
@@ -172,7 +171,6 @@ type ScheduledPush struct {
 	Title           string       `gorm:"column:title;size:200;not null"`
 	Body            string       `gorm:"column:body;size:2000;not null"`
 	ImageURL        string       `gorm:"column:image_url;size:500"`
-	DeepLink        string       `gorm:"column:deep_link;size:500"`
 	Priority        Priority     `gorm:"column:priority;size:16;not null;default:'normal'"`
 	TTLSeconds      int          `gorm:"column:ttl_seconds;not null;default:0"`
 	DataJSON        StringJSON   `gorm:"column:data_json;type:json"`

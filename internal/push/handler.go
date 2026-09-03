@@ -138,7 +138,6 @@ func (h *Handler) handleCreateImmediate(c *gin.Context) {
 		Title:      msg.Title,
 		Body:       msg.Body,
 		ImageUrl:   msg.ImageURL,
-		DeepLink:   msg.DeepLink,
 		Priority:   PriorityToProto(msg.Priority),
 		TtlSeconds: int32(msg.TTLSeconds),
 		Data:       map[string]string(msg.DataJSON),

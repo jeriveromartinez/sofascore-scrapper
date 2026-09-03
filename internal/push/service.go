@@ -116,7 +116,7 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 		return nil, nil, err
 	}
 
-	category, title, body, imageURL, deepLink, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
+	category, title, body, imageURL, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
 	now := time.Now()
 	msg := &PushMessage{
 		UserID:     ownerID,
@@ -124,7 +124,6 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 		Title:      title,
 		Body:       body,
 		ImageURL:   imageURL,
-		DeepLink:   deepLink,
 		Priority:   priority,
 		TTLSeconds: ttlSeconds,
 		DataJSON:   data,
@@ -244,7 +243,7 @@ func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, do
 		}
 	}
 
-	category, title, body, imageURL, deepLink, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
+	category, title, body, imageURL, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
 	now := time.Now()
 	sched := &ScheduledPush{
 		UserID:       ownerID,
@@ -252,7 +251,6 @@ func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, do
 		Title:        title,
 		Body:         body,
 		ImageURL:     imageURL,
-		DeepLink:     deepLink,
 		Priority:     priority,
 		TTLSeconds:   ttlSeconds,
 		DataJSON:     data,
@@ -424,7 +422,6 @@ func (s *Service) DispatchTimer(ctx context.Context, schedule *ScheduledPush, ti
 		Title:       schedule.Title,
 		Body:        schedule.Body,
 		ImageURL:    schedule.ImageURL,
-		DeepLink:    schedule.DeepLink,
 		Priority:    schedule.Priority,
 		TTLSeconds:  schedule.TTLSeconds,
 		DataJSON:    schedule.DataJSON,
@@ -628,7 +625,6 @@ func payloadFromSchedule(s *ScheduledPush) *pb.PushPayload {
 		Title:      s.Title,
 		Body:       s.Body,
 		ImageUrl:   s.ImageURL,
-		DeepLink:   s.DeepLink,
 		Priority:   PriorityToProto(s.Priority),
 		TtlSeconds: int32(s.TTLSeconds),
 		Data:       map[string]string(s.DataJSON),
@@ -739,7 +735,7 @@ func (s *Service) validatePayload(p *pb.PushPayload) error {
 	if p == nil {
 		return fmt.Errorf("%w: nil payload", ErrInvalidPayload)
 	}
-	_, _, _, _, _, _, _, _, ok := PayloadFromProto(p)
+	_, _, _, _, _, _, _, ok := PayloadFromProto(p)
 	if !ok {
 		return fmt.Errorf("%w: category, priority, or ttl out of range", ErrInvalidPayload)
 	}
@@ -804,7 +800,6 @@ func buildWsPush(pushID uint64, payload *pb.PushPayload) *pb.WsPush {
 		Title:      payload.GetTitle(),
 		Body:       payload.GetBody(),
 		ImageUrl:   payload.GetImageUrl(),
-		DeepLink:   payload.GetDeepLink(),
 		Priority:   payload.GetPriority(),
 		TtlSeconds: payload.GetTtlSeconds(),
 		Data:       payload.GetData(),

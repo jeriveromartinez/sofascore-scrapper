@@ -69,7 +69,7 @@ func TestPayloadFromProto_RejectsUnspecified(t *testing.T) {
 		Body:     "b",
 		Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
 	}
-	if _, _, _, _, _, _, _, _, ok := PayloadFromProto(p); ok {
+	if _, _, _, _, _, _, _, ok := PayloadFromProto(p); ok {
 		t.Fatal("expected PayloadFromProto to reject UNSPECIFIED category")
 	}
 }
@@ -82,7 +82,7 @@ func TestPayloadFromProto_RejectsBadTTL(t *testing.T) {
 		Priority:   pb.PushPriority_PUSH_PRIORITY_NORMAL,
 		TtlSeconds: -1,
 	}
-	if _, _, _, _, _, _, _, _, ok := PayloadFromProto(p); ok {
+	if _, _, _, _, _, _, _, ok := PayloadFromProto(p); ok {
 		t.Fatal("expected PayloadFromProto to reject negative TTL")
 	}
 }
@@ -93,12 +93,11 @@ func TestPayloadFromProto_AcceptsValid(t *testing.T) {
 		Title:      "Goal!",
 		Body:       "Real Madrid 1 - 0 Barcelona",
 		ImageUrl:   "https://cdn.example.com/img.png",
-		DeepLink:   "ott://match/123",
 		Priority:   pb.PushPriority_PUSH_PRIORITY_HIGH,
 		TtlSeconds: 300,
 		Data:       map[string]string{"match_id": "123"},
 	}
-	category, title, body, image, deep, priority, ttl, data, ok := PayloadFromProto(p)
+	category, title, body, image, priority, ttl, data, ok := PayloadFromProto(p)
 	if !ok {
 		t.Fatal("expected ok=true for valid payload")
 	}
@@ -113,9 +112,6 @@ func TestPayloadFromProto_AcceptsValid(t *testing.T) {
 	}
 	if image != "https://cdn.example.com/img.png" {
 		t.Errorf("image = %q", image)
-	}
-	if deep != "ott://match/123" {
-		t.Errorf("deep_link = %q", deep)
 	}
 	if priority != PriorityHigh {
 		t.Errorf("priority = %q", priority)

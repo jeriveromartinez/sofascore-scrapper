@@ -498,10 +498,9 @@ message PushPayload {
   string title = 2;
   string body = 3;
   string image_url = 4;
-  string deep_link = 5;
-  PushPriority priority = 6;
-  int32 ttl_seconds = 7;                       // 0 = no TTL
-  map<string, string> data = 8;                // free-form metadata
+  PushPriority priority = 5;
+  int32 ttl_seconds = 6;                       // 0 = no TTL
+  map<string, string> data = 7;                // free-form metadata
 }
 
 message CreateImmediatePushRequest {
@@ -556,12 +555,11 @@ message PushMessage {
   string title = 5;
   string body = 6;
   string image_url = 7;
-  string deep_link = 8;
-  PushPriority priority = 9;
-  int32 ttl_seconds = 10;
-  map<string, string> data = 11;
-  string source = 12;                          // "immediate" | "scheduled"
-  uint32 scheduled_id = 13;                    // 0 when source == "immediate"
+  PushPriority priority = 8;
+  int32 ttl_seconds = 9;
+  map<string, string> data = 10;
+  string source = 11;                          // "immediate" | "scheduled"
+  uint32 scheduled_id = 12;                    // 0 when source == "immediate"
   repeated uint32 domain_ids = 14;
 }
 
@@ -649,10 +647,9 @@ message WsPush {
   string title = 4;
   string body = 5;
   string image_url = 6;
-  string deep_link = 7;
-  PushPriority priority = 8;
-  int32 ttl_seconds = 9;
-  map<string, string> data = 10;
+  PushPriority priority = 7;
+  int32 ttl_seconds = 8;
+  map<string, string> data = 9;
   int64 sent_at = 11;                          // unix milliseconds; client uses for latency
 }
 
