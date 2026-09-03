@@ -33,7 +33,7 @@ func newServiceDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(
 		&users.User{}, &domains.Domain{}, &devices.Device{},
 		&PushMessage{}, &PushMessageTarget{},
-		&ScheduledPush{}, &ScheduledPushTarget{},
+		&ScheduledPush{}, &ScheduledPushTarget{}, &ScheduledPushTimer{},
 		&DeliveryAttempt{},
 	); err != nil {
 		t.Fatalf("automigrate: %v", err)
@@ -222,7 +222,7 @@ func TestService_OnAck_FlipsRowToDelivered(t *testing.T) {
 // matches what the service computed (next_fire_at, cron_expr).
 func TestService_CreateSchedule_OneShotAndRecurring(t *testing.T) {
 	db := newServiceDB(t)
-	uid, d1, _ := seedUserDomainDevice(t, db, 0)
+	uid, d1, _ := seedUserDomainDevice(t, db, 1)
 
 	repo := NewRepository(db)
 	pusher := newFakePusher()
@@ -235,10 +235,10 @@ func TestService_CreateSchedule_OneShotAndRecurring(t *testing.T) {
 
 	// one_shot
 	runAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-	one, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
+	one, _, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "t", Body: "b", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_ONE_SHOT, &runAt, "")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_ONE_SHOT, &runAt, "", TimezoneModeManager, "UTC")
 	if err != nil {
 		t.Fatalf("CreateSchedule one: %v", err)
 	}
@@ -250,10 +250,10 @@ func TestService_CreateSchedule_OneShotAndRecurring(t *testing.T) {
 	}
 
 	// recurring
-	rec, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
+	rec, _, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "t2", Body: "b2", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", TimezoneModeManager, "UTC")
 	if err != nil {
 		t.Fatalf("CreateSchedule rec: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestService_CreateSchedule_OneShotAndRecurring(t *testing.T) {
 // before the insert.
 func TestService_CreateSchedule_BadCronIsRejected(t *testing.T) {
 	db := newServiceDB(t)
-	uid, d1, _ := seedUserDomainDevice(t, db, 0)
+	uid, d1, _ := seedUserDomainDevice(t, db, 1)
 
 	repo := NewRepository(db)
 	pusher := newFakePusher()
@@ -286,10 +286,10 @@ func TestService_CreateSchedule_BadCronIsRejected(t *testing.T) {
 	}
 	s := NewService(repo, pusher, domainRepo, userRepo, nil)
 
-	_, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
+	_, _, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "t", Body: "b", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "not a cron")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "not a cron", TimezoneModeManager, "UTC")
 	if !errors.Is(err, ErrInvalidSchedule) {
 		t.Errorf("err = %v, want ErrInvalidSchedule", err)
 	}

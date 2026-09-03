@@ -127,29 +127,100 @@ func (r *Repository) ListAudienceDevicesForDomains(ctx context.Context, domainID
 	return rows, err
 }
 
-// InsertScheduledPushWithTargets creates a schedule and links it
-// to the given domain IDs. For one_shot, the caller must set
-// RunAt; for recurring, CronExpr.
-func (r *Repository) InsertScheduledPushWithTargets(ctx context.Context, s *ScheduledPush, domainIDs []uint) error {
+// InsertScheduledPushWithTargets creates a schedule, links it to the
+// given domain IDs, and seeds one timer per audience device in a
+// single transaction. The timers slice carries the fire time per
+// device (already computed by the service with the right TZ).
+func (r *Repository) InsertScheduledPushWithTargets(ctx context.Context, s *ScheduledPush, domainIDs []uint, timers []ScheduledPushTimer) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(s).Error; err != nil {
 			return err
 		}
-		if len(domainIDs) == 0 {
-			return nil
+		if len(domainIDs) > 0 {
+			rows := make([]ScheduledPushTarget, 0, len(domainIDs))
+			for _, id := range domainIDs {
+				rows = append(rows, ScheduledPushTarget{ScheduledPushID: s.ID, DomainID: id})
+			}
+			if err := tx.Create(&rows).Error; err != nil {
+				return err
+			}
 		}
-		rows := make([]ScheduledPushTarget, 0, len(domainIDs))
-		for _, id := range domainIDs {
-			rows = append(rows, ScheduledPushTarget{ScheduledPushID: s.ID, DomainID: id})
+		if len(timers) > 0 {
+			for i := range timers {
+				timers[i].ScheduledPushID = s.ID
+			}
+			if err := tx.Create(&timers).Error; err != nil {
+				return err
+			}
 		}
-		return tx.Create(&rows).Error
+		return nil
 	})
 }
 
-// ListDueScheduledPushes returns up to limit active schedules whose
-// next_fire_at <= now. The runner calls this every tick (default
-// 30s). Order is by next_fire_at ASC so the oldest overdue row fires
-// first.
+// ListDueTimers returns up to limit timers across all active
+// schedules whose fire_at <= now AND dispatched_at IS NULL. The
+// scheduler worker calls this every tick. Joins ScheduledPush to
+// surface is_active so we can skip paused campaigns without a
+// second query.
+func (r *Repository) ListDueTimers(ctx context.Context, now time.Time, limit int) ([]ScheduledPushTimer, error) {
+	var rows []ScheduledPushTimer
+	err := r.db.WithContext(ctx).
+		Joins("JOIN scheduled_pushes ON scheduled_pushes.id = scheduled_push_timers.scheduled_push_id").
+		Where("scheduled_pushes.is_active = ? AND scheduled_push_timers.dispatched_at IS NULL AND scheduled_push_timers.fire_at <= ?", true, now).
+		Order("scheduled_push_timers.fire_at ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
+// MarkTimerDispatched stamps dispatched_at on a single timer row.
+// Idempotent: if the row is already stamped, the UPDATE affects 0
+// rows but no error is raised. The unique invariant we rely on is
+// that each (schedule, device, fire) fires at most once across the
+// cluster even under worker races.
+func (r *Repository) MarkTimerDispatched(ctx context.Context, timerID uint, firedAt time.Time) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&ScheduledPushTimer{}).
+		Where("id = ? AND dispatched_at IS NULL", timerID).
+		Update("dispatched_at", firedAt)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+// InsertTimer adds a new pending timer for a recurring re-fire.
+// The caller computes the next fire time per the schedule's
+// TimezoneMode + the device's TZ.
+func (r *Repository) InsertTimer(ctx context.Context, t *ScheduledPushTimer) error {
+	return r.db.WithContext(ctx).Create(t).Error
+}
+
+// RemovePendingTimersForSchedule deletes every undispatched timer
+// for a schedule. Used when the operator deletes the schedule or
+// the user toggles notifications off.
+func (r *Repository) RemovePendingTimersForSchedule(ctx context.Context, scheduleID uint) error {
+	return r.db.WithContext(ctx).
+		Where("scheduled_push_id = ? AND dispatched_at IS NULL", scheduleID).
+		Delete(&ScheduledPushTimer{}).Error
+}
+
+// AllPendingTimers returns every undispatched timer across all
+// active schedules. Used by the worker on startup to rebuild the
+// Redis ZSET index from the durable DB.
+func (r *Repository) AllPendingTimers(ctx context.Context) ([]ScheduledPushTimer, error) {
+	var rows []ScheduledPushTimer
+	err := r.db.WithContext(ctx).
+		Joins("JOIN scheduled_pushes ON scheduled_pushes.id = scheduled_push_timers.scheduled_push_id").
+		Where("scheduled_pushes.is_active = ? AND scheduled_push_timers.dispatched_at IS NULL", true).
+		Order("scheduled_push_timers.fire_at ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+// ListDueScheduledPushes is the schedule-level (deprecated) view.
+// It is kept around because the metrics aggregator still polls it
+// for active-schedule counts, but the worker now reads per-timer
+// rows. New code should call ListDueTimers.
 func (r *Repository) ListDueScheduledPushes(ctx context.Context, now time.Time, limit int) ([]ScheduledPush, error) {
 	var rows []ScheduledPush
 	err := r.db.WithContext(ctx).
@@ -158,6 +229,71 @@ func (r *Repository) ListDueScheduledPushes(ctx context.Context, now time.Time, 
 		Limit(limit).
 		Find(&rows).Error
 	return rows, err
+}
+
+// FindDeviceByID is a thin wrapper so the service can load a
+// device's timezone when computing the next recurring fire.
+func (r *Repository) FindDeviceByID(ctx context.Context, id uint) (devices.Device, error) {
+	var d devices.Device
+	if err := r.db.WithContext(ctx).First(&d, id).Error; err != nil {
+		return devices.Device{}, err
+	}
+	return d, nil
+}
+
+// GetScheduledPushDomainIDs returns the audience domain IDs for a
+// scheduled push, flattened. Used by DispatchTimer to build the
+// push_messages_targets join rows.
+func (r *Repository) GetScheduledPushDomainIDs(ctx context.Context, scheduleID uint) ([]uint, error) {
+	var rows []ScheduledPushTarget
+	if err := r.db.WithContext(ctx).
+		Where("scheduled_push_id = ?", scheduleID).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]uint, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.DomainID)
+	}
+	return out, nil
+}
+
+// EarliestPendingTimer returns the soonest fire_at for any undispatched
+// timer on a schedule. Used by the service to keep
+// scheduled_pushes.next_fire_at in sync after re-enqueuing a
+// recurring fire.
+func (r *Repository) EarliestPendingTimer(ctx context.Context, scheduleID uint) (time.Time, error) {
+	var row ScheduledPushTimer
+	err := r.db.WithContext(ctx).
+		Where("scheduled_push_id = ? AND dispatched_at IS NULL", scheduleID).
+		Order("fire_at ASC").
+		Limit(1).
+		Find(&row).Error
+	if err != nil {
+		return time.Time{}, err
+	}
+	return row.FireAt, nil
+}
+
+// PendingTimersAtOrAfter returns every undispatched timer on a
+// schedule whose fire_at >= the given moment. Used by the worker
+// to repopulate the Redis index after a fire.
+func (r *Repository) PendingTimersAtOrAfter(ctx context.Context, scheduleID uint, min time.Time) ([]ScheduledPushTimer, error) {
+	var rows []ScheduledPushTimer
+	err := r.db.WithContext(ctx).
+		Where("scheduled_push_id = ? AND dispatched_at IS NULL AND fire_at >= ?", scheduleID, min).
+		Order("fire_at ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+// UpdateScheduledPushNextFireAt is a one-column setter. Called when
+// the recurring-fire path inserts a new timer so the schedule
+// header reflects the new earliest.
+func (r *Repository) UpdateScheduledPushNextFireAt(ctx context.Context, id uint, t time.Time) error {
+	return r.db.WithContext(ctx).Model(&ScheduledPush{}).
+		Where("id = ?", id).
+		Update("next_fire_at", t).Error
 }
 
 // GetPushMessageTargets returns the join rows linking a push to
