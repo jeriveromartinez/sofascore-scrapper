@@ -251,21 +251,21 @@ func (h *Handler) handleCreateSchedule(c *gin.Context) {
 	}
 
 	// The dashboard signals the timezone behavior via query
-	// params (?tz_mode=...&manager_tz=...). The proto wire
+	// params (?tz_mode=...&timezone=...). The proto wire
 	// format is unchanged so the existing API contract stays
 	// stable. Defaults preserve the previous behavior (cron in
 	// UTC) so older dashboard builds continue to work.
-	tzMode := TimezoneModeManager
+	tzMode := TimezoneModeShared
 	switch c.Query("tz_mode") {
 	case "device_local":
 		tzMode = TimezoneModeDeviceLocal
 	}
-	managerTZ := c.Query("manager_tz")
-	if managerTZ == "" {
-		managerTZ = "UTC"
+	timezone := c.Query("timezone")
+	if timezone == "" {
+		timezone = "UTC"
 	}
 
-	sched, timers, err := h.svc.CreateSchedule(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload, req.ScheduleType, runAt, req.CronExpr, tzMode, managerTZ)
+	sched, timers, err := h.svc.CreateSchedule(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload, req.ScheduleType, runAt, req.CronExpr, tzMode, timezone)
 	if err != nil {
 		writeServiceError(c, err)
 		return

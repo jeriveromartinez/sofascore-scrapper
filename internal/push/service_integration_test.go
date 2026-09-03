@@ -238,7 +238,7 @@ func TestService_CreateSchedule_OneShotAndRecurring(t *testing.T) {
 	one, _, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "t", Body: "b", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_ONE_SHOT, &runAt, "", TimezoneModeManager, "UTC")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_ONE_SHOT, &runAt, "", TimezoneModeShared, "UTC")
 	if err != nil {
 		t.Fatalf("CreateSchedule one: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestService_CreateSchedule_OneShotAndRecurring(t *testing.T) {
 	rec, _, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "t2", Body: "b2", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", TimezoneModeManager, "UTC")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", TimezoneModeShared, "UTC")
 	if err != nil {
 		t.Fatalf("CreateSchedule rec: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestService_CreateSchedule_BadCronIsRejected(t *testing.T) {
 	_, _, err := s.CreateSchedule(context.Background(), uid, uid, []uint{d1}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "t", Body: "b", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "not a cron", TimezoneModeManager, "UTC")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "not a cron", TimezoneModeShared, "UTC")
 	if !errors.Is(err, ErrInvalidSchedule) {
 		t.Errorf("err = %v, want ErrInvalidSchedule", err)
 	}

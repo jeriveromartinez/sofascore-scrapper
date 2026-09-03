@@ -208,15 +208,15 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 // with one timer per audience device. The cron expression is
 // evaluated per device when timezoneMode == DEVICE_LOCAL (each device
 // fires at its own local wall-clock moment) and once in the
-// manager's TZ when timezoneMode == MANAGER (all devices fire at
-// the same UTC moment).
+// schedule's Timezone when timezoneMode == SHARED (all devices fire
+// at the same UTC moment).
 //
 // The caller (handler) is responsible for enqueuing the returned
 // timers into the TimerStore so the worker can pick them up. We
 // split this because the handler is the boundary that knows whether
 // Redis is available; falling back to a DB scan is the worker's
 // job, not the service's.
-func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, domainIDs []uint, payload *pb.PushPayload, scheduleType pb.PushScheduleType, runAt *time.Time, cronExpr string, tzMode TimezoneMode, managerTZ string) (*ScheduledPush, []ScheduledPushTimer, error) {
+func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, domainIDs []uint, payload *pb.PushPayload, scheduleType pb.PushScheduleType, runAt *time.Time, cronExpr string, tzMode TimezoneMode, timezone string) (*ScheduledPush, []ScheduledPushTimer, error) {
 	if err := s.authorize(ctx, callerID, ownerID); err != nil {
 		return nil, nil, err
 	}
@@ -233,33 +233,33 @@ func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, do
 		return nil, nil, err
 	}
 	if !tzMode.Valid() {
-		return nil, nil, fmt.Errorf("%w: timezone_mode must be manager or device_local", ErrInvalidSchedule)
+		return nil, nil, fmt.Errorf("%w: timezone_mode must be shared or device_local", ErrInvalidSchedule)
 	}
-	if tzMode == TimezoneModeManager && managerTZ == "" {
-		managerTZ = "UTC"
+	if tzMode == TimezoneModeShared && timezone == "" {
+		timezone = "UTC"
 	}
-	if tzMode == TimezoneModeManager {
-		if _, err := time.LoadLocation(managerTZ); err != nil {
-			return nil, nil, fmt.Errorf("%w: invalid manager_timezone %q", ErrInvalidSchedule, managerTZ)
+	if tzMode == TimezoneModeShared {
+		if _, err := time.LoadLocation(timezone); err != nil {
+			return nil, nil, fmt.Errorf("%w: invalid timezone %q", ErrInvalidSchedule, timezone)
 		}
 	}
 
 	category, title, body, imageURL, deepLink, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
 	now := time.Now()
 	sched := &ScheduledPush{
-		UserID:          ownerID,
-		Category:        category,
-		Title:           title,
-		Body:            body,
-		ImageURL:        imageURL,
-		DeepLink:        deepLink,
-		Priority:        priority,
-		TTLSeconds:      ttlSeconds,
-		DataJSON:        data,
-		IsActive:        true,
-		TimezoneMode:    tzMode,
-		ManagerTimezone: managerTZ,
-		NextFireAt:      now,
+		UserID:       ownerID,
+		Category:     category,
+		Title:        title,
+		Body:         body,
+		ImageURL:     imageURL,
+		DeepLink:     deepLink,
+		Priority:     priority,
+		TTLSeconds:   ttlSeconds,
+		DataJSON:     data,
+		IsActive:     true,
+		TimezoneMode: tzMode,
+		Timezone:     timezone,
+		NextFireAt:   now,
 	}
 
 	var parsed cron.Schedule
@@ -325,7 +325,7 @@ func (s *Service) buildTimers(sched *ScheduledPush, parsed cron.Schedule, runAt 
 		earliest = fire
 	case ScheduleTypeRecurring:
 		for _, d := range audience {
-			fire, err := s.nextCronFire(parsed, sched.TimezoneMode, sched.ManagerTimezone, d.Timezone, now)
+			fire, err := s.nextCronFire(parsed, sched.TimezoneMode, sched.Timezone, d.Timezone, now)
 			if err != nil {
 				return nil, time.Time{}, err
 			}
@@ -344,13 +344,13 @@ func (s *Service) buildTimers(sched *ScheduledPush, parsed cron.Schedule, runAt 
 }
 
 // nextCronFire evaluates the cron expression in the right TZ and
-// returns the next moment >= now. For MANAGER mode the managerTZ
-// is used; for DEVICE_LOCAL the device's own TZ (falling back to
-// UTC if empty or invalid, with a debug log).
-func (s *Service) nextCronFire(parsed cron.Schedule, mode TimezoneMode, managerTZ, deviceTZ string, now time.Time) (time.Time, error) {
+// returns the next moment >= now. For SHARED mode the schedule's
+// Timezone is used; for DEVICE_LOCAL the device's own TZ (falling
+// back to UTC if empty or invalid, with a debug log).
+func (s *Service) nextCronFire(parsed cron.Schedule, mode TimezoneMode, scheduleTZ, deviceTZ string, now time.Time) (time.Time, error) {
 	switch mode {
-	case TimezoneModeManager:
-		loc, err := time.LoadLocation(managerTZ)
+	case TimezoneModeShared:
+		loc, err := time.LoadLocation(scheduleTZ)
 		if err != nil || loc == nil {
 			loc = time.UTC
 		}
@@ -479,7 +479,7 @@ func (s *Service) scheduleNextRecurringFire(ctx context.Context, schedule *Sched
 	if err != nil {
 		return fmt.Errorf("parse cron: %w", err)
 	}
-	next, err := s.nextCronFire(parsed, schedule.TimezoneMode, schedule.ManagerTimezone, dev.Timezone, now)
+	next, err := s.nextCronFire(parsed, schedule.TimezoneMode, schedule.Timezone, dev.Timezone, now)
 	if err != nil {
 		return err
 	}

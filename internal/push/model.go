@@ -132,21 +132,21 @@ type PushMessageTarget struct {
 }
 
 // TimezoneMode discriminates how the cron expression of a
-// ScheduledPush is interpreted. MANAGER (default) evaluates the cron
-// in the operator's TZ and fires once for the whole audience at the
-// resulting UTC moment. DEVICE_LOCAL evaluates the cron per device
-// in each device's registered timezone, producing a separate fire
-// time per device (each with its own row in
-// scheduled_push_timers).
+// ScheduledPush is interpreted. SHARED (default) evaluates the
+// cron once in the schedule's Timezone and fires the whole
+// audience at the resulting UTC moment. DEVICE_LOCAL evaluates
+// the cron per device in each device's registered timezone,
+// producing a separate fire time per device (each with its own
+// row in scheduled_push_timers).
 type TimezoneMode string
 
 const (
-	TimezoneModeManager     TimezoneMode = "manager"
+	TimezoneModeShared     TimezoneMode = "shared"
 	TimezoneModeDeviceLocal TimezoneMode = "device_local"
 )
 
 func (m TimezoneMode) Valid() bool {
-	return m == TimezoneModeManager || m == TimezoneModeDeviceLocal
+	return m == TimezoneModeShared || m == TimezoneModeDeviceLocal
 }
 
 // ScheduledPush is a push that fires automatically — either at a
@@ -166,8 +166,8 @@ type ScheduledPush struct {
 	NextFireAt      time.Time    `gorm:"column:next_fire_at;not null;index:idx_schedules_active_next,priority:2"`
 	LastFiredAt     *time.Time   `gorm:"column:last_fired_at;null"`
 	IsActive        bool         `gorm:"column:is_active;not null;default:true;index:idx_schedules_active_next,priority:1"`
-	TimezoneMode    TimezoneMode `gorm:"column:timezone_mode;size:16;not null;default:'manager'"`
-	ManagerTimezone string       `gorm:"column:manager_timezone;size:64;not null;default:'UTC'"`
+	TimezoneMode    TimezoneMode `gorm:"column:timezone_mode;size:16;not null;default:'shared'"`
+	Timezone        string       `gorm:"column:timezone;size:64;not null;default:'UTC'"`
 	Category        Category     `gorm:"column:category;size:32;not null"`
 	Title           string       `gorm:"column:title;size:200;not null"`
 	Body            string       `gorm:"column:body;size:2000;not null"`

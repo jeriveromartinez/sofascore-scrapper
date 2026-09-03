@@ -168,7 +168,7 @@ func TestTimersRunner_DispatchesDueTimersFromRedis(t *testing.T) {
 	sched, timers, err := f.svc.CreateSchedule(context.Background(), f.uid, f.uid, []uint{f.domain}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "news", Body: "now", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", push.TimezoneModeManager, "UTC")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", push.TimezoneModeShared, "UTC")
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestTimersRunner_MarkDispatchedIsIdempotent(t *testing.T) {
 	_, timers, err := f.svc.CreateSchedule(context.Background(), f.uid, f.uid, []uint{f.domain}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "x", Body: "x", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", push.TimezoneModeManager, "UTC")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", push.TimezoneModeShared, "UTC")
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}

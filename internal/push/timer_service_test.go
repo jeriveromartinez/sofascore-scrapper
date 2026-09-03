@@ -165,7 +165,7 @@ func TestService_CreateSchedule_DeviceLocal_FiresAtDeviceLocalTime(t *testing.T)
 	}
 }
 
-func TestService_CreateSchedule_Manager_FiresAtManagerTime(t *testing.T) {
+func TestService_CreateSchedule_Shared_FiresAtSharedTime(t *testing.T) {
 	f := newTimerFixture(t)
 	timerTestingT = t
 	f.addDevice("mex-2", "America/Mexico_City")
@@ -174,8 +174,8 @@ func TestService_CreateSchedule_Manager_FiresAtManagerTime(t *testing.T) {
 	svc := f.service()
 	_, timers, err := svc.CreateSchedule(context.Background(), f.uid, f.uid, []uint{f.domainID}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
-		Title:    "show", Body: "21:00 manager", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 21 * * *", TimezoneModeManager, "America/Mexico_City")
+		Title:    "show", Body: "21:00 shared", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 21 * * *", TimezoneModeShared, "America/Mexico_City")
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -183,23 +183,23 @@ func TestService_CreateSchedule_Manager_FiresAtManagerTime(t *testing.T) {
 		t.Fatalf("got %d timers, want 2", len(timers))
 	}
 
-	// Manager mode = all devices fire at the SAME UTC moment.
+	// Shared mode = all devices fire at the SAME UTC moment.
 	if !timers[0].FireAt.Equal(timers[1].FireAt) {
-		t.Errorf("manager mode: device 1 fires at %s, device 2 at %s (must match)",
+		t.Errorf("shared mode: device 1 fires at %s, device 2 at %s (must match)",
 			timers[0].FireAt, timers[1].FireAt)
 	}
-	// And the fire moment, in the manager TZ, reads 21:00.
+	// And the fire moment, in the schedule's Timezone, reads 21:00.
 	mx, _ := time.LoadLocation("America/Mexico_City")
 	if mx == nil {
 		t.Skip("America/Mexico_City unavailable in tzdata")
 	}
 	local := timers[0].FireAt.In(mx)
 	if local.Hour() != 21 || local.Minute() != 0 {
-		t.Errorf("manager TZ local fire = %s, want 21:00", local.Format(time.RFC3339))
+		t.Errorf("shared TZ local fire = %s, want 21:00", local.Format(time.RFC3339))
 	}
 }
 
-func TestService_CreateSchedule_RejectsInvalidManagerTZ(t *testing.T) {
+func TestService_CreateSchedule_RejectsInvalidTimezone(t *testing.T) {
 	f := newTimerFixture(t)
 	timerTestingT = t
 	f.addDevice("d-1", "UTC")
@@ -208,7 +208,7 @@ func TestService_CreateSchedule_RejectsInvalidManagerTZ(t *testing.T) {
 	_, _, err := svc.CreateSchedule(context.Background(), f.uid, f.uid, []uint{f.domainID}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "x", Body: "x", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", TimezoneModeManager, "Not/A/Zone")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", TimezoneModeShared, "Not/A/Zone")
 	if !errors.Is(err, ErrInvalidSchedule) {
 		t.Fatalf("err = %v, want ErrInvalidSchedule", err)
 	}
@@ -221,7 +221,7 @@ func TestService_CreateSchedule_NoAudienceFails(t *testing.T) {
 	_, _, err := svc.CreateSchedule(context.Background(), f.uid, f.uid, []uint{f.domainID}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "x", Body: "x", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", TimezoneModeManager, "UTC")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_RECURRING, nil, "0 * * * *", TimezoneModeShared, "UTC")
 	if !errors.Is(err, ErrInvalidSchedule) {
 		t.Fatalf("err = %v, want ErrInvalidSchedule", err)
 	}
@@ -241,7 +241,7 @@ func TestService_DispatchTimer_FiresOnce(t *testing.T) {
 	sched, timers, err := svc.CreateSchedule(context.Background(), f.uid, f.uid, []uint{f.domainID}, &pb.PushPayload{
 		Category: pb.PushCategory_PUSH_CATEGORY_ADMIN_MESSAGE,
 		Title:    "t", Body: "b", Priority: pb.PushPriority_PUSH_PRIORITY_NORMAL,
-	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_ONE_SHOT, ptrTime(time.Now().Add(time.Hour)), "", TimezoneModeManager, "UTC")
+	}, pb.PushScheduleType_PUSH_SCHEDULE_TYPE_ONE_SHOT, ptrTime(time.Now().Add(time.Hour)), "", TimezoneModeShared, "UTC")
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
