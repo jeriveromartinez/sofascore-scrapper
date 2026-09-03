@@ -138,7 +138,12 @@ describe("pushes.vue", () => {
     wrapper.unmount();
   });
 
-  it("creates a schedule with manager TZ by default", async () => {
+  it("creates a schedule in UTC when 'use each client's local timezone' is off", async () => {
+    // When the operator leaves the device-local checkbox off, the
+    // schedule must be saved in UTC. The frontend signals that by
+    // NOT sending a timezone, so the backend applies its UTC
+    // default. This test pins that contract — if a future change
+    // reintroduces an admin-timezone pick, this test fails.
     const authStore = useAuthStore();
     authStore.setUser(
       { id: 7, email: "admin@example.com", token: "t", refreshToken: "rt" },
@@ -168,16 +173,15 @@ describe("pushes.vue", () => {
     await flushPromises();
     await nextTick();
     expect(wrapper.find('[data-test="pushes-schedule-title"]').exists()).toBe(true);
-    const vm = wrapper.vm as unknown as { scheduleForm: { title: string; body: string; cronExpr: string; managerTz: string; domainIds: number[]; scheduleType: number } };
+    const vm = wrapper.vm as unknown as { scheduleForm: { title: string; body: string; cronExpr: string; domainIds: number[]; scheduleType: number } };
     await wrapper.find('[data-test="pushes-schedule-domain-11"]').setValue(true);
     await wrapper.find('[data-test="pushes-schedule-title"]').setValue("news");
-    await wrapper.find('[data-test="pushes-schedule-body"]').setValue("9pm show");
+    await wrapper.find('[data-test="pushes-schedule-body"]').setValue("9pm utc");
     await wrapper.find('[data-test="pushes-schedule-type"]').setValue("2");
     await flush();
     await flushPromises();
     await nextTick();
     vm.scheduleForm.cronExpr = "0 21 * * *";
-    vm.scheduleForm.managerTz = "America/Mexico_City";
     await flush();
     await flushPromises();
     await wrapper.find('[data-test="pushes-schedule-form"]').trigger("submit");
@@ -185,10 +189,14 @@ describe("pushes.vue", () => {
     await flushPromises();
     await nextTick();
     expect(createSpy).toHaveBeenCalledTimes(1);
-    expect(createSpy.mock.calls[0]?.[1]).toEqual({
-      tzMode: "manager",
-      managerTz: "America/Mexico_City",
-    });
+    const options = createSpy.mock.calls[0]?.[1] as
+      | { tzMode: string; timezone: string }
+      | undefined;
+    expect(options?.tzMode).toBe("shared");
+    // Empty timezone tells the backend to default to UTC. The
+    // API service drops the query param on empty, so the backend
+    // never sees a timezone from the dashboard in this mode.
+    expect(options?.timezone).toBe("");
     wrapper.unmount();
   });
 
@@ -236,7 +244,7 @@ describe("pushes.vue", () => {
     expect(createSpy).toHaveBeenCalledTimes(1);
     expect(createSpy.mock.calls[0]?.[1]).toEqual({
       tzMode: "device_local",
-      managerTz: "",
+      timezone: "",
     });
     wrapper.unmount();
   });

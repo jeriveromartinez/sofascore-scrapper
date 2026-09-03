@@ -195,10 +195,9 @@ const scheduleForm = reactive({
   cronExpr: "",
   // When deviceLocal is true, the cron expression is evaluated
   // in each device's local timezone (every device fires at its
-  // own 9pm, etc). When false, all devices fire at the same
-  // moment computed in the manager's timezone.
+  // own 9pm, etc). When false, the cron is evaluated in UTC and
+  // every device fires at the same UTC moment.
   deviceLocal: false,
-  managerTz: "",
   loading: false,
   error: "",
 });
@@ -238,7 +237,6 @@ function resetScheduleForm(): void {
   scheduleForm.runAt = "";
   scheduleForm.cronExpr = "";
   scheduleForm.deviceLocal = false;
-  scheduleForm.managerTz = "";
   scheduleForm.error = "";
 }
 
@@ -318,8 +316,8 @@ async function createSchedule(): Promise<void> {
   };
   try {
     await pushesApiService.createSchedule(payload, {
-      tzMode: scheduleForm.deviceLocal ? "device_local" : "manager",
-      managerTz: scheduleForm.deviceLocal ? "" : scheduleForm.managerTz.trim(),
+      tzMode: scheduleForm.deviceLocal ? "device_local" : "shared",
+      timezone: "",
     });
     toast.success("Schedule created");
     resetScheduleForm();
@@ -917,25 +915,7 @@ watch(activeTab, (tab) => {
                   <small class="text-muted d-block mt-1">
                     When enabled, each device fires the schedule at its own local time (a 9pm
                     cron reaches every device at 9pm local). When disabled, all devices fire
-                    at the same moment calculated in the manager's timezone below.
-                  </small>
-                </div>
-
-                <div v-if="!scheduleForm.deviceLocal" class="col-md-6">
-                  <label class="form-label" for="pushes-schedule-manager-tz">
-                    Manager timezone
-                  </label>
-                  <input
-                    id="pushes-schedule-manager-tz"
-                    v-model="scheduleForm.managerTz"
-                    type="text"
-                    class="form-control"
-                    placeholder="America/Mexico_City"
-                    data-test="pushes-schedule-manager-tz"
-                  />
-                  <small class="text-muted">
-                    IANA name (e.g. <code>America/Mexico_City</code>, <code>Europe/Madrid</code>).
-                    Leave blank for UTC.
+                    at the same moment calculated in UTC.
                   </small>
                 </div>
 

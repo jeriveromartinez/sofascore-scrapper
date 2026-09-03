@@ -76,11 +76,11 @@ export class PushesApiService extends BaseApiService {
 
   async createSchedule(
     payload: CreateSchedulePayload,
-    options?: { tzMode?: "manager" | "device_local"; managerTz?: string },
+    options?: { tzMode?: "shared" | "device_local"; timezone?: string },
   ): Promise<ScheduledPush> {
     const params = new URLSearchParams();
     if (options?.tzMode) params.set("tz_mode", options.tzMode);
-    if (options?.managerTz) params.set("manager_tz", options.managerTz);
+    if (options?.timezone) params.set("timezone", options.timezone);
     const qs = params.toString();
     const url = qs ? `/schedules?${qs}` : "/schedules";
     return this.post(url, payload, CreateSchedulePayloadCodec, ProtoScheduledPush);
