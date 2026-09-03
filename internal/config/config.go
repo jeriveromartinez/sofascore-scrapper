@@ -57,6 +57,17 @@ type Config struct {
 	HTTP              HTTP
 	ScrapeBatchSize   int
 	ScrapeConcurrency int
+	// PushTimerTickInterval is how often the timers runner wakes up
+	// to dispatch due scheduled pushes. Default 5s balances latency
+	// against DB load; smaller intervals cost more queries per
+	// minute, larger intervals stretch the perceived delay between
+	// the cron tick and the user-visible push.
+	PushTimerTickInterval time.Duration
+	// PushTimerBatchLimit caps the number of timers the runner
+	// processes per tick. Default 100 keeps a single tick
+	// bounded; raise it when the campaign mix is dominated by
+	// large audiences.
+	PushTimerBatchLimit int
 	// SkipMigrate, when true, skips database AutoMigrate and the
 	// default-admin seeder on startup. Used when the operator manages
 	// schema externally or wants a hot path with no DB write.
@@ -79,9 +90,11 @@ func Load() (Config, error) {
 		JWTSecret:         secret,
 		APKStoragePath:    getEnv("APK_STORAGE_PATH", "./apk_storage"),
 		ImageStoragePath:  getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
-		ScrapeBatchSize:   getInt("SCRAPE_BATCH_SIZE", 500),
-		ScrapeConcurrency: getInt("SCRAPE_CONCURRENCY", 8),
-		SkipMigrate:       getBool("SKIP_MIGRATE", false),
+		ScrapeBatchSize:        getInt("SCRAPE_BATCH_SIZE", 500),
+		ScrapeConcurrency:      getInt("SCRAPE_CONCURRENCY", 8),
+		PushTimerTickInterval:  getDuration("PUSH_TIMER_TICK_INTERVAL", 5*time.Second),
+		PushTimerBatchLimit:    getInt("PUSH_TIMER_BATCH_LIMIT", 100),
+		SkipMigrate:            getBool("SKIP_MIGRATE", false),
 		Database: Database{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "3306"),

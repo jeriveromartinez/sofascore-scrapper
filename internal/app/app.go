@@ -37,6 +37,7 @@ type App struct {
 	DB            *gorm.DB
 	SQL           *sql.DB
 	Redis         *goredis.Client
+	Cfg           config.Config
 	logoScheduler events.TeamLogoScheduler
 	// realtimeHub is the local WebSocket registry. One per backend
 	// instance; the Redis pub/sub subscriber fans out cross-instance.
@@ -106,6 +107,7 @@ func New(cfg config.Config) (*App, error) {
 	pprofSrv := observability.NewPprofServer(cfg.PprofAddr, cfg.PprofEnabled)
 
 	app := &App{
+		Cfg:           cfg,
 		Scheduler:     sched,
 		DB:            db,
 		SQL:           sqlDB,
@@ -164,7 +166,10 @@ func (a *App) Run(ctx context.Context) error {
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))
-	a.Scheduler.SetPushService(a.pushService, redisplatform.NewLocker(a.Redis))
+	a.Scheduler.SetPushService(a.pushService, redisplatform.NewLocker(a.Redis), a.Cfg.PushTimerTickInterval, a.Cfg.PushTimerBatchLimit)
+	if a.Redis != nil {
+		a.Scheduler.SetPushTimerStore(redisplatform.NewTimerStore(a.Redis))
+	}
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {
