@@ -74,8 +74,16 @@ export class PushesApiService extends BaseApiService {
 
   // --- scheduled pushes ------------------------------------------------
 
-  async createSchedule(payload: CreateSchedulePayload): Promise<ScheduledPush> {
-    return this.post("/schedules", payload, CreateSchedulePayloadCodec, ProtoScheduledPush);
+  async createSchedule(
+    payload: CreateSchedulePayload,
+    options?: { tzMode?: "manager" | "device_local"; managerTz?: string },
+  ): Promise<ScheduledPush> {
+    const params = new URLSearchParams();
+    if (options?.tzMode) params.set("tz_mode", options.tzMode);
+    if (options?.managerTz) params.set("manager_tz", options.managerTz);
+    const qs = params.toString();
+    const url = qs ? `/schedules?${qs}` : "/schedules";
+    return this.post(url, payload, CreateSchedulePayloadCodec, ProtoScheduledPush);
   }
 
   async listSchedules(
