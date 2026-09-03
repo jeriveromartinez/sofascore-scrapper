@@ -142,7 +142,7 @@ func (h *AdminHandler) handleUpdateDevice(c *gin.Context) {
 		return
 	}
 
-	updatedDevice, err := h.repo.Update(req.Token, req.Platform, req.Name, req.PackageId)
+	updatedDevice, err := h.repo.Update(req.Token, req.Platform, req.Name, req.PackageId, req.Timezone)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

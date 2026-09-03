@@ -27,7 +27,7 @@ func (h *AppHandler) handleRegisterDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.repo.Register(nil, req.Token, req.Platform, req.Name, req.Version, req.PackageId)
+	device, err := h.repo.Register(nil, req.Token, req.Platform, req.Name, req.Version, req.PackageId, req.Timezone)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

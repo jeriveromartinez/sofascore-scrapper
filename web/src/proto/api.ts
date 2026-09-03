@@ -396,6 +396,12 @@ export interface DeviceRegisterRequest {
    * because the Flutter app does not authenticate as a user).
    */
   domainId: number;
+  /**
+   * IANA timezone string (e.g. "America/Mexico_City"). Empty means the
+   * device did not register a TZ; the scheduler treats it as UTC when
+   * computing per-device fire times for device-local scheduled pushes.
+   */
+  timezone: string;
 }
 
 export interface Device {
@@ -415,6 +421,11 @@ export interface Device {
    * push delivery.
    */
   domainId: number;
+  /**
+   * IANA timezone string persisted from DeviceRegisterRequest.timezone.
+   * Empty means "not registered"; the scheduler falls back to UTC.
+   */
+  timezone: string;
 }
 
 export interface DeviceList {
@@ -2424,7 +2435,7 @@ export const DomainRequest: MessageFns<DomainRequest> = {
 };
 
 function createBaseDeviceRegisterRequest(): DeviceRegisterRequest {
-  return { token: "", platform: "", name: "", version: "", domainId: 0 };
+  return { token: "", platform: "", name: "", version: "", domainId: 0, timezone: "" };
 }
 
 export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
@@ -2443,6 +2454,9 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     }
     if (message.domainId !== 0) {
       writer.uint32(40).uint32(message.domainId);
+    }
+    if (message.timezone !== "") {
+      writer.uint32(58).string(message.timezone);
     }
     return writer;
   },
@@ -2494,6 +2508,14 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
           message.domainId = reader.uint32();
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.timezone = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2514,6 +2536,7 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
         : isSet(object.domain_id)
         ? globalThis.Number(object.domain_id)
         : 0,
+      timezone: isSet(object.timezone) ? globalThis.String(object.timezone) : "",
     };
   },
 
@@ -2534,6 +2557,9 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     if (message.domainId !== 0) {
       obj.domainId = Math.round(message.domainId);
     }
+    if (message.timezone !== "") {
+      obj.timezone = message.timezone;
+    }
     return obj;
   },
 
@@ -2547,6 +2573,7 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     message.name = object.name ?? "";
     message.version = object.version ?? "";
     message.domainId = object.domainId ?? 0;
+    message.timezone = object.timezone ?? "";
     return message;
   },
 };
@@ -2563,6 +2590,7 @@ function createBaseDevice(): Device {
     version: "",
     iptvUrl: "",
     domainId: 0,
+    timezone: "",
   };
 }
 
@@ -2597,6 +2625,9 @@ export const Device: MessageFns<Device> = {
     }
     if (message.domainId !== 0) {
       writer.uint32(80).uint32(message.domainId);
+    }
+    if (message.timezone !== "") {
+      writer.uint32(98).string(message.timezone);
     }
     return writer;
   },
@@ -2688,6 +2719,14 @@ export const Device: MessageFns<Device> = {
           message.domainId = reader.uint32();
           continue;
         }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.timezone = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2729,6 +2768,7 @@ export const Device: MessageFns<Device> = {
         : isSet(object.domain_id)
         ? globalThis.Number(object.domain_id)
         : 0,
+      timezone: isSet(object.timezone) ? globalThis.String(object.timezone) : "",
     };
   },
 
@@ -2764,6 +2804,9 @@ export const Device: MessageFns<Device> = {
     if (message.domainId !== 0) {
       obj.domainId = Math.round(message.domainId);
     }
+    if (message.timezone !== "") {
+      obj.timezone = message.timezone;
+    }
     return obj;
   },
 
@@ -2782,6 +2825,7 @@ export const Device: MessageFns<Device> = {
     message.version = object.version ?? "";
     message.iptvUrl = object.iptvUrl ?? "";
     message.domainId = object.domainId ?? 0;
+    message.timezone = object.timezone ?? "";
     return message;
   },
 };

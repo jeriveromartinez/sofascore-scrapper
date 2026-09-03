@@ -125,6 +125,10 @@ message DeviceRegisterRequest {
   // because the Flutter app does not authenticate as a user).
   uint32 domain_id = 5;
   string package_id = 6;
+  // IANA timezone string (e.g. "America/Mexico_City"). Empty means the
+  // device did not register a TZ; the scheduler treats it as UTC when
+  // computing per-device fire times for device-local scheduled pushes.
+  string timezone = 7;
 }
 
 message Device {
@@ -139,6 +143,9 @@ message Device {
   string iptv_url = 9;
   uint32 domain_id = 10;
   string package_id = 11;
+  // IANA timezone string persisted from DeviceRegisterRequest.timezone.
+  // Empty means "not registered"; the scheduler falls back to UTC.
+  string timezone = 12;
 }
 
 message DeviceList {

@@ -1283,8 +1283,12 @@ type DeviceRegisterRequest struct {
 	// backend sets devices.domain_id to this value (validating that the
 	// domain exists; per-user ownership is not enforced at register time
 	// because the Flutter app does not authenticate as a user).
-	DomainId      uint32 `protobuf:"varint,5,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	PackageId     string `protobuf:"bytes,6,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	DomainId  uint32 `protobuf:"varint,5,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	PackageId string `protobuf:"bytes,6,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	// IANA timezone string (e.g. "America/Mexico_City"). Empty means the
+	// device did not register a TZ; the scheduler treats it as UTC when
+	// computing per-device fire times for device-local scheduled pushes.
+	Timezone      string `protobuf:"bytes,7,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1361,19 +1365,29 @@ func (x *DeviceRegisterRequest) GetPackageId() string {
 	return ""
 }
 
+func (x *DeviceRegisterRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
 type Device struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Token         string                 `protobuf:"bytes,4,opt,name=token,proto3" json:"token,omitempty"`
-	Platform      string                 `protobuf:"bytes,5,opt,name=platform,proto3" json:"platform,omitempty"`
-	Name          string                 `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
-	LastSeen      int64                  `protobuf:"varint,7,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
-	Version       string                 `protobuf:"bytes,8,opt,name=version,proto3" json:"version,omitempty"`
-	IptvUrl       string                 `protobuf:"bytes,9,opt,name=iptv_url,json=iptvUrl,proto3" json:"iptv_url,omitempty"`
-	DomainId      uint32                 `protobuf:"varint,10,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	PackageId     string                 `protobuf:"bytes,11,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	CreatedAt string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Token     string                 `protobuf:"bytes,4,opt,name=token,proto3" json:"token,omitempty"`
+	Platform  string                 `protobuf:"bytes,5,opt,name=platform,proto3" json:"platform,omitempty"`
+	Name      string                 `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+	LastSeen  int64                  `protobuf:"varint,7,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	Version   string                 `protobuf:"bytes,8,opt,name=version,proto3" json:"version,omitempty"`
+	IptvUrl   string                 `protobuf:"bytes,9,opt,name=iptv_url,json=iptvUrl,proto3" json:"iptv_url,omitempty"`
+	DomainId  uint32                 `protobuf:"varint,10,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	PackageId string                 `protobuf:"bytes,11,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	// IANA timezone string persisted from DeviceRegisterRequest.timezone.
+	// Empty means "not registered"; the scheduler falls back to UTC.
+	Timezone      string `protobuf:"bytes,12,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1481,6 +1495,13 @@ func (x *Device) GetDomainId() uint32 {
 func (x *Device) GetPackageId() string {
 	if x != nil {
 		return x.PackageId
+	}
+	return ""
+}
+
+func (x *Device) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
 	}
 	return ""
 }
@@ -5900,7 +5921,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2\x19.sofascore.CursorPageInfoR\x04page\"@\n" +
 	"\rDomainRequest\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\rR\x06userId\"\xb3\x01\n" +
+	"\auser_id\x18\x02 \x01(\rR\x06userId\"\xcf\x01\n" +
 	"\x15DeviceRegisterRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1a\n" +
 	"\bplatform\x18\x02 \x01(\tR\bplatform\x12\x12\n" +
@@ -5908,7 +5929,8 @@ const file_proto_api_proto_rawDesc = "" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12\x1b\n" +
 	"\tdomain_id\x18\x05 \x01(\rR\bdomainId\x12\x1d\n" +
 	"\n" +
-	"package_id\x18\x06 \x01(\tR\tpackageId\"\xaa\x02\n" +
+	"package_id\x18\x06 \x01(\tR\tpackageId\x12\x1a\n" +
+	"\btimezone\x18\a \x01(\tR\btimezone\"\xc6\x02\n" +
 	"\x06Device\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
@@ -5924,7 +5946,8 @@ const file_proto_api_proto_rawDesc = "" +
 	"\tdomain_id\x18\n" +
 	" \x01(\rR\bdomainId\x12\x1d\n" +
 	"\n" +
-	"package_id\x18\v \x01(\tR\tpackageId\"\x94\x01\n" +
+	"package_id\x18\v \x01(\tR\tpackageId\x12\x1a\n" +
+	"\btimezone\x18\f \x01(\tR\btimezone\"\x94\x01\n" +
 	"\n" +
 	"DeviceList\x12%\n" +
 	"\x04data\x18\x01 \x03(\v2\x11.sofascore.DeviceR\x04data\x12\x12\n" +

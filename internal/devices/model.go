@@ -18,4 +18,9 @@ type Device struct {
 	Manager   *users.User     `gorm:"foreignKey:UserID;references:ID"`
 	DomainID  *uint           `gorm:"column:domain_id;index:idx_devices_domain_id;null;foreignKey:DomainID;references:ID;constraint:OnDelete:SET_NULL,OnUpdate:CASCADE"`
 	Domain    *domains.Domain `gorm:"foreignKey:DomainID;references:ID"`
+	// Timezone is an IANA TZ string (e.g. "America/Mexico_City") the
+	// Flutter app registers when the device starts. Empty means the
+	// device did not register a TZ; the scheduler treats it as UTC when
+	// computing per-device fire times for device-local scheduled pushes.
+	Timezone string `gorm:"column:timezone;size:64;not null;default:''"`
 }

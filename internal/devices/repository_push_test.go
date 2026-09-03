@@ -25,3 +25,19 @@ func TestDeviceToProto_PropagatesDomainID(t *testing.T) {
 		t.Fatalf("DomainId = %d, want 42", got.DomainId)
 	}
 }
+
+func TestDeviceToProto_PropagatesTimezone(t *testing.T) {
+	d := Device{Token: "x", Timezone: "America/Mexico_City"}
+	got := DeviceToProto(d)
+	if got.Timezone != "America/Mexico_City" {
+		t.Fatalf("Timezone = %q, want %q", got.Timezone, "America/Mexico_City")
+	}
+}
+
+func TestDeviceToProto_EmptyTimezone(t *testing.T) {
+	d := Device{Token: "x"}
+	got := DeviceToProto(d)
+	if got.Timezone != "" {
+		t.Fatalf("Timezone = %q, want empty", got.Timezone)
+	}
+}
