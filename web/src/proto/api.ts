@@ -396,6 +396,12 @@ export interface DeviceRegisterRequest {
    * because the Flutter app does not authenticate as a user).
    */
   domainId: number;
+  /**
+   * IANA timezone string (e.g. "America/Mexico_City"). Empty means the
+   * device did not register a TZ; the scheduler treats it as UTC when
+   * computing per-device fire times for device-local scheduled pushes.
+   */
+  timezone: string;
 }
 
 export interface Device {
@@ -415,6 +421,11 @@ export interface Device {
    * push delivery.
    */
   domainId: number;
+  /**
+   * IANA timezone string persisted from DeviceRegisterRequest.timezone.
+   * Empty means "not registered"; the scheduler falls back to UTC.
+   */
+  timezone: string;
 }
 
 export interface DeviceList {
@@ -700,7 +711,6 @@ export interface PushPayload {
   title: string;
   body: string;
   imageUrl: string;
-  deepLink: string;
   priority: PushPriority;
   /** 0 = no TTL */
   ttlSeconds: number;
@@ -773,7 +783,6 @@ export interface PushMessage {
   title: string;
   body: string;
   imageUrl: string;
-  deepLink: string;
   priority: PushPriority;
   ttlSeconds: number;
   data: { [key: string]: string };
@@ -901,7 +910,6 @@ export interface WsPush {
   title: string;
   body: string;
   imageUrl: string;
-  deepLink: string;
   priority: PushPriority;
   ttlSeconds: number;
   data: { [key: string]: string };
@@ -2424,7 +2432,7 @@ export const DomainRequest: MessageFns<DomainRequest> = {
 };
 
 function createBaseDeviceRegisterRequest(): DeviceRegisterRequest {
-  return { token: "", platform: "", name: "", version: "", domainId: 0 };
+  return { token: "", platform: "", name: "", version: "", domainId: 0, timezone: "" };
 }
 
 export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
@@ -2443,6 +2451,9 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     }
     if (message.domainId !== 0) {
       writer.uint32(40).uint32(message.domainId);
+    }
+    if (message.timezone !== "") {
+      writer.uint32(58).string(message.timezone);
     }
     return writer;
   },
@@ -2494,6 +2505,14 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
           message.domainId = reader.uint32();
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.timezone = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2514,6 +2533,7 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
         : isSet(object.domain_id)
         ? globalThis.Number(object.domain_id)
         : 0,
+      timezone: isSet(object.timezone) ? globalThis.String(object.timezone) : "",
     };
   },
 
@@ -2534,6 +2554,9 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     if (message.domainId !== 0) {
       obj.domainId = Math.round(message.domainId);
     }
+    if (message.timezone !== "") {
+      obj.timezone = message.timezone;
+    }
     return obj;
   },
 
@@ -2547,6 +2570,7 @@ export const DeviceRegisterRequest: MessageFns<DeviceRegisterRequest> = {
     message.name = object.name ?? "";
     message.version = object.version ?? "";
     message.domainId = object.domainId ?? 0;
+    message.timezone = object.timezone ?? "";
     return message;
   },
 };
@@ -2563,6 +2587,7 @@ function createBaseDevice(): Device {
     version: "",
     iptvUrl: "",
     domainId: 0,
+    timezone: "",
   };
 }
 
@@ -2597,6 +2622,9 @@ export const Device: MessageFns<Device> = {
     }
     if (message.domainId !== 0) {
       writer.uint32(80).uint32(message.domainId);
+    }
+    if (message.timezone !== "") {
+      writer.uint32(98).string(message.timezone);
     }
     return writer;
   },
@@ -2688,6 +2716,14 @@ export const Device: MessageFns<Device> = {
           message.domainId = reader.uint32();
           continue;
         }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.timezone = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2729,6 +2765,7 @@ export const Device: MessageFns<Device> = {
         : isSet(object.domain_id)
         ? globalThis.Number(object.domain_id)
         : 0,
+      timezone: isSet(object.timezone) ? globalThis.String(object.timezone) : "",
     };
   },
 
@@ -2764,6 +2801,9 @@ export const Device: MessageFns<Device> = {
     if (message.domainId !== 0) {
       obj.domainId = Math.round(message.domainId);
     }
+    if (message.timezone !== "") {
+      obj.timezone = message.timezone;
+    }
     return obj;
   },
 
@@ -2782,6 +2822,7 @@ export const Device: MessageFns<Device> = {
     message.version = object.version ?? "";
     message.iptvUrl = object.iptvUrl ?? "";
     message.domainId = object.domainId ?? 0;
+    message.timezone = object.timezone ?? "";
     return message;
   },
 };
@@ -7542,7 +7583,7 @@ export const UploadCompleteResponse: MessageFns<UploadCompleteResponse> = {
 };
 
 function createBasePushPayload(): PushPayload {
-  return { category: 0, title: "", body: "", imageUrl: "", deepLink: "", priority: 0, ttlSeconds: 0, data: {} };
+  return { category: 0, title: "", body: "", imageUrl: "", priority: 0, ttlSeconds: 0, data: {} };
 }
 
 export const PushPayload: MessageFns<PushPayload> = {
@@ -7559,17 +7600,14 @@ export const PushPayload: MessageFns<PushPayload> = {
     if (message.imageUrl !== "") {
       writer.uint32(34).string(message.imageUrl);
     }
-    if (message.deepLink !== "") {
-      writer.uint32(42).string(message.deepLink);
-    }
     if (message.priority !== 0) {
-      writer.uint32(48).int32(message.priority);
+      writer.uint32(40).int32(message.priority);
     }
     if (message.ttlSeconds !== 0) {
-      writer.uint32(56).int32(message.ttlSeconds);
+      writer.uint32(48).int32(message.ttlSeconds);
     }
     globalThis.Object.entries(message.data).forEach(([key, value]: [string, string]) => {
-      PushPayload_DataEntry.encode({ key: key as any, value }, writer.uint32(66).fork()).join();
+      PushPayload_DataEntry.encode({ key: key as any, value }, writer.uint32(58).fork()).join();
     });
     return writer;
   },
@@ -7614,11 +7652,11 @@ export const PushPayload: MessageFns<PushPayload> = {
           continue;
         }
         case 5: {
-          if (tag !== 42) {
+          if (tag !== 40) {
             break;
           }
 
-          message.deepLink = reader.string();
+          message.priority = reader.int32() as any;
           continue;
         }
         case 6: {
@@ -7626,25 +7664,17 @@ export const PushPayload: MessageFns<PushPayload> = {
             break;
           }
 
-          message.priority = reader.int32() as any;
-          continue;
-        }
-        case 7: {
-          if (tag !== 56) {
-            break;
-          }
-
           message.ttlSeconds = reader.int32();
           continue;
         }
-        case 8: {
-          if (tag !== 66) {
+        case 7: {
+          if (tag !== 58) {
             break;
           }
 
-          const entry8 = PushPayload_DataEntry.decode(reader, reader.uint32());
-          if (entry8.value !== undefined) {
-            message.data[entry8.key] = entry8.value;
+          const entry7 = PushPayload_DataEntry.decode(reader, reader.uint32());
+          if (entry7.value !== undefined) {
+            message.data[entry7.key] = entry7.value;
           }
           continue;
         }
@@ -7666,11 +7696,6 @@ export const PushPayload: MessageFns<PushPayload> = {
         ? globalThis.String(object.imageUrl)
         : isSet(object.image_url)
         ? globalThis.String(object.image_url)
-        : "",
-      deepLink: isSet(object.deepLink)
-        ? globalThis.String(object.deepLink)
-        : isSet(object.deep_link)
-        ? globalThis.String(object.deep_link)
         : "",
       priority: isSet(object.priority) ? pushPriorityFromJSON(object.priority) : 0,
       ttlSeconds: isSet(object.ttlSeconds)
@@ -7704,9 +7729,6 @@ export const PushPayload: MessageFns<PushPayload> = {
     if (message.imageUrl !== "") {
       obj.imageUrl = message.imageUrl;
     }
-    if (message.deepLink !== "") {
-      obj.deepLink = message.deepLink;
-    }
     if (message.priority !== 0) {
       obj.priority = pushPriorityToJSON(message.priority);
     }
@@ -7734,7 +7756,6 @@ export const PushPayload: MessageFns<PushPayload> = {
     message.title = object.title ?? "";
     message.body = object.body ?? "";
     message.imageUrl = object.imageUrl ?? "";
-    message.deepLink = object.deepLink ?? "";
     message.priority = object.priority ?? 0;
     message.ttlSeconds = object.ttlSeconds ?? 0;
     message.data = (globalThis.Object.entries(object.data ?? {}) as [string, string][]).reduce(
@@ -8562,7 +8583,6 @@ function createBasePushMessage(): PushMessage {
     title: "",
     body: "",
     imageUrl: "",
-    deepLink: "",
     priority: 0,
     ttlSeconds: 0,
     data: {},
@@ -8595,25 +8615,22 @@ export const PushMessage: MessageFns<PushMessage> = {
     if (message.imageUrl !== "") {
       writer.uint32(58).string(message.imageUrl);
     }
-    if (message.deepLink !== "") {
-      writer.uint32(66).string(message.deepLink);
-    }
     if (message.priority !== 0) {
-      writer.uint32(72).int32(message.priority);
+      writer.uint32(64).int32(message.priority);
     }
     if (message.ttlSeconds !== 0) {
-      writer.uint32(80).int32(message.ttlSeconds);
+      writer.uint32(72).int32(message.ttlSeconds);
     }
     globalThis.Object.entries(message.data).forEach(([key, value]: [string, string]) => {
-      PushMessage_DataEntry.encode({ key: key as any, value }, writer.uint32(90).fork()).join();
+      PushMessage_DataEntry.encode({ key: key as any, value }, writer.uint32(82).fork()).join();
     });
     if (message.source !== "") {
-      writer.uint32(98).string(message.source);
+      writer.uint32(90).string(message.source);
     }
     if (message.scheduledId !== 0) {
-      writer.uint32(104).uint32(message.scheduledId);
+      writer.uint32(96).uint32(message.scheduledId);
     }
-    writer.uint32(114).fork();
+    writer.uint32(106).fork();
     for (const v of message.domainIds) {
       writer.uint32(v);
     }
@@ -8685,11 +8702,11 @@ export const PushMessage: MessageFns<PushMessage> = {
           continue;
         }
         case 8: {
-          if (tag !== 66) {
+          if (tag !== 64) {
             break;
           }
 
-          message.deepLink = reader.string();
+          message.priority = reader.int32() as any;
           continue;
         }
         case 9: {
@@ -8697,15 +8714,18 @@ export const PushMessage: MessageFns<PushMessage> = {
             break;
           }
 
-          message.priority = reader.int32() as any;
+          message.ttlSeconds = reader.int32();
           continue;
         }
         case 10: {
-          if (tag !== 80) {
+          if (tag !== 82) {
             break;
           }
 
-          message.ttlSeconds = reader.int32();
+          const entry10 = PushMessage_DataEntry.decode(reader, reader.uint32());
+          if (entry10.value !== undefined) {
+            message.data[entry10.key] = entry10.value;
+          }
           continue;
         }
         case 11: {
@@ -8713,36 +8733,25 @@ export const PushMessage: MessageFns<PushMessage> = {
             break;
           }
 
-          const entry11 = PushMessage_DataEntry.decode(reader, reader.uint32());
-          if (entry11.value !== undefined) {
-            message.data[entry11.key] = entry11.value;
-          }
-          continue;
-        }
-        case 12: {
-          if (tag !== 98) {
-            break;
-          }
-
           message.source = reader.string();
           continue;
         }
-        case 13: {
-          if (tag !== 104) {
+        case 12: {
+          if (tag !== 96) {
             break;
           }
 
           message.scheduledId = reader.uint32();
           continue;
         }
-        case 14: {
-          if (tag === 112) {
+        case 13: {
+          if (tag === 104) {
             message.domainIds.push(reader.uint32());
 
             continue;
           }
 
-          if (tag === 114) {
+          if (tag === 106) {
             const end2 = reader.uint32() + reader.pos;
             while (reader.pos < end2) {
               message.domainIds.push(reader.uint32());
@@ -8782,11 +8791,6 @@ export const PushMessage: MessageFns<PushMessage> = {
         ? globalThis.String(object.imageUrl)
         : isSet(object.image_url)
         ? globalThis.String(object.image_url)
-        : "",
-      deepLink: isSet(object.deepLink)
-        ? globalThis.String(object.deepLink)
-        : isSet(object.deep_link)
-        ? globalThis.String(object.deep_link)
         : "",
       priority: isSet(object.priority) ? pushPriorityFromJSON(object.priority) : 0,
       ttlSeconds: isSet(object.ttlSeconds)
@@ -8840,9 +8844,6 @@ export const PushMessage: MessageFns<PushMessage> = {
     if (message.imageUrl !== "") {
       obj.imageUrl = message.imageUrl;
     }
-    if (message.deepLink !== "") {
-      obj.deepLink = message.deepLink;
-    }
     if (message.priority !== 0) {
       obj.priority = pushPriorityToJSON(message.priority);
     }
@@ -8882,7 +8883,6 @@ export const PushMessage: MessageFns<PushMessage> = {
     message.title = object.title ?? "";
     message.body = object.body ?? "";
     message.imageUrl = object.imageUrl ?? "";
-    message.deepLink = object.deepLink ?? "";
     message.priority = object.priority ?? 0;
     message.ttlSeconds = object.ttlSeconds ?? 0;
     message.data = (globalThis.Object.entries(object.data ?? {}) as [string, string][]).reduce(
@@ -10267,7 +10267,6 @@ function createBaseWsPush(): WsPush {
     title: "",
     body: "",
     imageUrl: "",
-    deepLink: "",
     priority: 0,
     ttlSeconds: 0,
     data: {},
@@ -10295,17 +10294,14 @@ export const WsPush: MessageFns<WsPush> = {
     if (message.imageUrl !== "") {
       writer.uint32(50).string(message.imageUrl);
     }
-    if (message.deepLink !== "") {
-      writer.uint32(58).string(message.deepLink);
-    }
     if (message.priority !== 0) {
-      writer.uint32(64).int32(message.priority);
+      writer.uint32(56).int32(message.priority);
     }
     if (message.ttlSeconds !== 0) {
-      writer.uint32(72).int32(message.ttlSeconds);
+      writer.uint32(64).int32(message.ttlSeconds);
     }
     globalThis.Object.entries(message.data).forEach(([key, value]: [string, string]) => {
-      WsPush_DataEntry.encode({ key: key as any, value }, writer.uint32(82).fork()).join();
+      WsPush_DataEntry.encode({ key: key as any, value }, writer.uint32(74).fork()).join();
     });
     if (message.sentAt !== 0) {
       writer.uint32(88).int64(message.sentAt);
@@ -10369,11 +10365,11 @@ export const WsPush: MessageFns<WsPush> = {
           continue;
         }
         case 7: {
-          if (tag !== 58) {
+          if (tag !== 56) {
             break;
           }
 
-          message.deepLink = reader.string();
+          message.priority = reader.int32() as any;
           continue;
         }
         case 8: {
@@ -10381,29 +10377,21 @@ export const WsPush: MessageFns<WsPush> = {
             break;
           }
 
-          message.priority = reader.int32() as any;
-          continue;
-        }
-        case 9: {
-          if (tag !== 72) {
-            break;
-          }
-
           message.ttlSeconds = reader.int32();
           continue;
         }
-        case 10: {
-          if (tag !== 82) {
+        case 9: {
+          if (tag !== 74) {
             break;
           }
 
-          const entry10 = WsPush_DataEntry.decode(reader, reader.uint32());
-          if (entry10.value !== undefined) {
-            message.data[entry10.key] = entry10.value;
+          const entry9 = WsPush_DataEntry.decode(reader, reader.uint32());
+          if (entry9.value !== undefined) {
+            message.data[entry9.key] = entry9.value;
           }
           continue;
         }
-        case 11: {
+        case 10: {
           if (tag !== 88) {
             break;
           }
@@ -10439,11 +10427,6 @@ export const WsPush: MessageFns<WsPush> = {
         ? globalThis.String(object.imageUrl)
         : isSet(object.image_url)
         ? globalThis.String(object.image_url)
-        : "",
-      deepLink: isSet(object.deepLink)
-        ? globalThis.String(object.deepLink)
-        : isSet(object.deep_link)
-        ? globalThis.String(object.deep_link)
         : "",
       priority: isSet(object.priority) ? pushPriorityFromJSON(object.priority) : 0,
       ttlSeconds: isSet(object.ttlSeconds)
@@ -10488,9 +10471,6 @@ export const WsPush: MessageFns<WsPush> = {
     if (message.imageUrl !== "") {
       obj.imageUrl = message.imageUrl;
     }
-    if (message.deepLink !== "") {
-      obj.deepLink = message.deepLink;
-    }
     if (message.priority !== 0) {
       obj.priority = pushPriorityToJSON(message.priority);
     }
@@ -10523,7 +10503,6 @@ export const WsPush: MessageFns<WsPush> = {
     message.title = object.title ?? "";
     message.body = object.body ?? "";
     message.imageUrl = object.imageUrl ?? "";
-    message.deepLink = object.deepLink ?? "";
     message.priority = object.priority ?? 0;
     message.ttlSeconds = object.ttlSeconds ?? 0;
     message.data = (globalThis.Object.entries(object.data ?? {}) as [string, string][]).reduce(

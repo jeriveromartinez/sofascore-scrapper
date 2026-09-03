@@ -85,13 +85,12 @@ func ScheduleTypeFromProto(s pb.PushScheduleType) ScheduleType {
 // PayloadToProto converts a (category, title, body, ...) tuple to a
 // pb.PushPayload. This is the canonical proto representation; both
 // CreateImmediatePushRequest and CreateScheduleRequest use it.
-func PayloadToProto(category Category, title, body, imageURL, deepLink string, priority Priority, ttlSeconds int, data StringJSON) *pb.PushPayload {
+func PayloadToProto(category Category, title, body, imageURL string, priority Priority, ttlSeconds int, data StringJSON) *pb.PushPayload {
 	return &pb.PushPayload{
 		Category:   CategoryToProto(category),
 		Title:      title,
 		Body:       body,
 		ImageUrl:   imageURL,
-		DeepLink:   deepLink,
 		Priority:   PriorityToProto(priority),
 		TtlSeconds: int32(ttlSeconds),
 		Data:       map[string]string(data),
@@ -101,22 +100,22 @@ func PayloadToProto(category Category, title, body, imageURL, deepLink string, p
 // PayloadFromProto is the inverse of PayloadToProto. Returns ok=false
 // when the category or priority is UNSPECIFIED so the caller can
 // reject the request with a 400.
-func PayloadFromProto(p *pb.PushPayload) (category Category, title, body, imageURL, deepLink string, priority Priority, ttlSeconds int, data StringJSON, ok bool) {
+func PayloadFromProto(p *pb.PushPayload) (category Category, title, body, imageURL string, priority Priority, ttlSeconds int, data StringJSON, ok bool) {
 	if p == nil {
-		return "", "", "", "", "", "", 0, nil, false
+		return "", "", "", "", "", 0, nil, false
 	}
 	category = CategoryFromProto(p.Category)
 	if category == "" {
-		return "", "", "", "", "", "", 0, nil, false
+		return "", "", "", "", "", 0, nil, false
 	}
 	priority = PriorityFromProto(p.Priority)
 	if priority == "" {
-		return "", "", "", "", "", "", 0, nil, false
+		return "", "", "", "", "", 0, nil, false
 	}
 	if p.TtlSeconds < 0 || p.TtlSeconds > 86400 {
-		return "", "", "", "", "", "", 0, nil, false
+		return "", "", "", "", "", 0, nil, false
 	}
-	return category, p.Title, p.Body, p.ImageUrl, p.DeepLink, priority, int(p.TtlSeconds), StringJSON(p.Data), true
+	return category, p.Title, p.Body, p.ImageUrl, priority, int(p.TtlSeconds), StringJSON(p.Data), true
 }
 
 // PushMessageToProto converts a domain PushMessage to a pb.PushMessage
@@ -132,7 +131,6 @@ func PushMessageToProto(m PushMessage, domainIDs []uint32) *pb.PushMessage {
 		Title:      m.Title,
 		Body:       m.Body,
 		ImageUrl:   m.ImageURL,
-		DeepLink:   m.DeepLink,
 		Priority:   PriorityToProto(m.Priority),
 		TtlSeconds: int32(m.TTLSeconds),
 		Data:       map[string]string(m.DataJSON),
@@ -163,7 +161,6 @@ func ScheduledPushToProto(s ScheduledPush, domainIDs []uint32) *pb.ScheduledPush
 			Title:      s.Title,
 			Body:       s.Body,
 			ImageUrl:   s.ImageURL,
-			DeepLink:   s.DeepLink,
 			Priority:   PriorityToProto(s.Priority),
 			TtlSeconds: int32(s.TTLSeconds),
 			Data:       map[string]string(s.DataJSON),

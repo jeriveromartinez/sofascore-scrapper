@@ -283,7 +283,7 @@ func TestRepository_ScheduledPushLifecycle(t *testing.T) {
 		Body:         "shot",
 		Priority:     PriorityNormal,
 	}
-	if err := repo.InsertScheduledPushWithTargets(ctx, one, []uint{d1}); err != nil {
+	if err := repo.InsertScheduledPushWithTargets(ctx, one, []uint{d1}, nil); err != nil {
 		t.Fatalf("insert one: %v", err)
 	}
 
@@ -299,7 +299,7 @@ func TestRepository_ScheduledPushLifecycle(t *testing.T) {
 		Body:         "urring",
 		Priority:     PriorityNormal,
 	}
-	if err := repo.InsertScheduledPushWithTargets(ctx, rec, []uint{d1}); err != nil {
+	if err := repo.InsertScheduledPushWithTargets(ctx, rec, []uint{d1}, nil); err != nil {
 		t.Fatalf("insert rec: %v", err)
 	}
 
@@ -362,7 +362,7 @@ func TestRepository_DeactivateAllForUser(t *testing.T) {
 			IsActive: true, Category: CategoryAdminMessage,
 			Title: fmt.Sprintf("s%d", i), Body: "b", Priority: PriorityNormal,
 		}
-		if err := repo.InsertScheduledPushWithTargets(ctx, s, []uint{d1}); err != nil {
+		if err := repo.InsertScheduledPushWithTargets(ctx, s, []uint{d1}, nil); err != nil {
 			t.Fatalf("seed s%d: %v", i, err)
 		}
 	}
@@ -493,13 +493,13 @@ func TestRepository_GetScheduledPushTargetsByScheduledIDs(t *testing.T) {
 		}
 	}
 	s1, s2, s3 := mk("s1"), mk("s2"), mk("s3")
-	if err := repo.InsertScheduledPushWithTargets(ctx, s1, []uint{d1, d2.ID}); err != nil {
+	if err := repo.InsertScheduledPushWithTargets(ctx, s1, []uint{d1, d2.ID}, nil); err != nil {
 		t.Fatalf("insert s1: %v", err)
 	}
-	if err := repo.InsertScheduledPushWithTargets(ctx, s2, []uint{d1, d2.ID}); err != nil {
+	if err := repo.InsertScheduledPushWithTargets(ctx, s2, []uint{d1, d2.ID}, nil); err != nil {
 		t.Fatalf("insert s2: %v", err)
 	}
-	if err := repo.InsertScheduledPushWithTargets(ctx, s3, nil); err != nil {
+	if err := repo.InsertScheduledPushWithTargets(ctx, s3, nil, nil); err != nil {
 		t.Fatalf("insert s3: %v", err)
 	}
 

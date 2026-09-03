@@ -2,6 +2,7 @@ package push
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,6 +11,37 @@ import (
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 )
+
+// TimerEntry is the minimal projection of a ScheduledPushTimer
+// that the TimerStore index needs. Defined here so the handler can
+// convert internal timers into the lighter Redis-friendly shape.
+type TimerEntry struct {
+	DeviceID uint
+	FireAt   time.Time
+}
+
+// redisTimerStore is a forward declaration so the handler can
+// call Enqueue/Remove without importing the redis package and
+// creating a cycle. The concrete type lives in
+// internal/platform/redis/timerstore.go and is wired by the app.
+type redisTimerStore struct {
+	enqFn func(scheduleID uint, entries []TimerEntry) error
+	remFn func(scheduleID uint) error
+}
+
+func (r *redisTimerStore) enqueue(scheduleID uint, entries []TimerEntry) error {
+	if r == nil || r.enqFn == nil {
+		return nil
+	}
+	return r.enqFn(scheduleID, entries)
+}
+
+func (r *redisTimerStore) remove(scheduleID uint) error {
+	if r == nil || r.remFn == nil {
+		return nil
+	}
+	return r.remFn(scheduleID)
+}
 
 // Handler exposes the push-notifications REST surface. It is
 // mounted on the webV1 group (auth required) by the app wire-up
@@ -20,6 +52,13 @@ type Handler struct {
 	// Production passes auth.AuthMiddleware's Gin context key;
 	// tests can plug a stub.
 	callerFromContext func(c *gin.Context) (uint, bool)
+	// timerStore is the Redis-backed index for scheduled push
+	// timers. nil is acceptable: the schedule still fires
+	// because the worker falls back to a DB scan, just slower.
+	timerStore *redisTimerStore
+	// logger is the slog handle for handler-level warnings. nil
+	// falls back to slog.Default() so warnings are never lost.
+	logger *slog.Logger
 }
 
 // HandlerDeps bundles the dependencies the handler needs. Kept
@@ -36,6 +75,26 @@ func NewHandler(svc *Service, deps HandlerDeps) *Handler {
 		panic("push.NewHandler: deps.CallerID is required")
 	}
 	return &Handler{svc: svc, callerFromContext: deps.CallerID}
+}
+
+// SetTimerStore wires the Redis-backed timer index into the
+// handler. Called by the app wire-up; nil-safe (handler just
+// skips the enqueue and the worker falls back to DB scan).
+func (h *Handler) SetTimerStore(store *redisTimerStore, logger *slog.Logger) {
+	h.timerStore = store
+	if logger != nil {
+		h.logger = logger
+	}
+}
+
+// timersToFireEntries converts the freshly inserted
+// ScheduledPushTimer rows into the lighter TimerEntry projection.
+func timersToFireEntries(rows []ScheduledPushTimer) []TimerEntry {
+	out := make([]TimerEntry, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, TimerEntry{DeviceID: r.DeviceID, FireAt: r.FireAt})
+	}
+	return out
 }
 
 // RegisterRoutes wires the push REST surface under the given
@@ -79,7 +138,6 @@ func (h *Handler) handleCreateImmediate(c *gin.Context) {
 		Title:      msg.Title,
 		Body:       msg.Body,
 		ImageUrl:   msg.ImageURL,
-		DeepLink:   msg.DeepLink,
 		Priority:   PriorityToProto(msg.Priority),
 		TtlSeconds: int32(msg.TTLSeconds),
 		Data:       map[string]string(msg.DataJSON),
@@ -190,10 +248,35 @@ func (h *Handler) handleCreateSchedule(c *gin.Context) {
 		}
 		runAt = &t
 	}
-	sched, err := h.svc.CreateSchedule(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload, req.ScheduleType, runAt, req.CronExpr)
+
+	// The dashboard signals the timezone behavior via query
+	// params (?tz_mode=...&timezone=...). The proto wire
+	// format is unchanged so the existing API contract stays
+	// stable. Defaults preserve the previous behavior (cron in
+	// UTC) so older dashboard builds continue to work.
+	tzMode := TimezoneModeShared
+	switch c.Query("tz_mode") {
+	case "device_local":
+		tzMode = TimezoneModeDeviceLocal
+	}
+	timezone := c.Query("timezone")
+	if timezone == "" {
+		timezone = "UTC"
+	}
+
+	sched, timers, err := h.svc.CreateSchedule(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload, req.ScheduleType, runAt, req.CronExpr, tzMode, timezone)
 	if err != nil {
 		writeServiceError(c, err)
 		return
+	}
+	if h.timerStore != nil {
+		if err := h.timerStore.enqueue(sched.ID, timersToFireEntries(timers)); err != nil {
+			if h.logger != nil {
+				h.logger.Warn("push: enqueue schedule timers failed",
+					slog.Uint64("schedule_id", uint64(sched.ID)),
+					slog.String("error", err.Error()))
+			}
+		}
 	}
 	server.RespondProto(c, http.StatusCreated, ScheduledPushToProto(*sched, req.DomainIds))
 }

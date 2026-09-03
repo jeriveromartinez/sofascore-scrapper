@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { createPinia, setActivePinia } from "pinia";
 import { useAuthStore } from "../store/pinia/authStore";
@@ -90,7 +91,7 @@ function buildRouter() {
       { path: "/pushes", name: "Pushes", component: { template: "<div />" } },
     ],
   });
-}
+};
 
 describe("pushes.vue", () => {
   beforeEach(() => {
@@ -134,6 +135,117 @@ describe("pushes.vue", () => {
     await flush();
     expect(wrapper.find('[data-test="pushes-flag-loading"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="pushes-flag-toggle"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("creates a schedule in UTC when 'use each client's local timezone' is off", async () => {
+    // When the operator leaves the device-local checkbox off, the
+    // schedule must be saved in UTC. The frontend signals that by
+    // NOT sending a timezone, so the backend applies its UTC
+    // default. This test pins that contract — if a future change
+    // reintroduces an admin-timezone pick, this test fails.
+    const authStore = useAuthStore();
+    authStore.setUser(
+      { id: 7, email: "admin@example.com", token: "t", refreshToken: "rt" },
+      false,
+    );
+
+    const { pushesApiService, domainsApiService } = await import("../store/services");
+    const createSpy = pushesApiService.createSchedule as unknown as ReturnType<typeof vi.fn>;
+    const getDomainsSpy = domainsApiService.getAllDomains as unknown as ReturnType<typeof vi.fn>;
+    createSpy.mockResolvedValue({});
+    getDomainsSpy.mockResolvedValue([
+      { id: 11, domain: "a.example.com" },
+      { id: 12, domain: "b.example.com" },
+    ]);
+
+    const router = buildRouter();
+    await router.push("/pushes");
+    await router.isReady();
+    const wrapper = mount(pushes, { global: { plugins: [router] } });
+    await flushPromises();
+
+    await wrapper.find('[data-test="pushes-tab-scheduled"]').trigger("click");
+    await flush();
+    await flushPromises();
+    await wrapper.find('[data-test="pushes-schedule-toggle"]').trigger("click");
+    await flush();
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.find('[data-test="pushes-schedule-title"]').exists()).toBe(true);
+    const vm = wrapper.vm as unknown as { scheduleForm: { title: string; body: string; cronExpr: string; domainIds: number[]; scheduleType: number } };
+    await wrapper.find('[data-test="pushes-schedule-domain-11"]').setValue(true);
+    await wrapper.find('[data-test="pushes-schedule-title"]').setValue("news");
+    await wrapper.find('[data-test="pushes-schedule-body"]').setValue("9pm utc");
+    await wrapper.find('[data-test="pushes-schedule-type"]').setValue("2");
+    await flush();
+    await flushPromises();
+    await nextTick();
+    vm.scheduleForm.cronExpr = "0 21 * * *";
+    await flush();
+    await flushPromises();
+    await wrapper.find('[data-test="pushes-schedule-form"]').trigger("submit");
+    await flush();
+    await flushPromises();
+    await nextTick();
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    const options = createSpy.mock.calls[0]?.[1] as
+      | { tzMode: string; timezone: string }
+      | undefined;
+    expect(options?.tzMode).toBe("shared");
+    // Empty timezone tells the backend to default to UTC. The
+    // API service drops the query param on empty, so the backend
+    // never sees a timezone from the dashboard in this mode.
+    expect(options?.timezone).toBe("");
+    wrapper.unmount();
+  });
+
+  it("creates a schedule with device-local TZ when checkbox is on", async () => {
+    const authStore = useAuthStore();
+    authStore.setUser(
+      { id: 7, email: "admin@example.com", token: "t", refreshToken: "rt" },
+      false,
+    );
+
+    const { pushesApiService, domainsApiService } = await import("../store/services");
+    const createSpy = pushesApiService.createSchedule as unknown as ReturnType<typeof vi.fn>;
+    createSpy.mockResolvedValue({});
+    (domainsApiService.getAllDomains as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 11, domain: "a.example.com" },
+    ]);
+
+    const router = buildRouter();
+    await router.push("/pushes");
+    await router.isReady();
+    const wrapper = mount(pushes, { global: { plugins: [router] } });
+    await flushPromises();
+
+    await wrapper.find('[data-test="pushes-tab-scheduled"]').trigger("click");
+    await flush();
+    await flushPromises();
+    await wrapper.find('[data-test="pushes-schedule-toggle"]').trigger("click");
+    await flush();
+    await flushPromises();
+    await nextTick();
+    await wrapper.find('[data-test="pushes-schedule-domain-11"]').setValue(true);
+    await wrapper.find('[data-test="pushes-schedule-title"]').setValue("news");
+    await wrapper.find('[data-test="pushes-schedule-body"]').setValue("local");
+    await wrapper.find('[data-test="pushes-schedule-type"]').setValue("2");
+    await flush();
+    await flushPromises();
+    await nextTick();
+    await wrapper.find('[data-test="pushes-schedule-cron"]').setValue("0 9 * * *");
+    await wrapper.find('[data-test="pushes-schedule-device-local"]').setValue(true);
+    await wrapper.find('[data-test="pushes-schedule-form"]').trigger("submit");
+    await flush();
+    await flushPromises();
+    await nextTick();
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy.mock.calls[0]?.[1]).toEqual({
+      tzMode: "device_local",
+      timezone: "",
+    });
     wrapper.unmount();
   });
 

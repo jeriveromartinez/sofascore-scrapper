@@ -230,10 +230,9 @@ func TestPushPayloadFields(t *testing.T) {
 	assertFieldNumber(t, fd, "title", 2)
 	assertFieldNumber(t, fd, "body", 3)
 	assertFieldNumber(t, fd, "image_url", 4)
-	assertFieldNumber(t, fd, "deep_link", 5)
-	assertFieldNumber(t, fd, "priority", 6)
-	assertFieldNumber(t, fd, "ttl_seconds", 7)
-	assertFieldNumber(t, fd, "data", 8)
+	assertFieldNumber(t, fd, "priority", 5)
+	assertFieldNumber(t, fd, "ttl_seconds", 6)
+	assertFieldNumber(t, fd, "data", 7)
 }
 
 // TestWsFrameOneof verifies the WsFrame message has the expected oneof

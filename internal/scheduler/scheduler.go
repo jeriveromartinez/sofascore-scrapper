@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
 	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
@@ -26,6 +27,9 @@ type Scheduler struct {
 	downloadCounter apk.DownloadCounter
 	pushService     *push.Service
 	pushLocker      redisplatform.Locker
+	pushStore       redisplatform.TimerStore
+	tickInterval    time.Duration
+	batchLimit      int
 	logger          *slog.Logger
 }
 
@@ -52,9 +56,17 @@ func (s *Scheduler) SetDownloadCounter(counter apk.DownloadCounter) {
 // SetPushService wires the push runner. svc and locker are
 // required; passing nil for either disables the runner (used in
 // tests that build an app without a push service).
-func (s *Scheduler) SetPushService(svc *push.Service, locker redisplatform.Locker) {
+func (s *Scheduler) SetPushService(svc *push.Service, locker redisplatform.Locker, tickInterval time.Duration, batchLimit int) {
 	s.pushService = svc
 	s.pushLocker = locker
+	s.tickInterval = tickInterval
+	s.batchLimit = batchLimit
+}
+
+// SetPushTimerStore wires the Redis-backed timer index. The
+// scheduler falls back to a DB scan if the store is nil.
+func (s *Scheduler) SetPushTimerStore(store redisplatform.TimerStore) {
+	s.pushStore = store
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
@@ -63,7 +75,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg, s.logger)
 	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg, s.logger)
-	startPushSchedules(localCtx, s.pushService, s.pushLocker, s.logger, &s.wg)
+	startTimersRunner(localCtx, s.pushService, s.pushStore, s.tickInterval, s.batchLimit, s.pushLocker, s.logger, &s.wg)
 
 	<-localCtx.Done()
 	s.wg.Wait()

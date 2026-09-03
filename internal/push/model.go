@@ -112,7 +112,6 @@ type PushMessage struct {
 	Title       string      `gorm:"column:title;size:200;not null"`
 	Body        string      `gorm:"column:body;size:2000;not null"`
 	ImageURL    string      `gorm:"column:image_url;size:500"`
-	DeepLink    string      `gorm:"column:deep_link;size:500"`
 	Priority    Priority    `gorm:"column:priority;size:16;not null;default:'normal'"`
 	TTLSeconds  int         `gorm:"column:ttl_seconds;not null;default:0"`
 	DataJSON    StringJSON  `gorm:"column:data_json;type:json"`
@@ -131,28 +130,68 @@ type PushMessageTarget struct {
 	Domain        *domains.Domain `gorm:"foreignKey:DomainID;references:ID"`
 }
 
+// TimezoneMode discriminates how the cron expression of a
+// ScheduledPush is interpreted. SHARED (default) evaluates the
+// cron once in the schedule's Timezone and fires the whole
+// audience at the resulting UTC moment. DEVICE_LOCAL evaluates
+// the cron per device in each device's registered timezone,
+// producing a separate fire time per device (each with its own
+// row in scheduled_push_timers).
+type TimezoneMode string
+
+const (
+	TimezoneModeShared     TimezoneMode = "shared"
+	TimezoneModeDeviceLocal TimezoneMode = "device_local"
+)
+
+func (m TimezoneMode) Valid() bool {
+	return m == TimezoneModeShared || m == TimezoneModeDeviceLocal
+}
+
 // ScheduledPush is a push that fires automatically — either at a
-// fixed timestamp (one_shot) or on a recurring cron (recurring). The
-// next_fire_at column is what the runner polls on; it is updated
-// after each fire.
+// fixed timestamp (one_shot) or on a recurring cron (recurring).
+// Fire times are stored per device in scheduled_push_timers; this
+// row is the campaign config (audience, payload, schedule). The
+// NextFireAt column mirrors the earliest pending timer across the
+// schedule's audience — the worker keeps it in sync on enqueue
+// and on fire, so the existing dashboard column keeps working.
 type ScheduledPush struct {
 	gorm.Model
-	UserID       uint        `gorm:"column:user_id;not null;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	User         *users.User `gorm:"foreignKey:UserID;references:ID"`
-	ScheduleType ScheduleType `gorm:"column:schedule_type;size:16;not null"`
-	RunAt        *time.Time  `gorm:"column:run_at;null"`
-	CronExpr     string      `gorm:"column:cron_expr;size:64"`
-	NextFireAt   time.Time   `gorm:"column:next_fire_at;not null;index:idx_schedules_active_next,priority:2"`
-	LastFiredAt  *time.Time  `gorm:"column:last_fired_at;null"`
-	IsActive     bool        `gorm:"column:is_active;not null;default:true;index:idx_schedules_active_next,priority:1"`
-	Category     Category    `gorm:"column:category;size:32;not null"`
-	Title        string      `gorm:"column:title;size:200;not null"`
-	Body         string      `gorm:"column:body;size:2000;not null"`
-	ImageURL     string      `gorm:"column:image_url;size:500"`
-	DeepLink     string      `gorm:"column:deep_link;size:500"`
-	Priority     Priority    `gorm:"column:priority;size:16;not null;default:'normal'"`
-	TTLSeconds   int         `gorm:"column:ttl_seconds;not null;default:0"`
-	DataJSON     StringJSON  `gorm:"column:data_json;type:json"`
+	UserID          uint         `gorm:"column:user_id;not null;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	User            *users.User  `gorm:"foreignKey:UserID;references:ID"`
+	ScheduleType    ScheduleType `gorm:"column:schedule_type;size:16;not null"`
+	RunAt           *time.Time   `gorm:"column:run_at;null"`
+	CronExpr        string       `gorm:"column:cron_expr;size:64"`
+	NextFireAt      time.Time    `gorm:"column:next_fire_at;not null;index:idx_schedules_active_next,priority:2"`
+	LastFiredAt     *time.Time   `gorm:"column:last_fired_at;null"`
+	IsActive        bool         `gorm:"column:is_active;not null;default:true;index:idx_schedules_active_next,priority:1"`
+	TimezoneMode    TimezoneMode `gorm:"column:timezone_mode;size:16;not null;default:'shared'"`
+	Timezone        string       `gorm:"column:timezone;size:64;not null;default:'UTC'"`
+	Category        Category     `gorm:"column:category;size:32;not null"`
+	Title           string       `gorm:"column:title;size:200;not null"`
+	Body            string       `gorm:"column:body;size:2000;not null"`
+	ImageURL        string       `gorm:"column:image_url;size:500"`
+	Priority        Priority     `gorm:"column:priority;size:16;not null;default:'normal'"`
+	TTLSeconds      int          `gorm:"column:ttl_seconds;not null;default:0"`
+	DataJSON        StringJSON   `gorm:"column:data_json;type:json"`
+}
+
+// ScheduledPushTimer is the per-device fire row for a scheduled
+// push. There is one row per audience device per pending fire; once
+// the timer fires, DispatchedAt is stamped and the row stays for
+// audit. For recurring schedules the worker inserts a new row with
+// the next fire time after each dispatch.
+//
+// This is the durable source of truth for "when does each device
+// receive this schedule". Redis ZSETs cache the index but are
+// rebuilt from this table on startup.
+type ScheduledPushTimer struct {
+	gorm.Model
+	ScheduledPushID uint      `gorm:"column:scheduled_push_id;not null;index:idx_spt_schedule_fire,priority:1;foreignKey:ScheduledPushID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	ScheduledPush   *ScheduledPush `gorm:"foreignKey:ScheduledPushID;references:ID"`
+	DeviceID        uint      `gorm:"column:device_id;not null;index:idx_spt_device_dispatched,priority:1;foreignKey:DeviceID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	FireAt          time.Time `gorm:"column:fire_at;not null;index:idx_spt_schedule_fire,priority:2"`
+	DispatchedAt    *time.Time `gorm:"column:dispatched_at;null;index:idx_spt_device_dispatched,priority:2"`
 }
 
 // ScheduledPushTarget is the join table between a scheduled_push and

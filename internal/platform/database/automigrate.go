@@ -52,6 +52,7 @@ var automigrateModels = []any{
 	&push.PushMessageTarget{},
 	&push.ScheduledPush{},
 	&push.ScheduledPushTarget{},
+	&push.ScheduledPushTimer{},
 	&push.DeliveryAttempt{},
 }
 

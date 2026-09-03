@@ -20,7 +20,7 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Register(userID *uint, token, platform, name, version, packageId string) (*Device, error) {
+func (r *Repository) Register(userID *uint, token, platform, name, version, packageId, timezone string) (*Device, error) {
 	if packageId == "" || token == "" || name == "" {
 		return nil, gorm.ErrInvalidData
 	}
@@ -43,8 +43,8 @@ func (r *Repository) Register(userID *uint, token, platform, name, version, pack
 		return nil, gorm.ErrInvalidData
 	}
 
-	device := &Device{UserID: userID, Token: token, Platform: platform, Name: name, Version: version, LastSeen: time.Now().Unix(), PackageId: packageId, DomainID: &domain.ID}
-	assign := Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version, PackageId: packageId, DomainID: &domain.ID}
+	device := &Device{UserID: userID, Token: token, Platform: platform, Name: name, Version: version, LastSeen: time.Now().Unix(), PackageId: packageId, DomainID: &domain.ID, Timezone: timezone}
+	assign := Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version, PackageId: packageId, DomainID: &domain.ID, Timezone: timezone}
 
 	result := r.db.Where(Device{Token: token}).Assign(assign).FirstOrCreate(device)
 	return device, result.Error
@@ -100,7 +100,7 @@ func (r *Repository) FindByToken(token string) (*Device, error) {
 	return &device, nil
 }
 
-func (r *Repository) Update(token, platform, name, packageId string) (*Device, error) {
+func (r *Repository) Update(token, platform, name, packageId, timezone string) (*Device, error) {
 	var device Device
 	if err := r.db.Where("token = ?", token).First(&device).Error; err != nil {
 		return nil, err
@@ -109,6 +109,7 @@ func (r *Repository) Update(token, platform, name, packageId string) (*Device, e
 	device.Platform = platform
 	device.Name = name
 	device.PackageId = packageId
+	device.Timezone = timezone
 	if err := r.db.Save(&device).Error; err != nil {
 		return nil, err
 	}

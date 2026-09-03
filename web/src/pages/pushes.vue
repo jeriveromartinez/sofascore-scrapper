@@ -101,7 +101,6 @@ const compose = reactive({
   title: "",
   body: "",
   imageUrl: "",
-  deepLink: "",
   ttlSeconds: 0,
   loading: false,
   error: "",
@@ -123,7 +122,6 @@ function resetCompose(): void {
   compose.title = "";
   compose.body = "";
   compose.imageUrl = "";
-  compose.deepLink = "";
   compose.ttlSeconds = 0;
   compose.error = "";
 }
@@ -140,7 +138,6 @@ async function sendCompose(): Promise<void> {
       title: compose.title.trim(),
       body: compose.body.trim(),
       imageUrl: compose.imageUrl.trim(),
-      deepLink: compose.deepLink.trim(),
       ttlSeconds: Number(compose.ttlSeconds) || 0,
       data: {},
     },
@@ -193,6 +190,11 @@ const scheduleForm = reactive({
   scheduleType: PushScheduleType.PUSH_SCHEDULE_TYPE_ONE_SHOT,
   runAt: "",
   cronExpr: "",
+  // When deviceLocal is true, the cron expression is evaluated
+  // in each device's local timezone (every device fires at its
+  // own 9pm, etc). When false, the cron is evaluated in UTC and
+  // every device fires at the same UTC moment.
+  deviceLocal: false,
   loading: false,
   error: "",
 });
@@ -231,6 +233,7 @@ function resetScheduleForm(): void {
   scheduleForm.scheduleType = PushScheduleType.PUSH_SCHEDULE_TYPE_ONE_SHOT;
   scheduleForm.runAt = "";
   scheduleForm.cronExpr = "";
+  scheduleForm.deviceLocal = false;
   scheduleForm.error = "";
 }
 
@@ -294,7 +297,6 @@ async function createSchedule(): Promise<void> {
       title: scheduleForm.title.trim(),
       body: scheduleForm.body.trim(),
       imageUrl: "",
-      deepLink: "",
       ttlSeconds: 0,
       data: {},
     },
@@ -309,7 +311,10 @@ async function createSchedule(): Promise<void> {
         : "",
   };
   try {
-    await pushesApiService.createSchedule(payload);
+    await pushesApiService.createSchedule(payload, {
+      tzMode: scheduleForm.deviceLocal ? "device_local" : "shared",
+      timezone: "",
+    });
     toast.success("Schedule created");
     resetScheduleForm();
     newScheduleOpen.value = false;
@@ -690,17 +695,6 @@ watch(activeTab, (tab) => {
               />
             </div>
 
-            <div class="col-md-6">
-              <label class="form-label" for="pushes-compose-deeplink">Deep link</label>
-              <input
-                id="pushes-compose-deeplink"
-                v-model="compose.deepLink"
-                type="text"
-                class="form-control"
-                placeholder="/events/123"
-              />
-            </div>
-
             <div class="col-md-4">
               <label class="form-label" for="pushes-compose-ttl">TTL (seconds)</label>
               <input
@@ -753,7 +747,7 @@ watch(activeTab, (tab) => {
 
           <div v-if="newScheduleOpen" class="card mb-3">
             <div class="card-body">
-              <form class="row g-3" @submit.prevent="createSchedule">
+              <form class="row g-3" data-test="pushes-schedule-form" @submit.prevent="createSchedule">
                 <div class="col-12">
                   <label class="form-label">Domains *</label>
                   <div
@@ -777,6 +771,7 @@ watch(activeTab, (tab) => {
                         type="checkbox"
                         class="form-check-input"
                         :checked="scheduleForm.domainIds.includes(d.id)"
+                        :data-test="`pushes-schedule-domain-${d.id}`"
                         @change="toggleScheduleDomain(d.id, ($event.target as HTMLInputElement).checked)"
                       />
                       <label class="form-check-label" :for="`schedule-domain-${d.id}`">
@@ -829,6 +824,7 @@ watch(activeTab, (tab) => {
                     class="form-control"
                     maxlength="120"
                     required
+                    data-test="pushes-schedule-title"
                   />
                 </div>
 
@@ -841,6 +837,7 @@ watch(activeTab, (tab) => {
                     rows="2"
                     maxlength="2000"
                     required
+                    data-test="pushes-schedule-body"
                   ></textarea>
                 </div>
 
@@ -850,6 +847,7 @@ watch(activeTab, (tab) => {
                     id="pushes-schedule-type"
                     v-model.number="scheduleForm.scheduleType"
                     class="form-select"
+                    data-test="pushes-schedule-type"
                   >
                     <option :value="PushScheduleType.PUSH_SCHEDULE_TYPE_ONE_SHOT">One-shot</option>
                     <option :value="PushScheduleType.PUSH_SCHEDULE_TYPE_RECURRING">Recurring (cron)</option>
@@ -866,6 +864,7 @@ watch(activeTab, (tab) => {
                     v-model="scheduleForm.runAt"
                     type="datetime-local"
                     class="form-control"
+                    data-test="pushes-schedule-runat"
                   />
                 </div>
 
@@ -880,7 +879,29 @@ watch(activeTab, (tab) => {
                     type="text"
                     class="form-control"
                     placeholder="0 9 * * *"
+                    data-test="pushes-schedule-cron"
                   />
+                </div>
+
+                <div class="col-12">
+                  <div class="form-check form-switch">
+                    <input
+                      id="pushes-schedule-device-local"
+                      v-model="scheduleForm.deviceLocal"
+                      type="checkbox"
+                      role="switch"
+                      class="form-check-input"
+                      data-test="pushes-schedule-device-local"
+                    />
+                    <label class="form-check-label" for="pushes-schedule-device-local">
+                      Use each client's local timezone
+                    </label>
+                  </div>
+                  <small class="text-muted d-block mt-1">
+                    When enabled, each device fires the schedule at its own local time (a 9pm
+                    cron reaches every device at 9pm local). When disabled, all devices fire
+                    at the same moment calculated in UTC.
+                  </small>
                 </div>
 
                 <div v-if="scheduleForm.error" class="col-12">

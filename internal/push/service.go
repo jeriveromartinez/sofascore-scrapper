@@ -10,6 +10,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"github.com/robfig/cron/v3"
@@ -115,7 +116,7 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 		return nil, nil, err
 	}
 
-	category, title, body, imageURL, deepLink, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
+	category, title, body, imageURL, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
 	now := time.Now()
 	msg := &PushMessage{
 		UserID:     ownerID,
@@ -123,7 +124,6 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 		Title:      title,
 		Body:       body,
 		ImageURL:   imageURL,
-		DeepLink:   deepLink,
 		Priority:   priority,
 		TTLSeconds: ttlSeconds,
 		DataJSON:   data,
@@ -203,59 +203,171 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 	return msg, deviceIDs, nil
 }
 
-// CreateSchedule validates and persists a scheduled_push. It does
-// not fire anything (the cron runner does that). Returns the
-// persisted schedule with the domain associations loaded.
-func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, domainIDs []uint, payload *pb.PushPayload, scheduleType pb.PushScheduleType, runAt *time.Time, cronExpr string) (*ScheduledPush, error) {
+// CreateSchedule validates and persists a scheduled_push along
+// with one timer per audience device. The cron expression is
+// evaluated per device when timezoneMode == DEVICE_LOCAL (each device
+// fires at its own local wall-clock moment) and once in the
+// schedule's Timezone when timezoneMode == SHARED (all devices fire
+// at the same UTC moment).
+//
+// The caller (handler) is responsible for enqueuing the returned
+// timers into the TimerStore so the worker can pick them up. We
+// split this because the handler is the boundary that knows whether
+// Redis is available; falling back to a DB scan is the worker's
+// job, not the service's.
+func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, domainIDs []uint, payload *pb.PushPayload, scheduleType pb.PushScheduleType, runAt *time.Time, cronExpr string, tzMode TimezoneMode, timezone string) (*ScheduledPush, []ScheduledPushTimer, error) {
 	if err := s.authorize(ctx, callerID, ownerID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := s.validateFeatureEnabled(ctx, ownerID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := s.validateDomains(ctx, ownerID, domainIDs); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := s.validatePayload(payload); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := s.validateSchedule(scheduleType, runAt, cronExpr); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	if !tzMode.Valid() {
+		return nil, nil, fmt.Errorf("%w: timezone_mode must be shared or device_local", ErrInvalidSchedule)
+	}
+	if tzMode == TimezoneModeShared && timezone == "" {
+		timezone = "UTC"
+	}
+	if tzMode == TimezoneModeShared {
+		if _, err := time.LoadLocation(timezone); err != nil {
+			return nil, nil, fmt.Errorf("%w: invalid timezone %q", ErrInvalidSchedule, timezone)
+		}
 	}
 
-	category, title, body, imageURL, deepLink, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
+	category, title, body, imageURL, priority, ttlSeconds, data, _ := PayloadFromProto(payload)
 	now := time.Now()
 	sched := &ScheduledPush{
-		UserID:     ownerID,
-		Category:   category,
-		Title:      title,
-		Body:       body,
-		ImageURL:   imageURL,
-		DeepLink:   deepLink,
-		Priority:   priority,
-		TTLSeconds: ttlSeconds,
-		DataJSON:   data,
-		NextFireAt: now,
-		IsActive:   true,
+		UserID:       ownerID,
+		Category:     category,
+		Title:        title,
+		Body:         body,
+		ImageURL:     imageURL,
+		Priority:     priority,
+		TTLSeconds:   ttlSeconds,
+		DataJSON:     data,
+		IsActive:     true,
+		TimezoneMode: tzMode,
+		Timezone:     timezone,
+		NextFireAt:   now,
 	}
+
+	var parsed cron.Schedule
 	switch ScheduleTypeFromProto(scheduleType) {
 	case ScheduleTypeOneShot:
 		sched.ScheduleType = ScheduleTypeOneShot
 		sched.RunAt = runAt
-		sched.NextFireAt = *runAt
 	case ScheduleTypeRecurring:
 		sched.ScheduleType = ScheduleTypeRecurring
 		sched.CronExpr = cronExpr
-		parsed, err := s.parser.Parse(cronExpr)
+		p, err := s.parser.Parse(cronExpr)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidSchedule, err)
+			return nil, nil, fmt.Errorf("%w: %v", ErrInvalidSchedule, err)
 		}
-		sched.NextFireAt = parsed.Next(now)
+		parsed = p
 	}
-	if err := s.repo.InsertScheduledPushWithTargets(ctx, sched, domainIDs); err != nil {
-		return nil, fmt.Errorf("insert schedule: %w", err)
+
+	// Resolve the audience once so we can compute per-device fire
+	// times. The audience must exist on the DB before timers can
+	// reference their device_ids.
+	devices, err := s.repo.ListAudienceDevicesForDomains(ctx, domainIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list audience: %w", err)
 	}
-	return sched, nil
+	if len(devices) == 0 {
+		return nil, nil, fmt.Errorf("%w: no audience devices in the selected domains", ErrInvalidSchedule)
+	}
+
+	timers, earliest, err := s.buildTimers(sched, parsed, runAt, now, devices)
+	if err != nil {
+		return nil, nil, err
+	}
+	sched.NextFireAt = earliest
+
+	if err := s.repo.InsertScheduledPushWithTargets(ctx, sched, domainIDs, timers); err != nil {
+		return nil, nil, fmt.Errorf("insert schedule: %w", err)
+	}
+	return sched, timers, nil
+}
+
+// buildTimers computes one ScheduledPushTimer per audience device,
+// applying the schedule's TimezoneMode. Returns the earliest fire
+// time so the caller can stamp ScheduledPush.NextFireAt.
+func (s *Service) buildTimers(sched *ScheduledPush, parsed cron.Schedule, runAt *time.Time, now time.Time, audience []devices.Device) ([]ScheduledPushTimer, time.Time, error) {
+	if len(audience) == 0 {
+		return nil, time.Time{}, fmt.Errorf("buildTimers: empty audience")
+	}
+	timers := make([]ScheduledPushTimer, 0, len(audience))
+	earliest := time.Time{}
+
+	switch sched.ScheduleType {
+	case ScheduleTypeOneShot:
+		// Single UTC fire for everyone, regardless of TZ mode.
+		// The operator picked the moment; clients display it in
+		// their local TZ.
+		fire := *runAt
+		for _, d := range audience {
+			timers = append(timers, ScheduledPushTimer{
+				DeviceID: d.ID,
+				FireAt:   fire,
+			})
+		}
+		earliest = fire
+	case ScheduleTypeRecurring:
+		for _, d := range audience {
+			fire, err := s.nextCronFire(parsed, sched.TimezoneMode, sched.Timezone, d.Timezone, now)
+			if err != nil {
+				return nil, time.Time{}, err
+			}
+			timers = append(timers, ScheduledPushTimer{
+				DeviceID: d.ID,
+				FireAt:   fire,
+			})
+			if earliest.IsZero() || fire.Before(earliest) {
+				earliest = fire
+			}
+		}
+	default:
+		return nil, time.Time{}, fmt.Errorf("unknown schedule_type %q", sched.ScheduleType)
+	}
+	return timers, earliest, nil
+}
+
+// nextCronFire evaluates the cron expression in the right TZ and
+// returns the next moment >= now. For SHARED mode the schedule's
+// Timezone is used; for DEVICE_LOCAL the device's own TZ (falling
+// back to UTC if empty or invalid, with a debug log).
+func (s *Service) nextCronFire(parsed cron.Schedule, mode TimezoneMode, scheduleTZ, deviceTZ string, now time.Time) (time.Time, error) {
+	switch mode {
+	case TimezoneModeShared:
+		loc, err := time.LoadLocation(scheduleTZ)
+		if err != nil || loc == nil {
+			loc = time.UTC
+		}
+		localNow := now.In(loc)
+		return parsed.Next(localNow), nil
+	case TimezoneModeDeviceLocal:
+		loc, err := time.LoadLocation(deviceTZ)
+		if err != nil || loc == nil {
+			if s.logger != nil {
+				s.logger.Debug("push: device has no valid TZ, falling back to UTC for cron eval",
+					slog.String("device_tz", deviceTZ))
+			}
+			loc = time.UTC
+		}
+		localNow := now.In(loc)
+		return parsed.Next(localNow), nil
+	default:
+		return time.Time{}, fmt.Errorf("unknown timezone_mode %q", mode)
+	}
 }
 
 // OnAck is the entry point for the realtime hub. It is called from
@@ -280,73 +392,158 @@ func (s *Service) OnAck(ctx context.Context, messageID string) error {
 	return nil
 }
 
-// DispatchScheduled fires a single scheduled push. It is called
-// from the scheduler runner for every row that is due
-// (is_active = true and next_fire_at <= now). The flow is the
-// same as CreateImmediate's: persist a push_messages row, snapshot
-// delivery_attempts, publish to the hub, and record per-device
-// outcomes. The schedule is then either deactivated (one_shot) or
-// rescheduled (recurring).
+// DispatchTimer fires ONE scheduled push to the single device that
+// owns the timer. The worker calls this once per pending timer it
+// pops off the Redis index (or the DB fallback). For recurring
+// schedules it computes and inserts the next per-device timer so
+// the next firing is also correct.
 //
-// The caller (scheduler runner) is responsible for fetching the
-// schedule's target domainIDs from the join table and passing them
-// in. This keeps the schedule struct free of m2m preloads.
+// Like CreateImmediate, this persists a push_messages row +
+// delivery_attempts snapshot and publishes a WsPush. The schedule's
+// user-facing fields are unchanged.
 //
-// Unlike CreateImmediate, this method does NOT re-validate the
-// per-user feature toggle or domain ownership. The schedule is
-// the source of truth: if the user disabled notifications after
-// creating the schedule, the existing schedule still fires (the
-// spec's "se desactiva en cascada" rule is enforced at toggle
-// time, not at fire time). The audience filter still runs and the
-// rows are still snapshotted, so a deactivated user can
-// reactivate and immediately see the metrics.
-func (s *Service) DispatchScheduled(ctx context.Context, schedule *ScheduledPush, domainIDs []uint) error {
+// Two workers racing on the same row is harmless: the DB-side
+// dispatched_at guard in MarkTimerDispatched ensures only one
+// dispatch goes through. The losing worker just sees RowsAffected=0
+// and exits silently.
+func (s *Service) DispatchTimer(ctx context.Context, schedule *ScheduledPush, timer ScheduledPushTimer) error {
 	now := time.Now()
+
+	// Load the device. We need its TZ to compute the next fire
+	// time when the schedule is recurring.
+	dev, err := s.repo.FindDeviceByID(ctx, timer.DeviceID)
+	if err != nil {
+		return fmt.Errorf("load device: %w", err)
+	}
+
 	msg := &PushMessage{
 		UserID:      schedule.UserID,
 		Category:    schedule.Category,
 		Title:       schedule.Title,
 		Body:        schedule.Body,
 		ImageURL:    schedule.ImageURL,
-		DeepLink:    schedule.DeepLink,
 		Priority:    schedule.Priority,
 		TTLSeconds:  schedule.TTLSeconds,
 		DataJSON:    schedule.DataJSON,
 		Source:      SourceScheduled,
 		ScheduledID: &schedule.ID,
 	}
+	domainIDs, err := s.repo.GetScheduledPushDomainIDs(ctx, schedule.ID)
+	if err != nil {
+		return fmt.Errorf("load domains: %w", err)
+	}
 	if err := s.repo.InsertPushMessageWithTargets(ctx, msg, domainIDs, &now); err != nil {
 		return fmt.Errorf("insert scheduled push: %w", err)
 	}
-	if err := s.markScheduleFired(ctx, schedule, now); err != nil {
-		s.logger.Warn("push: mark schedule fired",
-			slog.Uint64("schedule_id", uint64(schedule.ID)),
-			slog.String("error", err.Error()))
-	}
+
 	payload := payloadFromSchedule(schedule)
-	if err := s.dispatchToAudience(ctx, msg, audienceFilter{DomainIDs: domainIDs}, payload); err != nil {
-		return fmt.Errorf("dispatch: %w", err)
+	if err := s.dispatchToOneDevice(ctx, msg, dev, payload); err != nil {
+		return fmt.Errorf("dispatch to device: %w", err)
+	}
+
+	// Stamp dispatched_at. Idempotent under worker races.
+	stamped, err := s.repo.MarkTimerDispatched(ctx, timer.ID, now)
+	if err != nil {
+		s.logger.Warn("push: mark timer dispatched failed",
+			slog.Uint64("timer_id", uint64(timer.ID)),
+			slog.String("error", err.Error()))
+	} else if !stamped {
+		s.logger.Info("push: timer already dispatched by another worker, skipping post-fire work",
+			slog.Uint64("timer_id", uint64(timer.ID)))
+		return nil
+	}
+
+	// For recurring, compute and insert the next per-device timer.
+	if schedule.ScheduleType == ScheduleTypeRecurring {
+		if err := s.scheduleNextRecurringFire(ctx, schedule, dev, now); err != nil {
+			s.logger.Warn("push: schedule next recurring fire failed",
+				slog.Uint64("schedule_id", uint64(schedule.ID)),
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("error", err.Error()))
+		}
 	}
 	return nil
 }
 
-// markScheduleFired handles the per-type post-fire state. For
-// one_shot, it deactivates the row. For recurring, it computes
-// the next fire and stamps last_fired_at.
-func (s *Service) markScheduleFired(ctx context.Context, schedule *ScheduledPush, now time.Time) error {
-	switch schedule.ScheduleType {
-	case ScheduleTypeOneShot:
-		return s.repo.MarkScheduledPushFired(ctx, schedule.ID, now)
-	case ScheduleTypeRecurring:
-		parsed, err := s.parser.Parse(schedule.CronExpr)
-		if err != nil {
-			return fmt.Errorf("parse cron: %w", err)
-		}
-		next := parsed.Next(now)
-		return s.repo.RescheduleRecurring(ctx, schedule.ID, next, now)
-	default:
-		return fmt.Errorf("unknown schedule_type %q", schedule.ScheduleType)
+// scheduleNextRecurringFire computes the next per-device fire
+// time and inserts a new pending timer row. Updates the schedule's
+// NextFireAt column if this fire time is the new earliest. The
+// caller is expected to also enqueue the new timer into the
+// Redis index (the worker does this on its next tick by reading
+// the new DB row).
+func (s *Service) scheduleNextRecurringFire(ctx context.Context, schedule *ScheduledPush, dev devices.Device, now time.Time) error {
+	parsed, err := s.parser.Parse(schedule.CronExpr)
+	if err != nil {
+		return fmt.Errorf("parse cron: %w", err)
 	}
+	next, err := s.nextCronFire(parsed, schedule.TimezoneMode, schedule.Timezone, dev.Timezone, now)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.InsertTimer(ctx, &ScheduledPushTimer{
+		ScheduledPushID: schedule.ID,
+		DeviceID:        dev.ID,
+		FireAt:          next,
+	}); err != nil {
+		return err
+	}
+	// Bump the schedule's NextFireAt if this row is now the
+	// earliest pending timer. Cheap: take MIN over pending
+	// timers. Skipped on error to avoid masking the insert error.
+	earliest, err := s.repo.EarliestPendingTimer(ctx, schedule.ID)
+	if err == nil && !earliest.IsZero() {
+		_ = s.repo.UpdateScheduledPushNextFireAt(ctx, schedule.ID, earliest)
+	}
+	return nil
+}
+
+// dispatchToOneDevice is the per-device version of
+// dispatchToAudience: snapshot the single delivery_attempt row,
+// publish the WsPush, and record the outcome.
+func (s *Service) dispatchToOneDevice(ctx context.Context, msg *PushMessage, dev devices.Device, payload *pb.PushPayload) error {
+	now := time.Now()
+	frame := buildWsPush(uint64(msg.ID), payload)
+	if err := s.repo.InsertDeliveryAttempts(ctx, []DeliveryAttempt{{
+		PushMessageID: msg.ID,
+		DeviceID:      dev.ID,
+		MessageID:     frame.MessageId,
+		State:         StateSent,
+		SentAt:        &now,
+	}}); err != nil {
+		return fmt.Errorf("insert delivery attempt: %w", err)
+	}
+	s.metrics.IncDispatched(string(msg.Source))
+	if err := s.pusher.PublishPush(ctx, uint64(dev.ID), frame); err != nil {
+		if errors.Is(err, realtime.ErrDeviceNotConnected) {
+			if markErr := s.repo.MarkDeliveryFailed(ctx, frame.MessageId, FailureDeviceOffline); markErr != nil {
+				s.logger.Warn("push: mark offline failed",
+					slog.String("message_id", frame.MessageId),
+					slog.String("error", markErr.Error()))
+			}
+			s.metrics.IncFailed(FailureDeviceOffline)
+			s.logger.Info("push: ws delivery skipped",
+				slog.Uint64("push_id", uint64(msg.ID)),
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("reason", string(FailureDeviceOffline)))
+			return nil
+		}
+		s.logger.Warn("push: ws publish failed",
+			slog.Uint64("push_id", uint64(msg.ID)),
+			slog.Uint64("device_id", uint64(dev.ID)),
+			slog.String("error", err.Error()))
+		if markErr := s.repo.MarkDeliveryFailed(ctx, frame.MessageId, FailureInternalError); markErr != nil {
+			s.logger.Warn("push: mark internal-error failed",
+				slog.String("message_id", frame.MessageId),
+				slog.String("error", markErr.Error()))
+		}
+		s.metrics.IncFailed(FailureInternalError)
+		return err
+	}
+	s.logger.Info("push: ws publish queued",
+		slog.Uint64("push_id", uint64(msg.ID)),
+		slog.Uint64("device_id", uint64(dev.ID)),
+		slog.String("message_id", frame.MessageId))
+	return nil
 }
 
 // audienceFilter is a small helper struct for the audience filter
@@ -428,18 +625,50 @@ func payloadFromSchedule(s *ScheduledPush) *pb.PushPayload {
 		Title:      s.Title,
 		Body:       s.Body,
 		ImageUrl:   s.ImageURL,
-		DeepLink:   s.DeepLink,
 		Priority:   PriorityToProto(s.Priority),
 		TtlSeconds: int32(s.TTLSeconds),
 		Data:       map[string]string(s.DataJSON),
 	}
 }
 
-// ListDueScheduledPushes returns schedules whose next_fire_at has
-// arrived. Exposed as a service method so the scheduler runner in
-// internal/scheduler does not need to import internal/push.
-func (s *Service) ListDueScheduledPushes(ctx context.Context, now time.Time, limit int) ([]ScheduledPush, error) {
-	return s.repo.ListDueScheduledPushes(ctx, now, limit)
+// ListDueTimers returns pending timers whose fire_at has arrived,
+// joined with their schedule for context. Exposed so the scheduler
+// worker does not need to import the push package directly.
+func (s *Service) ListDueTimers(ctx context.Context, now time.Time, limit int) ([]ScheduledPushTimer, error) {
+	return s.repo.ListDueTimers(ctx, now, limit)
+}
+
+// LoadSchedule fetches a schedule by id for the worker. Returns
+// ErrRecordNotFound when the row does not exist.
+func (s *Service) LoadSchedule(ctx context.Context, id uint) (*ScheduledPush, error) {
+	var s2 ScheduledPush
+	if err := s.repo.db.WithContext(ctx).First(&s2, id).Error; err != nil {
+		return nil, err
+	}
+	return &s2, nil
+}
+
+// EarliestPendingTimer delegates to the repository. The runner
+// uses it to keep the schedule header column in sync after a
+// recurring fire.
+func (s *Service) EarliestPendingTimer(ctx context.Context, scheduleID uint) (time.Time, error) {
+	return s.repo.EarliestPendingTimer(ctx, scheduleID)
+}
+
+// PendingTimersAfter returns every undispatched timer at or after
+// the given moment, projected as the canonical Redis TimerEntry
+// shape. The runner uses it to re-enqueue the schedule into Redis
+// after a fire.
+func (s *Service) PendingTimersAfter(ctx context.Context, scheduleID uint, min time.Time) ([]redisplatform.TimerEntry, error) {
+	rows, err := s.repo.PendingTimersAtOrAfter(ctx, scheduleID, min)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]redisplatform.TimerEntry, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, redisplatform.TimerEntry{DeviceID: r.DeviceID, FireAt: r.FireAt})
+	}
+	return out, nil
 }
 
 // authorize checks that the caller is either the user themselves
@@ -506,7 +735,7 @@ func (s *Service) validatePayload(p *pb.PushPayload) error {
 	if p == nil {
 		return fmt.Errorf("%w: nil payload", ErrInvalidPayload)
 	}
-	_, _, _, _, _, _, _, _, ok := PayloadFromProto(p)
+	_, _, _, _, _, _, _, ok := PayloadFromProto(p)
 	if !ok {
 		return fmt.Errorf("%w: category, priority, or ttl out of range", ErrInvalidPayload)
 	}
@@ -571,7 +800,6 @@ func buildWsPush(pushID uint64, payload *pb.PushPayload) *pb.WsPush {
 		Title:      payload.GetTitle(),
 		Body:       payload.GetBody(),
 		ImageUrl:   payload.GetImageUrl(),
-		DeepLink:   payload.GetDeepLink(),
 		Priority:   payload.GetPriority(),
 		TtlSeconds: payload.GetTtlSeconds(),
 		Data:       payload.GetData(),

@@ -231,7 +231,6 @@ func TestBuildWsPush_PopulatesEveryPayloadField(t *testing.T) {
 		Title:      "Hello",
 		Body:       "World",
 		ImageUrl:   "https://example.test/banner.png",
-		DeepLink:   "iptv://event/42",
 		Priority:   pb.PushPriority_PUSH_PRIORITY_HIGH,
 		TtlSeconds: 3600,
 		Data:       map[string]string{"k": "v"},
@@ -253,9 +252,6 @@ func TestBuildWsPush_PopulatesEveryPayloadField(t *testing.T) {
 	}
 	if frame.ImageUrl != payload.ImageUrl {
 		t.Errorf("ImageUrl = %q, want %q (regression: this field was silently dropped before B1)", frame.ImageUrl, payload.ImageUrl)
-	}
-	if frame.DeepLink != payload.DeepLink {
-		t.Errorf("DeepLink = %q, want %q (regression: this field was silently dropped before B1)", frame.DeepLink, payload.DeepLink)
 	}
 	if frame.Priority != payload.Priority {
 		t.Errorf("Priority = %v, want %v (regression: this field was silently dropped before B1)", frame.Priority, payload.Priority)
