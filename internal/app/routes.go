@@ -201,6 +201,14 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 }
 
 func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger) (*scraper.Service, *reporting.AggregationRepository) {
+	// Tests construct App with a nil DB and call Run to exercise
+	// shutdown logic; they have no need for a scraper. The rod-backed
+	// NewClient also requires launching a real Chromium process,
+	// which is not viable inside the unit test suite, so we skip
+	// it entirely when db is nil.
+	if db == nil {
+		return nil, nil
+	}
 	client, err := scraper.NewClient(scraper.ClientConfig{})
 	if err != nil {
 		panic("scraper: failed to create client: " + err.Error())
