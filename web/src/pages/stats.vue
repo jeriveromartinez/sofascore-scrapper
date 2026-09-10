@@ -69,9 +69,9 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, index) in state.data" :key="row.sofaScoreEventId">
+            <tr v-for="(row, index) in state.data" :key="row.externalMatchId">
               <td>{{ index + 1 }}</td>
-              <td>{{ row.sofaScoreEventId }}</td>
+              <td>{{ row.externalMatchId }}</td>
               <td>{{ row.viewCount }}</td>
             </tr>
           </tbody>

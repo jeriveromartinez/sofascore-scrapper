@@ -8,8 +8,8 @@ import (
 )
 
 type EventStats struct {
-	SofaScoreEventId int64
-	ViewCount        int64
+	ExternalMatchId string
+	ViewCount       int64
 }
 
 type Repository struct {
@@ -44,22 +44,22 @@ func (r *Repository) GetTopEvents(ctx context.Context, limit int) ([]EventStats,
 
 	if strings.Contains(r.db.Dialector.Name(), "sqlite") {
 		result = r.db.WithContext(ctx).Raw(`
-			SELECT CAST(content AS INTEGER) AS sofa_score_event_id,
+			SELECT content AS external_match_id,
 			       COUNT(*) AS view_count
 			FROM playback_logs
 			WHERE content NOT GLOB '*[^0-9]*' AND content != ''
 			GROUP BY content
-			ORDER BY view_count DESC, sofa_score_event_id ASC
+			ORDER BY view_count DESC, external_match_id ASC
 			LIMIT ?
 		`, limit).Scan(&stats)
 	} else {
 		result = r.db.WithContext(ctx).Raw(`
-			SELECT CAST(content AS UNSIGNED) AS sofa_score_event_id,
+			SELECT content AS external_match_id,
 			       COUNT(*) AS view_count
 			FROM playback_logs
 			WHERE content REGEXP '^[0-9]+$'
 			GROUP BY content
-			ORDER BY view_count DESC, sofa_score_event_id ASC
+			ORDER BY view_count DESC, external_match_id ASC
 			LIMIT ?
 		`, limit).Scan(&stats)
 	}

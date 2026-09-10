@@ -19,7 +19,7 @@ import type {
   LogPlaybackRequest,
   PlaybackLog as ProtoPlaybackLog,
   PlaybackPage as ProtoPlaybackPage,
-  SofaScoreEvent as ProtoSofaScoreEvent,
+  ExternalEvent as ProtoExternalEvent,
   Team as ProtoTeam,
   Tournament as ProtoTournament,
   TournamentPage as ProtoTournamentPage,
@@ -48,7 +48,7 @@ import type {
 } from "../../../proto/api";
 
 export type Team = ProtoTeam;
-export type SofaScoreEvent = ProtoSofaScoreEvent;
+export type ExternalEvent = ProtoExternalEvent;
 export type EventsResponse = EventsList;
 export type EventPageResponse = ProtoEventPage;
 export type DeviceResponse = DeviceList;
