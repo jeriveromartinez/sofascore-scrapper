@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -165,7 +166,7 @@ func TestService_GetCurrentAndUpcoming_CacheHit(t *testing.T) {
 
 	svc := NewService(repo, fake, &EpochStore{client: nil})
 
-	cached := []Event{{SofaScoreEventId: 999, Sport: "from-cache"}}
+	cached := []Event{{ExternalMatchId: "999", Sport: "from-cache"}}
 	cachedData, _ := json.Marshal(cached)
 	fake.data[BuildCacheKey(0, []uint{1}, 6)] = cachedData
 
@@ -177,8 +178,8 @@ func TestService_GetCurrentAndUpcoming_CacheHit(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].SofaScoreEventId != 999 {
-		t.Errorf("expected cached event, got sofaID=%d", events[0].SofaScoreEventId)
+	if events[0].ExternalMatchId != "999" {
+		t.Errorf("expected cached event, got externalMatchID=%s", events[0].ExternalMatchId)
 	}
 	if events[0].Sport != "from-cache" {
 		t.Errorf("expected sport='from-cache', got %s", events[0].Sport)
@@ -210,8 +211,8 @@ func TestService_GetCurrentAndUpcoming_CacheMissFills(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].SofaScoreEventId != 1 {
-		t.Errorf("expected DB event, got sofaID=%d", events[0].SofaScoreEventId)
+	if events[0].ExternalMatchId != "1" {
+		t.Errorf("expected DB event, got externalMatchID=%s", events[0].ExternalMatchId)
 	}
 	if fake.setCalls == 0 {
 		t.Error("cache Set should have been called on miss")
@@ -244,8 +245,8 @@ func TestService_GetCurrentAndUpcoming_CorruptCacheRepopulates(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].SofaScoreEventId != 2 {
-		t.Errorf("expected DB event after corrupt cache, got sofaID=%d", events[0].SofaScoreEventId)
+	if events[0].ExternalMatchId != "2" {
+		t.Errorf("expected DB event after corrupt cache, got externalMatchID=%s", events[0].ExternalMatchId)
 	}
 
 	key := BuildCacheKey(0, []uint{1}, 6)
@@ -278,8 +279,8 @@ func TestService_GetCurrentAndUpcoming_RedisErrorFallsBackToDB(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event from DB fallback, got %d", len(events))
 	}
-	if events[0].SofaScoreEventId != 3 {
-		t.Errorf("expected DB event, got sofaID=%d", events[0].SofaScoreEventId)
+	if events[0].ExternalMatchId != "3" {
+		t.Errorf("expected DB event, got externalMatchID=%s", events[0].ExternalMatchId)
 	}
 }
 
@@ -300,8 +301,8 @@ func TestService_GetCurrentAndUpcoming_NoCacheFallsBackToDB(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].SofaScoreEventId != 4 {
-		t.Errorf("expected DB event, got sofaID=%d", events[0].SofaScoreEventId)
+	if events[0].ExternalMatchId != "4" {
+		t.Errorf("expected DB event, got externalMatchID=%s", events[0].ExternalMatchId)
 	}
 }
 
@@ -325,8 +326,8 @@ func TestService_GetCurrentAndUpcoming_DeviceTournamentsPreferred(t *testing.T) 
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event from device assignment, got %d", len(events))
 	}
-	if events[0].SofaScoreEventId != 2 {
-		t.Errorf("expected event from device's tournament, got sofaID=%d", events[0].SofaScoreEventId)
+	if events[0].ExternalMatchId != "2" {
+		t.Errorf("expected event from device's tournament, got externalMatchID=%s", events[0].ExternalMatchId)
 	}
 }
 
@@ -336,7 +337,7 @@ func TestService_GetCurrentAndUpcoming_CoalescesConcurrentCacheMisses(t *testing
 	if err := db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1}).Error; err != nil {
 		t.Fatalf("seed tournament selection: %v", err)
 	}
-	if err := db.Create(&Event{SofaScoreEventId: 1, LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
+	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
 		t.Fatalf("seed event: %v", err)
 	}
 
@@ -408,7 +409,7 @@ func TestService_GetCurrentAndUpcoming_CanceledCallerDoesNotCancelSharedLoad(t *
 	if err := db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1}).Error; err != nil {
 		t.Fatalf("seed tournament selection: %v", err)
 	}
-	if err := db.Create(&Event{SofaScoreEventId: 1, LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
+	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
 		t.Fatalf("seed event: %v", err)
 	}
 
@@ -475,7 +476,7 @@ func TestService_GetCurrentAndUpcoming_CanceledCallerDoesNotCancelSharedLoad(t *
 func createTestEventWithLeague(repo *Repository, sofaID int64, leagueID uint, statusType string, startTs int64, currentPeriodTs int64) error {
 	tm := Team{TeamId: sofaID + 100, Name: "Team"}
 	event := Event{
-		SofaScoreEventId:            sofaID,
+		ExternalMatchId:             strconv.FormatInt(sofaID, 10),
 		Sport:                       "football",
 		HomeScore:                   0,
 		HomeTeamId:                  100 + sofaID,

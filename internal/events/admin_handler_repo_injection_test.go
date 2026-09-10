@@ -44,10 +44,10 @@ func TestHandleGetEventsPage_UsesInjectedRepository(t *testing.T) {
 
 	now := time.Now().UnixMilli()
 	if err := db.Create(&Event{
-		SofaScoreEventId: 9000,
-		StartTimestamp:   now + 3600_000,
-		Sport:            "football",
-		StatusType:       "notstarted",
+		ExternalMatchId: "9000",
+		StartTimestamp:  now + 3600_000,
+		Sport:           "football",
+		StatusType:      "notstarted",
 	}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}

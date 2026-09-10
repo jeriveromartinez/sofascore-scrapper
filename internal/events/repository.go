@@ -181,7 +181,7 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 
 		if len(batch.Events) > 0 {
 			if err := tx.Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "sofa_score_event_id"}},
+				Columns: []clause.Column{{Name: "external_match_id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
 					"sport", "home_score", "away_score",
 					"home_team_id", "away_team_id",

@@ -1,6 +1,7 @@
 package events
 
 import (
+	"strconv"
 	"time"
 
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
@@ -26,11 +27,17 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 	homeTeam := TeamToProto(e.HomeTeamModel)
 	awayTeam := TeamToProto(e.AwayTeamModel)
 
+	// The proto type (pb.SofaScoreEvent) still carries the int64
+	// SofaScoreEventId field. The model has moved to a string
+	// ExternalMatchId. Bridge the two so the wire contract survives
+	// until Task 2 renames the proto field to ExternalMatchId (string).
+	sofaID, _ := strconv.ParseInt(e.ExternalMatchId, 10, 64)
+
 	return &pb.SofaScoreEvent{
 		Id:                          uint32(e.ID),
 		CreatedAt:                   formatTime(e.CreatedAt),
 		UpdatedAt:                   formatTime(e.UpdatedAt),
-		SofaScoreEventId:            e.SofaScoreEventId,
+		SofaScoreEventId:            sofaID,
 		Sport:                       e.Sport,
 		HomeScore:                   int32(e.HomeScore),
 		HomeTeamId:                  e.HomeTeamId,

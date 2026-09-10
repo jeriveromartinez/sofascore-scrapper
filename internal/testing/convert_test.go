@@ -200,7 +200,7 @@ func TestEventToProto(t *testing.T) {
 	league.ID = 3
 
 	e := events.Event{
-		SofaScoreEventId:            100,
+		ExternalMatchId:             "100",
 		Sport:                       "football",
 		HomeScore:                   2,
 		HomeTeamId:                  1,
@@ -248,8 +248,8 @@ func TestEventsToProto(t *testing.T) {
 	home := &events.Team{TeamId: 10, Name: "H", LogoUrl: "/team/10/image"}
 	away := &events.Team{TeamId: 20, Name: "A", LogoUrl: "/team/20/image"}
 	evs := []events.Event{
-		{SofaScoreEventId: 1, HomeTeamModel: home, AwayTeamModel: away},
-		{SofaScoreEventId: 2, HomeTeamModel: home, AwayTeamModel: away},
+		{ExternalMatchId: "1", HomeTeamModel: home, AwayTeamModel: away},
+		{ExternalMatchId: "2", HomeTeamModel: home, AwayTeamModel: away},
 	}
 
 	result := events.EventsToProto(evs)

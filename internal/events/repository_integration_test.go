@@ -4,6 +4,7 @@ package events
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func createTestEvent(repo *Repository, sofaID int64, statusType string, startTs int64, currentPeriodTs int64) error {
 	tm := Team{TeamId: sofaID + 100, Name: "Team"}
 	event := Event{
-		SofaScoreEventId:            sofaID,
+		ExternalMatchId:             strconv.FormatInt(sofaID, 10),
 		Sport:                       "football",
 		HomeScore:                   0,
 		HomeTeamId:                  100,
@@ -63,7 +64,7 @@ func TestGetCurrentAndUpcoming_ExcludesFinished(t *testing.T) {
 	}
 
 	for _, e := range events {
-		if e.SofaScoreEventId == 1 {
+		if e.ExternalMatchId == "1" {
 			t.Error("finished event should not be in current/upcoming")
 		}
 	}
@@ -88,7 +89,7 @@ func TestGetCurrentAndUpcoming_LiveByStatusType(t *testing.T) {
 
 	found := false
 	for _, e := range events {
-		if e.SofaScoreEventId == 1 {
+		if e.ExternalMatchId == "1" {
 			found = true
 		}
 	}
@@ -115,14 +116,14 @@ func TestGetCurrentAndUpcoming_UpcomingByStatusTypeAndStartTimestamp(t *testing.
 	}
 
 	for _, e := range events {
-		if e.SofaScoreEventId == 2 {
+		if e.ExternalMatchId == "2" {
 			t.Error("notstarted event in the past should not be upcoming")
 		}
 	}
 
 	foundFuture := false
 	for _, e := range events {
-		if e.SofaScoreEventId == 1 {
+		if e.ExternalMatchId == "1" {
 			foundFuture = true
 		}
 	}
@@ -141,10 +142,10 @@ func TestListPage_SportFilter(t *testing.T) {
 	now := time.Now().UnixMilli()
 	for i, sport := range []string{"football", "basketball", "football"} {
 		if err := db.Create(&Event{
-			SofaScoreEventId: int64(2000 + i),
-			StartTimestamp:   now + int64(i*3600_000),
-			Sport:            sport,
-			StatusType:       "notstarted",
+			ExternalMatchId: strconv.Itoa(2000 + i),
+			StartTimestamp:  now + int64(i*3600_000),
+			Sport:           sport,
+			StatusType:      "notstarted",
 		}).Error; err != nil {
 			t.Fatalf("seed: %v", err)
 		}
@@ -158,7 +159,7 @@ func TestListPage_SportFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPage: %v", err)
 	}
-	if len(got) != 1 || got[0].SofaScoreEventId != 2001 {
+	if len(got) != 1 || got[0].ExternalMatchId != "2001" {
 		t.Fatalf("want 1 basketball event (id 2001), got %d events: %+v", len(got), got)
 	}
 }
@@ -180,7 +181,7 @@ func TestListPage_AllFilters_Combined(t *testing.T) {
 		t.Fatalf("seed away: %v", err)
 	}
 	if err := db.Create(&Event{
-		SofaScoreEventId: 3000, Sport: "football", StatusType: "notstarted",
+		ExternalMatchId: "3000", Sport: "football", StatusType: "notstarted",
 		StartTimestamp: now + 3600_000, LeagueId: league.ID,
 		HomeTeamId: 5001, AwayTeamId: 5002,
 	}).Error; err != nil {
@@ -192,12 +193,12 @@ func TestListPage_AllFilters_Combined(t *testing.T) {
 			status = "finished"
 		}
 		if err := db.Create(&Event{
-			SofaScoreEventId: int64(3001 + i),
-			Sport:            sport,
-			StatusType:       status,
-			StartTimestamp:   now + int64((i+1)*3600_000),
-			LeagueId:         league.ID,
-			HomeTeamId:       5001, AwayTeamId: 5002,
+			ExternalMatchId: strconv.Itoa(3001 + i),
+			Sport:           sport,
+			StatusType:      status,
+			StartTimestamp:  now + int64((i+1)*3600_000),
+			LeagueId:        league.ID,
+			HomeTeamId:      5001, AwayTeamId: 5002,
 		}).Error; err != nil {
 			t.Fatalf("seed decoy: %v", err)
 		}
@@ -214,7 +215,7 @@ func TestListPage_AllFilters_Combined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPage: %v", err)
 	}
-	if len(got) != 1 || got[0].SofaScoreEventId != 3000 {
+	if len(got) != 1 || got[0].ExternalMatchId != "3000" {
 		t.Fatalf("want only event 3000 (football + notstarted + Primera + Barcelona), got %d events: %+v", len(got), got)
 	}
 }
@@ -237,10 +238,10 @@ func TestListPage_LikeInputEscapesWildcards(t *testing.T) {
 			t.Fatalf("seed team: %v", err)
 		}
 		if err := db.Create(&Event{
-			SofaScoreEventId: int64(7000 + i),
-			Sport:            "football", StatusType: "notstarted",
-			StartTimestamp:   now + int64(i*3600_000),
-			HomeTeamId:       tm.id,
+			ExternalMatchId: strconv.Itoa(7000 + i),
+			Sport:           "football", StatusType: "notstarted",
+			StartTimestamp:  now + int64(i*3600_000),
+			HomeTeamId:      tm.id,
 		}).Error; err != nil {
 			t.Fatalf("seed event: %v", err)
 		}
@@ -258,8 +259,8 @@ func TestListPage_LikeInputEscapesWildcards(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("want 1 event (Team%%Special only — %% must NOT act as wildcard), got %d: %+v", len(got), got)
 	}
-	if got[0].SofaScoreEventId != 7002 {
-		t.Fatalf("want event 7002 (Team%%Special), got %d", got[0].SofaScoreEventId)
+	if got[0].ExternalMatchId != "7002" {
+		t.Fatalf("want event 7002 (Team%%Special), got %s", got[0].ExternalMatchId)
 	}
 }
 

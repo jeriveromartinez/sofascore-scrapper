@@ -17,7 +17,8 @@ type Team struct {
 
 type Event struct {
 	gorm.Model
-	SofaScoreEventId            int64  `gorm:"column:sofa_score_event_id;uniqueIndex:idx_events_sofa_score_event_id"`
+	ExternalMatchId             string `gorm:"column:external_match_id;uniqueIndex:idx_events_external_match_id;size:64;not null"`
+	Source                      string `gorm:"column:source;size:32;not null;default:''"`
 	Sport                       string `gorm:"column:sport;type:longtext"`
 	HomeScore                   int    `gorm:"column:home_score"`
 	HomeTeamId                  int64  `gorm:"column:home_team_id;foreignKey:HomeTeamId;references:TeamId"`
