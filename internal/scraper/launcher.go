@@ -14,6 +14,13 @@ import (
 // /usr/bin/chromium), it is used as-is and the auto-download path is
 // skipped. Otherwise rod downloads its pinned build on first launch.
 //
+// When SOFASCRAPER_PROXY_URL is set, Chromium is launched with
+// --proxy-server=<url>. Accepts any URL Chromium's proxy-server flag
+// understands: socks5://user:pass@host:port (DNS resolved locally) or
+// socks5h://user:pass@host:port (DNS resolved via proxy — preferred
+// when the goal is hiding the resolver IP from the target). Empty
+// means no proxy and the browser uses the host network directly.
+//
 // The browser lives until Close is called on the owning Client.
 func launchBrowser() (*rod.Browser, error) {
 	l := launcher.New().
@@ -36,6 +43,10 @@ func launchBrowser() (*rod.Browser, error) {
 
 	if bin := os.Getenv("SOFASCRAPER_CHROMIUM_BIN"); bin != "" {
 		l = l.Bin(bin)
+	}
+
+	if proxy := os.Getenv("SOFASCRAPER_PROXY_URL"); proxy != "" {
+		l = l.Proxy(proxy)
 	}
 
 	controlURL, err := l.Launch()

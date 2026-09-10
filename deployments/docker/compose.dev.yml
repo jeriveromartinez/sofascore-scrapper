@@ -59,6 +59,11 @@ services:
       API_ADDR: "0.0.0.0:8080"
       APK_STORAGE_PATH: /data/apk
       IMAGE_STORAGE_PATH: /data/image
+      # Optional SOCKS5 proxy. Format: socks5://user:pass@host:port
+      # Use socks5h://... to also resolve DNS through the proxy (preferred
+      # when the goal is to hide the resolver IP from the target).
+      # Leave empty to route directly from the container's network.
+      SOFASCRAPER_PROXY_URL: ${SOFASCRAPER_PROXY_URL:-}
     volumes:
       - apk_data:/data/apk
       - image_data:/data/image

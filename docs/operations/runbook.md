@@ -12,7 +12,7 @@ Day-to-day procedures for the on-call operator. Pair this with
 | `iptv_db_connections_exhausted` | Check `DB_MAX_OPEN_CONNS`; check for stuck transactions via `SHOW PROCESSLIST` |
 | `iptv_redis_outage` | See [Redis Outage Behavior](#redis-outage-behavior) |
 | `iptv_apk_storage_full` | `du -sh /opt/iptv/apk_storage/*`; prune old upload chunks |
-| `iptv_scrape_403` | SofaScore is blocking this IP. Cosmetic; scraper retries on next tick. |
+| `iptv_scrape_403` | SofaScore is blocking this IP. Cosmetic; scraper retries on next tick. If persistent, see [SOCKS5 proxy](#socks5-proxy-for-sofascore). |
 
 ## Redis outage behavior
 
@@ -128,3 +128,34 @@ and refuses to run once `users` already has a row, so it must run
 before the server's first normal boot. Start the server afterward
 and the first human registers at `/register` using the token; that
 account becomes the sole admin via the existing first-user rule.
+
+## SOCKS5 proxy for SofaScore
+
+Fastly's WAF behind SofaScore blocks datacenter IP ranges, so when the
+backend runs on a typical VPS or cloud VM, every API request comes
+back with HTTP 200 whose body is `{"error":{"code":403,"reason":"challenge"}}`.
+A residential SOCKS5 proxy makes the browser's egress look like a
+home user.
+
+The scraper's Chromium binary is launched with `--proxy-server=<url>`
+when `SOFASCRAPER_PROXY_URL` is set. The env var is consumed only by
+the scraper; everything else (admin API, WebSocket, uploads) keeps
+talking to the database/Redis directly.
+
+Format:
+
+- `socks5://user:pass@host:port` — DNS resolved locally (target sees
+  the proxy IP but the resolver IP is the host's).
+- `socks5h://user:pass@host:port` — DNS also resolved through the
+  proxy (target sees only the proxy IP end-to-end). Preferred.
+
+In `deployments/docker/.env`:
+
+```bash
+SOFASCRAPER_PROXY_URL=socks5h://user:pass@proxy.example.com:1080
+```
+
+`docker compose -f deployments/docker/compose.dev.yml up -d` picks
+the new value on next restart of the backend container. Verify the
+proxy is being used by watching for `"scraper fetch error"` warnings
+to disappear within one or two cron ticks (default: every 1 minute).
