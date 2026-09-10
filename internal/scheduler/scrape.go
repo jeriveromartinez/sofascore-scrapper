@@ -48,6 +48,9 @@ func startScrape(ctx context.Context, svc scraperService, runner *Runner, wg *sy
 	c := cron.New()
 
 	if _, err := c.AddFunc(scrapeTodaySpec, func() {
+		if logger != nil {
+			logger.Info("scheduler: scrape today tick fired")
+		}
 		_ = runner.RunLocked(context.Background(), lockScrapeToday, ttlScrapeToday, func(jobCtx context.Context) error {
 			svc.ScrapeToday(jobCtx, time.Now())
 			return nil

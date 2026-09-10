@@ -62,6 +62,7 @@ services:
     volumes:
       - apk_data:/data/apk
       - image_data:/data/image
+      - rod_browser:/home/appuser/.cache/rod
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
       interval: 15s
@@ -77,6 +78,7 @@ volumes:
   redis_data:
   apk_data:
   image_data:
+  rod_browser:
 
 networks:
   dev-net:

@@ -2,18 +2,21 @@ package scraper
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 )
 
-// launchBrowser resolves a Chromium binary via rod's launcher (which
-// downloads a managed build on first use and caches it under
-// ~/.cache/rod/browser), launches it headless, and connects a rod
-// Browser to it. The browser lives until Close is called on the
-// owning Client.
+// launchBrowser resolves a Chromium binary via rod's launcher and
+// launches it headless. When rodBrowserBin is set (typically via the
+// SOFASCRAPER_CHROMIUM_BIN env var, populated in the Dockerfile to
+// /usr/bin/chromium), it is used as-is and the auto-download path is
+// skipped. Otherwise rod downloads its pinned build on first launch.
+//
+// The browser lives until Close is called on the owning Client.
 func launchBrowser() (*rod.Browser, error) {
-	controlURL, err := launcher.New().
+	l := launcher.New().
 		Headless(true).
 		NoSandbox(true).
 		// Leakless spawns a small helper binary to force-kill the
@@ -25,7 +28,17 @@ func launchBrowser() (*rod.Browser, error) {
 		Set("disable-gpu").
 		Set("disable-dev-shm-usage").
 		Set("disable-blink-features", "AutomationControlled").
-		Launch()
+		// --enable-automation is the default flag Chromium adds when
+		// it detects CDP control. Many bot-detection systems (incl.
+		// Fastly's WAF) treat it as an outright block signal. rod's
+		// NewUserMode removes it; we do the same here for headless.
+		Delete("enable-automation")
+
+	if bin := os.Getenv("SOFASCRAPER_CHROMIUM_BIN"); bin != "" {
+		l = l.Bin(bin)
+	}
+
+	controlURL, err := l.Launch()
 	if err != nil {
 		return nil, fmt.Errorf("scraper: launch chromium: %w", err)
 	}

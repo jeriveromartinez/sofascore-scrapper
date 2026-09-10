@@ -1,10 +1,13 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
@@ -24,31 +27,14 @@ type fetchResult struct {
 // refresh / backoff can be exercised without booting a browser.
 type pageFetcher interface {
 	Fetch(ctx context.Context, url string, headers map[string]string) (fetchResult, error)
+	Warmup(ctx context.Context) error
 	Close() error
 }
 
-// fetchJS is executed in the browser context. credentials:'include'
-// is required so the browser's cf_clearance cookie is forwarded;
-// headers from Go are merged in; the result is JSON-serialized so
-// the Go side can read status, body, and response headers
-// (notably Retry-After).
-const fetchJS = `(async (url, headers) => {
-	const init = { credentials: 'include', headers: {} };
-	if (headers) {
-		for (const k of Object.keys(headers)) {
-			init.headers[k] = headers[k];
-		}
-	}
-	const r = await fetch(url, init);
-	const headerObj = {};
-	r.headers.forEach((v, k) => { headerObj[k.toLowerCase()] = v; });
-	const body = await r.text();
-	return JSON.stringify({
-		status: r.status,
-		body: body,
-		headers: headerObj,
-	});
-})`
+const readBodyJS = `() => {
+	const text = document.body ? document.body.innerText : '';
+	return text;
+}`
 
 type rodPageFetcher struct {
 	browser *rod.Browser
@@ -75,6 +61,39 @@ func newRodPageFetcher(browser *rod.Browser, size int) (*rodPageFetcher, error) 
 	return &rodPageFetcher{browser: browser, pool: pool}, nil
 }
 
+// Warmup navigates one pooled page to the homepage and waits for
+// it to settle. The browser context now holds whatever session
+// cookies Fastly issued, and other pages inherit them on
+// subsequent navigations. Without this the edge sees a cold
+// client hitting /api/v1/* directly and returns the
+// 403-challenge JSON body.
+func (f *rodPageFetcher) Warmup(ctx context.Context) error {
+	page, err := f.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer f.release(page)
+
+	if err := page.Context(ctx).Navigate("https://www.sofascore.com/es/"); err != nil {
+		return fmt.Errorf("scraper: warmup navigate: %w", err)
+	}
+	// WaitLoad blocks until the document is fully parsed and
+	// sub-resources stop firing. Without it Navigate returns as
+	// soon as the request is sent and readyState is still
+	// "loading" — SPA bundles haven't executed yet, no SPA
+	// globals are present, and Fastly's edge may not have
+	// finished setting cookies.
+	if err := page.Context(ctx).WaitLoad(); err != nil {
+		// not fatal: we can still attempt subsequent fetches
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(2 * time.Second):
+		return nil
+	}
+}
+
 func (f *rodPageFetcher) Fetch(ctx context.Context, url string, headers map[string]string) (fetchResult, error) {
 	page, err := f.acquire(ctx)
 	if err != nil {
@@ -82,28 +101,59 @@ func (f *rodPageFetcher) Fetch(ctx context.Context, url string, headers map[stri
 	}
 	defer f.release(page)
 
-	obj, err := page.Context(ctx).Eval(fetchJS, url, headers)
-	if err != nil {
-		return fetchResult{}, fmt.Errorf("scraper: browser fetch: %w", err)
+	// Top-level navigation, not fetch(): top-level navigations are
+	// exempt from CORS, so the browser actually shows us the
+	// response body. fetch() from inside page.Eval would be blocked
+	// by the browser because SofaScore's edge does not return
+	// Access-Control-Allow-Origin: *.
+	if err := page.Context(ctx).Navigate(url); err != nil {
+		return fetchResult{}, fmt.Errorf("scraper: browser navigate: %w", err)
+	}
+	// WaitLoad ensures the document (the JSON-as-HTML page) is
+	// fully rendered before we read its body. Without this, the
+	// page might still be parsing and innerText returns an
+	// empty string.
+	if err := page.Context(ctx).WaitLoad(); err != nil {
+		// not fatal: we can still attempt to read whatever's there
 	}
 
-	raw, err := obj.Value.MarshalJSON()
-	if err != nil || len(raw) == 0 {
-		raw = []byte(obj.Description)
+	obj, err := page.Context(ctx).Eval(readBodyJS)
+	if err != nil {
+		return fetchResult{}, fmt.Errorf("scraper: read body: %w", err)
 	}
-	var decoded struct {
-		Status  int                 `json:"status"`
-		Body    string              `json:"body"`
-		Headers map[string][]string `json:"headers"`
+
+	body := []byte(obj.Value.String())
+	if obj.Description != "" && len(body) == 0 {
+		body = []byte(obj.Description)
 	}
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return fetchResult{}, fmt.Errorf("scraper: decode browser response: %w (raw=%q)", err, raw)
+
+	status := http.StatusOK
+	trimmed := bytes.TrimSpace(body)
+
+	if bytes.HasPrefix(trimmed, []byte("{")) {
+		// Fastly returns HTTP 200 with a JSON body that reports the
+		// block, e.g. {"error":{"code":403,"reason":"challenge"}}.
+		// Detect those and surface them as a non-2xx so doRequest
+		// can apply its retry / refresh path.
+		var probe struct {
+			Error *struct {
+				Code    int    `json:"code"`
+				Reason  string `json:"reason"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(trimmed, &probe); err == nil && probe.Error != nil && probe.Error.Code != 0 {
+			status = probe.Error.Code
+			if status < 400 {
+				status = http.StatusForbidden
+			}
+		}
+	} else if !bytes.HasPrefix(trimmed, []byte("[")) {
+		// Non-JSON body (HTML challenge page, empty doc, etc.).
+		status = http.StatusBadGateway
 	}
-	return fetchResult{
-		Status:  decoded.Status,
-		Body:    []byte(decoded.Body),
-		Headers: decoded.Headers,
-	}, nil
+
+	return fetchResult{Status: status, Body: body, Headers: nil}, nil
 }
 
 func (f *rodPageFetcher) acquire(ctx context.Context) (*rod.Page, error) {

@@ -24,9 +24,25 @@ RUN CGO_ENABLED=0 go build \
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates su-exec wget tzdata
+RUN apk add --no-cache \
+        ca-certificates \
+        su-exec \
+        wget \
+        tzdata \
+        # Chromium (system) plus every shared library the headless
+        # binary needs. rod is told to use the system binary via
+        # SOFASCRAPER_CHROMIUM_BIN, so no runtime download is
+        # required and the binary + .so deps stay in sync.
+        chromium \
+        nss \
+        at-spi2-core
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+    && mkdir -p /home/appuser/.cache \
+    && chown -R appuser:appgroup /home/appuser
+
+ENV HOME=/home/appuser \
+    SOFASCRAPER_CHROMIUM_BIN=/usr/bin/chromium
 
 WORKDIR /app
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"strconv"
@@ -72,6 +73,7 @@ type Client struct {
 	requestTimeout   time.Duration
 	responseMaxBytes int64
 	maxBackoff       time.Duration
+	logger           *slog.Logger
 }
 
 // NewClient launches a headless Chromium (downloading it on first
@@ -91,7 +93,20 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		_ = browser.Close()
 		return nil, err
 	}
-	return newClientWithFetcher(cfg, fetcher), nil
+
+	c := newClientWithFetcher(cfg, fetcher)
+
+	// Warmup once before returning. Fastly's edge issues per-session
+	// cookies after the first HTML navigation; subsequent API calls
+	// from any page in the same browser context inherit them. The
+	// warmup itself runs with the configured request timeout so a
+	// stuck browser fails fast instead of hanging app startup.
+	warmupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := c.fetcher.Warmup(warmupCtx); err != nil {
+		c.logger.Warn("scraper: warmup failed", slog.String("error", err.Error()))
+	}
+	return c, nil
 }
 
 // newClientWithFetcher is the seam tests use to build a Client
@@ -105,6 +120,15 @@ func newClientWithFetcher(cfg ClientConfig, fetcher pageFetcher) *Client {
 		requestTimeout:   cfg.RequestTimeout,
 		responseMaxBytes: cfg.ResponseMaxBytes,
 		maxBackoff:       cfg.MaxBackoff,
+		logger:           slog.Default(),
+	}
+}
+
+// SetLogger overrides the default slog logger used by Client. Useful
+// in tests that want to capture log output.
+func (c *Client) SetLogger(l *slog.Logger) {
+	if l != nil {
+		c.logger = l
 	}
 }
 
@@ -200,6 +224,17 @@ func parseRetryAfter(s string) time.Duration {
 	return 0
 }
 
+func bodyPreview(body []byte) []byte {
+	const max = 200
+	if len(body) <= max {
+		return body
+	}
+	out := make([]byte, max+3)
+	copy(out, body[:max])
+	copy(out[max:], []byte("..."))
+	return out
+}
+
 // doRequest performs one API call against the given baseURL-relative
 // path with full retry / backoff / 401-refresh semantics. The actual
 // transport lives in c.fetcher (rod-backed in production); doRequest
@@ -231,11 +266,24 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 
 		result, err := c.fetcher.Fetch(ctx, url, headers)
 		if err != nil {
+			c.logger.WarnContext(ctx, "scraper fetch error",
+				slog.String("path", path),
+				slog.Int("attempt", attempt),
+				slog.String("error", err.Error()),
+			)
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
 			continue
 		}
+
+		c.logger.DebugContext(ctx, "scraper fetch result",
+			slog.String("path", path),
+			slog.Int("attempt", attempt),
+			slog.Int("status", result.Status),
+			slog.Int("body_bytes", len(result.Body)),
+			slog.String("body_preview", string(bodyPreview(result.Body))),
+		)
 
 		if int64(len(result.Body)) > c.responseMaxBytes {
 			// rod hands the body to us already fully read; the
@@ -248,6 +296,20 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 			return result.Body, nil
 
 		case http.StatusUnauthorized, http.StatusForbidden:
+			// Surface the Fastly/WAF response body so operators can see
+			// why a request was blocked. Bodies are usually short
+			// (challenge markup, error JSON, or empty).
+			bodyPreview := string(result.Body)
+			if len(bodyPreview) > 200 {
+				bodyPreview = bodyPreview[:200] + "..."
+			}
+			if bodyPreview != "" {
+				c.logger.WarnContext(ctx, "scraper blocked response",
+					slog.Int("status", result.Status),
+					slog.String("body", bodyPreview),
+					slog.String("path", path),
+				)
+			}
 			if !refreshedCookie {
 				refreshedCookie = true
 				if refreshErr := c.refreshCookies(ctx); refreshErr != nil {

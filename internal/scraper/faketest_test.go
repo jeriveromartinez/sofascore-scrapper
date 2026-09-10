@@ -71,6 +71,8 @@ func (f *fakeFetcher) Close() error {
 	return nil
 }
 
+func (f *fakeFetcher) Warmup(_ context.Context) error { return nil }
+
 func (f *fakeFetcher) callCount() int64 { return f.calls.Load() }
 func (f *fakeFetcher) openCount() int32 { return f.open.Load() }
 
