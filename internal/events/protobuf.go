@@ -1,6 +1,7 @@
 package events
 
 import (
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -31,7 +32,20 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 	// SofaScoreEventId field. The model has moved to a string
 	// ExternalMatchId. Bridge the two so the wire contract survives
 	// until Task 2 renames the proto field to ExternalMatchId (string).
-	sofaID, _ := strconv.ParseInt(e.ExternalMatchId, 10, 64)
+	// TODO: Task 2 will rename the proto field to external_match_id (string); the bridge must be removed at that point.
+	sofaID, err := strconv.ParseInt(e.ExternalMatchId, 10, 64)
+	if err != nil && e.ExternalMatchId != "" {
+		// Empty string is the legitimate "unset" case and round-trips
+		// to 0, matching pre-rename behavior. Any non-empty unparseable
+		// value indicates a malformed source ID and would silently
+		// corrupt the proto wire as a numeric 0 indistinguishable from
+		// a legitimate zero — log loudly so the upstream is debuggable.
+		slog.Default().Warn("events: unparseable ExternalMatchId in proto bridge",
+			slog.Uint64("event_id", uint64(e.ID)),
+			slog.String("external_match_id", e.ExternalMatchId),
+			slog.Any("err", err),
+		)
+	}
 
 	return &pb.SofaScoreEvent{
 		Id:                          uint32(e.ID),
