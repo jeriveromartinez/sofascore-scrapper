@@ -85,8 +85,8 @@ func TestTeamToProtoUsesTeamIDForCanonicalPath(t *testing.T) {
 	}
 }
 
-func TestEventToProtoHandlesMissingTeams(t *testing.T) {
-	event := EventToProto(Event{})
+func TestEventToExternalProtoHandlesMissingTeams(t *testing.T) {
+	event := EventToExternalProto(Event{})
 
 	if event.TeamHome != nil {
 		t.Fatalf("TeamHome = %#v, want nil", event.TeamHome)

@@ -47,7 +47,7 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"TournamentPage":                 false,
 		"TournamentRequest":              false,
 		"Team":                           false,
-		"SofaScoreEvent":                 false,
+		"ExternalEvent":                  false,
 		"DeviceRegisterRequest":          false,
 		"AssignTournamentRequest":        false,
 		"SetTournamentIdsRequest":        false,
@@ -135,10 +135,10 @@ func TestAuthResponseFields(t *testing.T) {
 	assertFieldNumber(t, fd, "refresh_token", 4)
 }
 
-func TestSofaScoreEventFields(t *testing.T) {
-	event := &SofaScoreEvent{
+func TestExternalEventFields(t *testing.T) {
+	event := &ExternalEvent{
 		Id:                          1,
-		SofaScoreEventId:            12345,
+		ExternalMatchId:             "12345",
 		Sport:                       "football",
 		HomeScore:                   2,
 		HomeTeamId:                  100,
@@ -152,7 +152,7 @@ func TestSofaScoreEventFields(t *testing.T) {
 	}
 	fd := event.ProtoReflect().Descriptor()
 	assertFieldNumber(t, fd, "id", 1)
-	assertFieldNumber(t, fd, "sofa_score_event_id", 4)
+	assertFieldNumber(t, fd, "external_match_id", 4)
 	assertFieldNumber(t, fd, "sport", 5)
 	assertFieldNumber(t, fd, "home_score", 6)
 	assertFieldNumber(t, fd, "home_team_id", 7)

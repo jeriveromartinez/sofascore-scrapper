@@ -81,8 +81,8 @@ func TestAdminEventsWithoutDateUsesUnixMilliseconds(t *testing.T) {
 	if len(response.Data) != 1 {
 		t.Fatalf("events: want 1 future event, got %d", len(response.Data))
 	}
-	if response.Data[0].SofaScoreEventId != 2 {
-		t.Fatalf("event: want SofaScore ID 2, got %d", response.Data[0].SofaScoreEventId)
+	if response.Data[0].ExternalMatchId != "2" {
+		t.Fatalf("event: want ExternalMatchId 2, got %q", response.Data[0].ExternalMatchId)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestHandleGetEventsPage_DefaultsFromToTodayUTC(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
 	}
-	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 4001 {
+	if len(response.Data) != 1 || response.Data[0].ExternalMatchId != "4001" {
 		t.Fatalf("want only the future event (id 4001), got %d events", len(response.Data))
 	}
 }
@@ -243,10 +243,10 @@ func TestHandleGetEventsPage_FromInUserTZ(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
 	}
-	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 6001 {
-		ids := make([]int64, 0, len(response.Data))
+	if len(response.Data) != 1 || response.Data[0].ExternalMatchId != "6001" {
+		ids := make([]string, 0, len(response.Data))
 		for _, e := range response.Data {
-			ids = append(ids, e.SofaScoreEventId)
+			ids = append(ids, e.ExternalMatchId)
 		}
 		t.Fatalf("want only event 6001 ('from' parsed in Pacific/Auckland, not UTC), got %v", ids)
 	}
@@ -285,7 +285,7 @@ func TestHandleGetEventsPage_FromInNonUTCBoundary(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
 	}
-	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 5001 {
+	if len(response.Data) != 1 || response.Data[0].ExternalMatchId != "5001" {
 		t.Fatalf("want only event 5001 (post-midnight in TZ), got %d events", len(response.Data))
 	}
 }

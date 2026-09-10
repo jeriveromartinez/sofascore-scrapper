@@ -1,8 +1,6 @@
 package events
 
 import (
-	"log/slog"
-	"strconv"
 	"time"
 
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
@@ -24,34 +22,15 @@ func TeamToProto(t *Team) *pb.Team {
 	}
 }
 
-func EventToProto(e Event) *pb.SofaScoreEvent {
+func EventToExternalProto(e Event) *pb.ExternalEvent {
 	homeTeam := TeamToProto(e.HomeTeamModel)
 	awayTeam := TeamToProto(e.AwayTeamModel)
 
-	// The proto type (pb.SofaScoreEvent) still carries the int64
-	// SofaScoreEventId field. The model has moved to a string
-	// ExternalMatchId. Bridge the two so the wire contract survives
-	// until Task 2 renames the proto field to ExternalMatchId (string).
-	// TODO: Task 2 will rename the proto field to external_match_id (string); the bridge must be removed at that point.
-	sofaID, err := strconv.ParseInt(e.ExternalMatchId, 10, 64)
-	if err != nil && e.ExternalMatchId != "" {
-		// Empty string is the legitimate "unset" case and round-trips
-		// to 0, matching pre-rename behavior. Any non-empty unparseable
-		// value indicates a malformed source ID and would silently
-		// corrupt the proto wire as a numeric 0 indistinguishable from
-		// a legitimate zero — log loudly so the upstream is debuggable.
-		slog.Default().Warn("events: unparseable ExternalMatchId in proto bridge",
-			slog.Uint64("event_id", uint64(e.ID)),
-			slog.String("external_match_id", e.ExternalMatchId),
-			slog.Any("err", err),
-		)
-	}
-
-	return &pb.SofaScoreEvent{
+	return &pb.ExternalEvent{
 		Id:                          uint32(e.ID),
 		CreatedAt:                   formatTime(e.CreatedAt),
 		UpdatedAt:                   formatTime(e.UpdatedAt),
-		SofaScoreEventId:            sofaID,
+		ExternalMatchId:             e.ExternalMatchId,
 		Sport:                       e.Sport,
 		HomeScore:                   int32(e.HomeScore),
 		HomeTeamId:                  e.HomeTeamId,
@@ -65,13 +44,14 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 		TeamHome:                    homeTeam,
 		TeamAway:                    awayTeam,
 		League:                      tournaments.TournamentPtrToProto(e.League),
+		Source:                      e.Source,
 	}
 }
 
-func EventsToProto(events []Event) []*pb.SofaScoreEvent {
-	result := make([]*pb.SofaScoreEvent, 0, len(events))
+func EventsToProto(events []Event) []*pb.ExternalEvent {
+	result := make([]*pb.ExternalEvent, 0, len(events))
 	for _, e := range events {
-		result = append(result, EventToProto(e))
+		result = append(result, EventToExternalProto(e))
 	}
 	return result
 }

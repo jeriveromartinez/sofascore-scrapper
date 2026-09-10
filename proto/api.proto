@@ -248,11 +248,11 @@ message Team {
 
 // ========== Events ==========
 
-message SofaScoreEvent {
+message ExternalEvent {
   uint32 id = 1;
   string created_at = 2;
   string updated_at = 3;
-  int64 sofa_score_event_id = 4;
+  string external_match_id = 4;
   string sport = 5;
   int32 home_score = 6;
   int64 home_team_id = 7;
@@ -267,10 +267,11 @@ message SofaScoreEvent {
   Team team_away = 16;
   Tournament league = 17;
   string status_type = 18;
+  string source = 19;
 }
 
 message EventsList {
-  repeated SofaScoreEvent data = 1;
+  repeated ExternalEvent data = 1;
   int32 page = 2;
   int32 limit = 3;
   int64 total = 4;
@@ -278,7 +279,7 @@ message EventsList {
 }
 
 message EventPage {
-  repeated SofaScoreEvent data = 1;
+  repeated ExternalEvent data = 1;
   CursorPageInfo page = 2;
 }
 
@@ -317,7 +318,7 @@ message PlaybackPage {
 // ========== Stats ==========
 
 message EventStats {
-  int64 sofa_score_event_id = 1;
+  string external_match_id = 1;
   int64 view_count = 2;
 }
 

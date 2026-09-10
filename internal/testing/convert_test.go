@@ -193,7 +193,7 @@ func TestTeamPtrToProto(t *testing.T) {
 	}
 }
 
-func TestEventToProto(t *testing.T) {
+func TestEventToExternalProto(t *testing.T) {
 	homeTeam := &events.Team{TeamId: 1, Name: "Home"}
 	awayTeam := &events.Team{TeamId: 2, Name: "Away"}
 	league := &tournaments.Tournament{Name: "Champions League"}
@@ -217,7 +217,7 @@ func TestEventToProto(t *testing.T) {
 	}
 	e.ID = 50
 
-	result := events.EventToProto(e)
+	result := events.EventToExternalProto(e)
 	if result == nil {
 		t.Fatal("expected non-nil")
 	}
