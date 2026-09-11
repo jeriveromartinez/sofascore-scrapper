@@ -96,7 +96,7 @@ func TestProtobufFileDescriptor(t *testing.T) {
 		"WsPong":                     false,
 		"WsError":                    false,
 		// Build info (added 2026-08-30)
-		"BuildInfo":                  false,
+		"BuildInfo": false,
 	}
 
 	for i := 0; i < fd.Messages().Len(); i++ {

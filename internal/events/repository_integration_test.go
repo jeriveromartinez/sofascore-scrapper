@@ -240,8 +240,8 @@ func TestListPage_LikeInputEscapesWildcards(t *testing.T) {
 		if err := db.Create(&Event{
 			ExternalMatchId: strconv.Itoa(7000 + i),
 			Sport:           "football", StatusType: "notstarted",
-			StartTimestamp:  now + int64(i*3600_000),
-			HomeTeamId:      tm.id,
+			StartTimestamp: now + int64(i*3600_000),
+			HomeTeamId:     tm.id,
 		}).Error; err != nil {
 			t.Fatalf("seed event: %v", err)
 		}
