@@ -18,10 +18,10 @@ func TestToEvent_ParsesScoreStr(t *testing.T) {
 	league := LeagueRef{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "England", Sport: "football"}
 
 	cases := []struct {
-		name       string
-		scoreStr   string
-		wantHome   int
-		wantAway   int
+		name     string
+		scoreStr string
+		wantHome int
+		wantAway int
 	}{
 		{"home win", "3-1", 3, 1},
 		{"away win", "0-2", 0, 2},
