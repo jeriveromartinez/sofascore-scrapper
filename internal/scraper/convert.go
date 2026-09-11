@@ -48,6 +48,8 @@ func ToEvent(source Match, sport string) events.Event {
 		Slug:            source.Slug,
 		StartTimestamp:  startTs,
 		StatusType:      source.Status.Type,
+		HomeTeamId:      homeTeam.TeamId,
+		AwayTeamId:      awayTeam.TeamId,
 		HomeTeamModel:   &homeTeam,
 		AwayTeamModel:   &awayTeam,
 		League:          &tournament,
