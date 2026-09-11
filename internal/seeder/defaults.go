@@ -34,7 +34,15 @@ func SeedDefaults(db *gorm.DB, logger *slog.Logger) error {
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		var existing int64
-		if err := tx.Model(&catalog.ScraperLeague{}).Count(&existing).Error; err != nil {
+		// Fix C2 (PR #122): Unscoped count so soft-deleted rows are
+		// counted as "table not empty". The catalog DELETE endpoint
+		// uses GORM soft-delete (sets DeletedAt); the underlying row
+		// stays in the table and the unique index on source_league_id
+		// still applies, so re-inserting the curated seed would
+		// collide. Without Unscoped, GORM's default scope returns 0
+		// after DELETE-all + restart, SeedDefaults tries to insert,
+		// and app.New fails at boot.
+		if err := tx.Unscoped().Model(&catalog.ScraperLeague{}).Count(&existing).Error; err != nil {
 			return fmt.Errorf("count scraper_leagues: %w", err)
 		}
 		if existing > 0 {

@@ -210,3 +210,73 @@ func TestSeed_NonEmptyCatalogIsNoop(t *testing.T) {
 		t.Errorf("operator row mutated: name = %q", got.Name)
 	}
 }
+
+// TestSeed_OnlySoftDeletedRowsIsNoop covers fix C2 (PR #120 codex
+// review). The catalog DELETE endpoint uses GORM soft-delete (it sets
+// DeletedAt). GORM's default scoped Count ignores soft-deleted rows
+// and returns 0; SeedDefaults used that count to decide whether to
+// insert, so the unique index on source_league_id collided with the
+// still-present soft-deleted rows and app.New failed at boot.
+//
+// The fix: SeedDefaults must use Unscoped().Count so soft-deleted rows
+// count as "table not empty", which is the correct semantic for the
+// unique-index guard. This test seeds a row, soft-deletes it, runs
+// SeedDefaults, and asserts:
+//   - SeedDefaults returns nil (no unique-index collision);
+//   - the soft-deleted row is still in the table;
+//   - no fresh curated seed rows were inserted.
+func TestSeed_OnlySoftDeletedRowsIsNoop(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&catalog.ScraperLeague{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+	pre := catalog.ScraperLeague{
+		Source: "fotmob", SourceLeagueId: "47",
+		Name: "Premier League", Country: "GB", Sport: "football", Enabled: true,
+	}
+	if err := db.Create(&pre).Error; err != nil {
+		t.Fatalf("pre-insert: %v", err)
+	}
+	// Soft-delete via the catalog DELETE endpoint's pattern:
+	// db.Delete(&row). GORM populates DeletedAt and skips the row in
+	// default scopes. The underlying row remains and the unique
+	// index still applies.
+	if err := db.Delete(&pre).Error; err != nil {
+		t.Fatalf("soft-delete: %v", err)
+	}
+
+	// Sanity check: scoped count sees zero rows; unscoped sees one.
+	var scoped int64
+	if err := db.Model(&catalog.ScraperLeague{}).Count(&scoped).Error; err != nil {
+		t.Fatalf("scoped count: %v", err)
+	}
+	if scoped != 0 {
+		t.Fatalf("scoped count expected 0 after soft-delete, got %d", scoped)
+	}
+
+	if err := SeedDefaults(db, nil); err != nil {
+		t.Fatalf("seed after soft-delete: %v (likely unique-index collision)", err)
+	}
+
+	// Soft-deleted row must still be present (unscoped).
+	var unscoped int64
+	if err := db.Unscoped().Model(&catalog.ScraperLeague{}).Count(&unscoped).Error; err != nil {
+		t.Fatalf("unscoped count: %v", err)
+	}
+	if unscoped != 1 {
+		t.Fatalf("unscoped count expected 1, got %d", unscoped)
+	}
+	// The visible (non-deleted) league count must remain zero: the
+	// soft-deleted row is the only one and SeedDefaults must not
+	// have inserted any fresh curated seed.
+	var visible int64
+	if err := db.Model(&catalog.ScraperLeague{}).Count(&visible).Error; err != nil {
+		t.Fatalf("visible count: %v", err)
+	}
+	if visible != 0 {
+		t.Errorf("SeedDefaults inserted fresh curated seed despite soft-deleted row: visible count = %d, want 0", visible)
+	}
+}
