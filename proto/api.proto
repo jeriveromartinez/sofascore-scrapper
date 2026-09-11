@@ -248,11 +248,26 @@ message Team {
 
 // ========== Events ==========
 
+// ExternalEvent carries event metadata to mobile clients.
+//
+// Backwards compatibility (added 2026-09-11, PR #122 fix A2):
+// The pre-FotMob wire schema exposed tag 4 as `int64 sofa_score_event_id`.
+// PR #118 (model reset) silently changed that tag to a string
+// `external_match_id`, which broke already-deployed clients built
+// against the old schema. To restore compatibility we keep the old
+// int64 at tag 4 (renamed `sofa_score_event_id_deprecated` to make the
+// intent obvious) and place the new string at a fresh tag (20). Old
+// clients continue to read int64 at tag 4; new clients read string at
+// tag 20. See docs/integration-audit-roadmap.md for the rollout plan.
 message ExternalEvent {
   uint32 id = 1;
   string created_at = 2;
   string updated_at = 3;
-  string external_match_id = 4;
+  // Deprecated int64 view of the legacy SofaScore match id. Populated
+  // by the server only when the stored ExternalMatchId is numeric
+  // (i.e. pre-FotMob data). New clients should read the string field
+  // at tag 20 instead. Wire type MUST stay int64 for old clients.
+  int64 sofa_score_event_id_deprecated = 4;
   string sport = 5;
   int32 home_score = 6;
   int64 home_team_id = 7;
@@ -268,6 +283,10 @@ message ExternalEvent {
   Tournament league = 17;
   string status_type = 18;
   string source = 19;
+  // String view of the external match id (FotMob id, etc.). New
+  // clients read this. Lives at a fresh tag so the deprecated int64
+  // keeps its wire position.
+  string external_match_id = 20;
 }
 
 message EventsList {
