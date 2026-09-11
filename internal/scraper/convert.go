@@ -10,77 +10,74 @@ import (
 	"gorm.io/gorm"
 )
 
-func ToTeam(source TeamApi) events.Team {
+func ToTeam(source Team) events.Team {
 	return events.Team{
-		TeamId:         source.ID,
+		TeamId:         source.SourceId,
 		Name:           source.Name,
-		PrimaryColor:   source.Colors.Primary,
-		SecondaryColor: source.Colors.Secondary,
-		TextColor:      source.Colors.Text,
-		LogoUrl:        events.TeamLogoSourceURL(source.ID),
+		PrimaryColor:   source.PrimaryColor,
+		SecondaryColor: source.SecondaryColor,
+		TextColor:      source.TextColor,
+		LogoUrl:        source.LogoURL,
 	}
 }
 
-func ToTournament(source APIEvent) tournaments.Tournament {
-	slug := source.Tournament.UniqueTournament.Slug + "-" + strings.ToLower(source.Tournament.UniqueTournament.Category.Slug)
+func ToTournament(source LeagueRef) tournaments.Tournament {
+	slug := strings.ToLower(strings.ReplaceAll(source.Name, " ", "-"))
 	return tournaments.Tournament{
-		Model:  gorm.Model{ID: uint(source.Tournament.UniqueTournament.ID)},
-		Name:   source.Tournament.UniqueTournament.Name,
+		Model:  gorm.Model{},
+		Name:   source.Name,
 		Slug:   slug,
-		Region: source.Tournament.UniqueTournament.Category.Name,
+		Region: source.Country,
 	}
 }
 
-func ToEvent(source APIEvent, sport string) events.Event {
+func ToEvent(source Match, sport string) events.Event {
 	homeTeam := ToTeam(source.HomeTeam)
 	awayTeam := ToTeam(source.AwayTeam)
-	tournamentSlug := source.Tournament.UniqueTournament.Slug + "-" + strings.ToLower(source.Tournament.UniqueTournament.Category.Slug)
+	tournament := ToTournament(source.League)
 
-	startTs := int64(0)
-	if source.StartTimestamp > 0 && source.StartTimestamp < 1<<62/1000 {
-		startTs = source.StartTimestamp * 1000
-	}
-	currentPeriodTs := int64(0)
-	if source.Time.CurrentPeriodStartTimestamp > 0 && source.Time.CurrentPeriodStartTimestamp < 1<<62/1000 {
-		currentPeriodTs = source.Time.CurrentPeriodStartTimestamp * 1000
+	startTs := source.StartTimestamp.UnixMilli()
+	if startTs < 0 || startTs > 1<<62/1000 {
+		startTs = 0
 	}
 
 	return events.Event{
-		ExternalMatchId:             strconv.FormatInt(source.ID, 10),
-		HomeScore:                   source.HomeScore.Current,
-		HomeTeamId:                  source.HomeTeam.ID,
-		AwayScore:                   source.AwayScore.Current,
-		AwayTeamId:                  source.AwayTeam.ID,
-		StartTimestamp:              startTs,
-		CurrentPeriodStartTimestamp: currentPeriodTs,
-		Slug:                        source.Slug,
-		LeagueId:                    uint(source.Tournament.UniqueTournament.ID),
-		Sport:                       sport,
-		StatusType:                  source.Status.Type,
-		HomeTeamModel:               &homeTeam,
-		AwayTeamModel:               &awayTeam,
-		League: &tournaments.Tournament{
-			Model:  gorm.Model{ID: uint(source.Tournament.UniqueTournament.ID)},
-			Name:   source.Tournament.UniqueTournament.Name,
-			Slug:   tournamentSlug,
-			Region: source.Tournament.UniqueTournament.Category.Name,
-		},
+		ExternalMatchId: source.SourceMatchId,
+		Source:          source.Source,
+		Sport:           sport,
+		Slug:            source.Slug,
+		StartTimestamp:  startTs,
+		StatusType:      source.Status.Type,
+		HomeTeamModel:   &homeTeam,
+		AwayTeamModel:   &awayTeam,
+		League:          &tournament,
+		LeagueId:        uint(parseLeagueID(source.League.SourceLeagueId)),
 	}
 }
 
-func ToScrapeBatch(apiEvents []*APIEvent, sport string) events.ScrapeBatch {
+// parseLeagueID convierte el ID string de FotMob a uint. Si falla, retorna 0
+// (la fila no se podrá relacionar con un league_id válido pero igual se persiste).
+func parseLeagueID(s string) uint {
+	n, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return uint(n)
+}
+
+func ToScrapeBatch(matches []Match, sport string) events.ScrapeBatch {
 	teamMap := make(map[int64]events.Team)
 	tournamentMap := make(map[uint]tournaments.Tournament)
 	eventMap := make(map[string]events.Event)
 
-	for _, apiEvent := range apiEvents {
-		homeTeam := ToTeam(apiEvent.HomeTeam)
-		awayTeam := ToTeam(apiEvent.AwayTeam)
-		tournament := ToTournament(*apiEvent)
-		event := ToEvent(*apiEvent, sport)
+	for _, m := range matches {
+		home := ToTeam(m.HomeTeam)
+		away := ToTeam(m.AwayTeam)
+		tournament := ToTournament(m.League)
+		event := ToEvent(m, sport)
 
-		teamMap[homeTeam.TeamId] = homeTeam
-		teamMap[awayTeam.TeamId] = awayTeam
+		teamMap[home.TeamId] = home
+		teamMap[away.TeamId] = away
 		tournamentMap[tournament.ID] = tournament
 		eventMap[event.ExternalMatchId] = event
 	}
@@ -106,9 +103,5 @@ func ToScrapeBatch(apiEvents []*APIEvent, sport string) events.ScrapeBatch {
 	}
 	sort.Slice(evts, func(i, j int) bool { return evts[i].ExternalMatchId < evts[j].ExternalMatchId })
 
-	return events.ScrapeBatch{
-		Teams:       teams,
-		Tournaments: tours,
-		Events:      evts,
-	}
+	return events.ScrapeBatch{Teams: teams, Tournaments: tours, Events: evts}
 }
