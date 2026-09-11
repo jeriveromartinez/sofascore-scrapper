@@ -1,66 +1,77 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import axios from 'axios'
+import { authJsonAxios } from './axiosAuth'
 import { ScraperLeagueService } from './ScraperLeagueService'
 
-vi.mock('axios')
+// Mock the auth-aware axios instance so the service under test can be driven
+// deterministically. We don't mock `axios` directly — ScraperLeagueService no
+// longer uses the top-level client, and `vi.mock('axios')` would also strip
+// the implementation out of `./axiosAuth`, which would break this spec.
+vi.mock('./axiosAuth', () => ({
+  authJsonAxios: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
 
 describe('ScraperLeagueService', () => {
   beforeEach(() => {
-    const mockedAxios = axios as any
-    mockedAxios.get.mockReset()
-    mockedAxios.post.mockReset()
-    mockedAxios.patch.mockReset()
-    mockedAxios.delete.mockReset()
+    const mocked = authJsonAxios as any
+    mocked.get.mockReset()
+    mocked.post.mockReset()
+    mocked.patch.mockReset()
+    mocked.delete.mockReset()
   })
   it('list calls GET /scraper-leagues', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.get.mockResolvedValue({ data: { data: [], total: 0 } })
+    const mocked = authJsonAxios as any
+    mocked.get.mockResolvedValue({ data: { data: [], total: 0 } })
     const svc = new ScraperLeagueService()
     const result = await svc.list({ page: 1, limit: 50 })
-    expect(mockedAxios.get).toHaveBeenCalledTimes(1)
-    expect(mockedAxios.get.mock.calls[0][0]).toContain('/scraper-leagues')
-    expect(mockedAxios.get.mock.calls[0][1]).toEqual(
+    expect(mocked.get).toHaveBeenCalledTimes(1)
+    expect(mocked.get.mock.calls[0][0]).toContain('/scraper-leagues')
+    expect(mocked.get.mock.calls[0][1]).toEqual(
       expect.objectContaining({ params: expect.objectContaining({ page: '1', limit: '50' }) })
     )
     expect(result.total).toBe(0)
   })
 
   it('create posts to /scraper-leagues', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.post.mockResolvedValue({ data: { id: 1, name: 'PL' } })
+    const mocked = authJsonAxios as any
+    mocked.post.mockResolvedValue({ data: { id: 1, name: 'PL' } })
     const svc = new ScraperLeagueService()
     await svc.create({ source: 'fotmob', source_league_id: '47', name: 'PL' } as any)
-    expect(mockedAxios.post).toHaveBeenCalledTimes(1)
-    expect(mockedAxios.post.mock.calls[0][0]).toContain('/scraper-leagues')
-    expect(mockedAxios.post.mock.calls[0][1]).toEqual(
+    expect(mocked.post).toHaveBeenCalledTimes(1)
+    expect(mocked.post.mock.calls[0][0]).toContain('/scraper-leagues')
+    expect(mocked.post.mock.calls[0][1]).toEqual(
       expect.objectContaining({ name: 'PL' })
     )
   })
 
   it('update patches /scraper-leagues/:id', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.patch.mockResolvedValue({ data: { ok: true } })
+    const mocked = authJsonAxios as any
+    mocked.patch.mockResolvedValue({ data: { ok: true } })
     const svc = new ScraperLeagueService()
     await svc.update(7, { name: 'PL' })
-    expect(mockedAxios.patch).toHaveBeenCalledTimes(1)
-    expect(mockedAxios.patch.mock.calls[0][0]).toMatch(/\/scraper-leagues\/7$/)
-    expect(mockedAxios.patch.mock.calls[0][1]).toEqual(
+    expect(mocked.patch).toHaveBeenCalledTimes(1)
+    expect(mocked.patch.mock.calls[0][0]).toMatch(/\/scraper-leagues\/7$/)
+    expect(mocked.patch.mock.calls[0][1]).toEqual(
       expect.objectContaining({ name: 'PL' })
     )
   })
 
   it('delete calls DELETE /scraper-leagues/:id', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.delete.mockResolvedValue({ data: undefined })
+    const mocked = authJsonAxios as any
+    mocked.delete.mockResolvedValue({ data: undefined })
     const svc = new ScraperLeagueService()
     await svc.delete(9)
-    expect(mockedAxios.delete).toHaveBeenCalledTimes(1)
-    expect(mockedAxios.delete.mock.calls[0][0]).toMatch(/\/scraper-leagues\/9$/)
+    expect(mocked.delete).toHaveBeenCalledTimes(1)
+    expect(mocked.delete.mock.calls[0][0]).toMatch(/\/scraper-leagues\/9$/)
   })
 
   it('search calls GET /scraper-leagues/search with q param', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.get.mockResolvedValue({
+    const mocked = authJsonAxios as any
+    mocked.get.mockResolvedValue({
       data: {
         data: [
           {
@@ -74,9 +85,9 @@ describe('ScraperLeagueService', () => {
     })
     const svc = new ScraperLeagueService()
     const result = await svc.search('premier')
-    expect(mockedAxios.get).toHaveBeenCalledTimes(1)
-    expect(mockedAxios.get.mock.calls[0][0]).toContain('/scraper-leagues/search')
-    expect(mockedAxios.get.mock.calls[0][1]).toEqual(
+    expect(mocked.get).toHaveBeenCalledTimes(1)
+    expect(mocked.get.mock.calls[0][0]).toContain('/scraper-leagues/search')
+    expect(mocked.get.mock.calls[0][1]).toEqual(
       expect.objectContaining({
         params: expect.objectContaining({ q: 'premier' }),
       })
@@ -106,8 +117,8 @@ describe('ScraperLeagueService', () => {
   }
 
   it('list normalizes gorm.Model-style PascalCase fields to snake_case', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.get.mockResolvedValue({ data: { data: [gormCasedItem], total: 1 } })
+    const mocked = authJsonAxios as any
+    mocked.get.mockResolvedValue({ data: { data: [gormCasedItem], total: 1 } })
     const svc = new ScraperLeagueService()
     const result = await svc.list({ page: 1, limit: 50 })
     expect(result.data).toHaveLength(1)
@@ -125,8 +136,8 @@ describe('ScraperLeagueService', () => {
   })
 
   it('get normalizes gorm.Model-style PascalCase fields to snake_case', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.get.mockResolvedValue({ data: gormCasedItem })
+    const mocked = authJsonAxios as any
+    mocked.get.mockResolvedValue({ data: gormCasedItem })
     const svc = new ScraperLeagueService()
     const item = await svc.get(7)
     expect(item.id).toBe(7)
@@ -135,8 +146,8 @@ describe('ScraperLeagueService', () => {
   })
 
   it('create normalizes gorm.Model-style PascalCase fields to snake_case', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.post.mockResolvedValue({ data: gormCasedItem })
+    const mocked = authJsonAxios as any
+    mocked.post.mockResolvedValue({ data: gormCasedItem })
     const svc = new ScraperLeagueService()
     const item = await svc.create({ source: 'fotmob', source_league_id: '47' } as any)
     expect(item.id).toBe(7)
@@ -144,8 +155,8 @@ describe('ScraperLeagueService', () => {
   })
 
   it('list preserves already-snake_cased responses (no double normalization regression)', async () => {
-    const mockedAxios = axios as any
-    mockedAxios.get.mockResolvedValue({
+    const mocked = authJsonAxios as any
+    mocked.get.mockResolvedValue({
       data: {
         data: [{
           id: 3,
@@ -163,7 +174,7 @@ describe('ScraperLeagueService', () => {
     })
     const svc = new ScraperLeagueService()
     const result = await svc.list({ page: 1, limit: 50 })
-    expect(result.data[0].id).toBe(3)
-    expect(result.data[0].created_at).toBe('2026-09-10T10:00:00Z')
+    expect(result.data[0]?.id).toBe(3)
+    expect(result.data[0]?.created_at).toBe('2026-09-10T10:00:00Z')
   })
 })
