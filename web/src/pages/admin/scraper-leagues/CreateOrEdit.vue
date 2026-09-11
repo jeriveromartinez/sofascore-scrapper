@@ -38,16 +38,6 @@
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useScraperLeaguesStore, type ScraperLeague } from '../../../store/pinia/scraperLeaguesStore'
 
-// NOTE on i18n: the brief asks for vue-i18n translations ($t('scraperLeagues.edit'),
-// $t('scraperLeagues.addNew'), etc.). vue-i18n is not yet a dependency of this
-// project (it is not in package.json or package-lock.json), and Task 6 is the
-// planned landing point for both the dependency and the locale files. Until
-// that lands this modal uses plain English string literals (matching the
-// convention used in every other page in this project and in the sibling
-// index.vue in this same directory). When the i18n layer is added in Task 6
-// these literals will be replaced with $t('scraperLeagues.*') and
-// $t('common.cancel') calls.
-//
 // NOTE on @/ alias: the brief's snippet uses `@/store/...` imports. The alias
 // only exists in vite.config.ts (runtime); there is no matching `paths` mapping
 // in tsconfig.app.json, and `eslint.config.js` does not register the alias with
