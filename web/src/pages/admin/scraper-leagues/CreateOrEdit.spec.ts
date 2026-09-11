@@ -61,4 +61,25 @@ describe('CreateOrEdit', () => {
     const modal = wrapper.find('.modal-visible')
     expect(modal.exists()).toBe(true)
   })
+
+  it('handles a null search response without crashing (F3 guard)', async () => {
+    // F3 (PR #123): the backend's FotMob /search endpoint returns
+    //   {"data": null}   (the source returns nil when nothing matches).
+    // The store currently hands that null straight through, so the template
+    // tried `suggestions.length > 0` and threw TypeError. The component
+    // must normalize null -> [] before assigning to `suggestions`.
+    const store = useScraperLeaguesStore()
+    const svc = new ScraperLeagueService() as any
+    svc.search.mockResolvedValue(null)
+    store.setService(svc)
+
+    const wrapper = mount(CreateOrEdit, { props: { item: null } })
+    await wrapper.find('input.search').setValue('premier')
+    await flushPromises()
+    await new Promise(r => setTimeout(r, 300))  // debounce
+    await flushPromises()
+
+    // No suggestions rendered, no crash. The next render must not throw.
+    expect(wrapper.findAll('.suggestion')).toHaveLength(0)
+  })
 })

@@ -75,7 +75,14 @@ watch(search, (q) => {
       suggestions.value = []
       return
     }
-    suggestions.value = await store.searchLeagues(q)
+    // F3 (PR #123): the backend FotMob source returns `nil` when nothing
+    // matches, and the JSON handler encodes that as `{"data": null}`. The
+    // store hands the raw payload through, so this can be null. Guard the
+    // assignment so the template's `suggestions.length` access doesn't
+    // throw. The store is out of scope for this PR, so the defensive
+    // normalization lives at the call site.
+    const result = await store.searchLeagues(q)
+    suggestions.value = Array.isArray(result) ? result : []
   }, 250)
 })
 
