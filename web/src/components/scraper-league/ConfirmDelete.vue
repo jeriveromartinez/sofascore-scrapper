@@ -1,6 +1,6 @@
 <template>
   <div class="modal-backdrop" @click.self="$emit('cancel')">
-    <div class="modal">
+    <div class="modal modal-visible">
       <h2>Delete league</h2>
       <p>Are you sure you want to delete '{{ item.name }}'?</p>
       <div class="actions">
@@ -24,3 +24,14 @@ import type { ScraperLeague } from '../../store/pinia/scraperLeaguesStore'
 defineProps<{ item: ScraperLeague }>()
 defineEmits<{ (e: 'confirm'): void; (e: 'cancel'): void }>()
 </script>
+
+<style scoped>
+/* assets/vendor/css/core.css declares `.modal { display: none }` for the
+ * Bootstrap modal lifecycle. We don't bootstrap Bootstrap JS, so we never add
+ * the `.show` class that flips it back on — the modal content stays invisible.
+ * `modal-visible` is our opt-in: scoped to this component so we never silently
+ * override any real Bootstrap modal that might land on the same page later. */
+.modal-visible {
+  display: block !important;
+}
+</style>

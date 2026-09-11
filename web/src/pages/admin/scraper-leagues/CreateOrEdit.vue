@@ -1,6 +1,6 @@
 <template>
   <div class="modal-backdrop" @click.self="$emit('close')">
-    <div class="modal">
+    <div class="modal modal-visible">
       <h2>{{ item ? 'Edit league' : 'Add new league' }}</h2>
 
       <label>Search</label>
@@ -75,7 +75,14 @@ watch(search, (q) => {
       suggestions.value = []
       return
     }
-    suggestions.value = await store.searchLeagues(q)
+    // F3 (PR #123): the backend FotMob source returns `nil` when nothing
+    // matches, and the JSON handler encodes that as `{"data": null}`. The
+    // store hands the raw payload through, so this can be null. Guard the
+    // assignment so the template's `suggestions.length` access doesn't
+    // throw. The store is out of scope for this PR, so the defensive
+    // normalization lives at the call site.
+    const result = await store.searchLeagues(q)
+    suggestions.value = Array.isArray(result) ? result : []
   }, 250)
 })
 
@@ -101,3 +108,14 @@ async function onSave() {
   emit('saved')
 }
 </script>
+
+<style scoped>
+/* assets/vendor/css/core.css declares `.modal { display: none }` for the
+ * Bootstrap modal lifecycle. We don't bootstrap Bootstrap JS, so we never add
+ * the `.show` class that flips it back on — the modal content stays invisible.
+ * `modal-visible` is our opt-in: scoped to this component so we never silently
+ * override any real Bootstrap modal that might land on the same page later. */
+.modal-visible {
+  display: block !important;
+}
+</style>
