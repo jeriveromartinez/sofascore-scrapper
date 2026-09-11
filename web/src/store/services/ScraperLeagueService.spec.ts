@@ -84,4 +84,86 @@ describe('ScraperLeagueService', () => {
     expect(result).toHaveLength(1)
     expect(result[0]!.name).toBe('PL')
   })
+
+  // --- F2 (PR #123) -------------------------------------------------------
+  // The backend's catalog.ScraperLeague embeds gorm.Model without explicit
+  // JSON tags, so the wire format uses Go's default field naming
+  // (`ID`, `Source`, `SourceLeagueId`, `CreatedAt`, `UpdatedAt`). The
+  // frontend types use snake_case lowercase. Without normalization the
+  // response is silently unusable (item.id is undefined and the UI
+  // builds URLs like `/scraper-leagues/undefined`).
+
+  const gormCasedItem = {
+    ID: 7,
+    Source: 'fotmob',
+    SourceLeagueId: '47',
+    Name: 'Premier League',
+    Country: 'GB',
+    Sport: 'football',
+    Enabled: true,
+    CreatedAt: '2026-09-10T10:00:00Z',
+    UpdatedAt: '2026-09-10T11:00:00Z',
+  }
+
+  it('list normalizes gorm.Model-style PascalCase fields to snake_case', async () => {
+    const mockedAxios = axios as any
+    mockedAxios.get.mockResolvedValue({ data: { data: [gormCasedItem], total: 1 } })
+    const svc = new ScraperLeagueService()
+    const result = await svc.list({ page: 1, limit: 50 })
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]).toEqual({
+      id: 7,
+      source: 'fotmob',
+      source_league_id: '47',
+      name: 'Premier League',
+      country: 'GB',
+      sport: 'football',
+      enabled: true,
+      created_at: '2026-09-10T10:00:00Z',
+      updated_at: '2026-09-10T11:00:00Z',
+    })
+  })
+
+  it('get normalizes gorm.Model-style PascalCase fields to snake_case', async () => {
+    const mockedAxios = axios as any
+    mockedAxios.get.mockResolvedValue({ data: gormCasedItem })
+    const svc = new ScraperLeagueService()
+    const item = await svc.get(7)
+    expect(item.id).toBe(7)
+    expect(item.source_league_id).toBe('47')
+    expect(item.created_at).toBe('2026-09-10T10:00:00Z')
+  })
+
+  it('create normalizes gorm.Model-style PascalCase fields to snake_case', async () => {
+    const mockedAxios = axios as any
+    mockedAxios.post.mockResolvedValue({ data: gormCasedItem })
+    const svc = new ScraperLeagueService()
+    const item = await svc.create({ source: 'fotmob', source_league_id: '47' } as any)
+    expect(item.id).toBe(7)
+    expect(item.name).toBe('Premier League')
+  })
+
+  it('list preserves already-snake_cased responses (no double normalization regression)', async () => {
+    const mockedAxios = axios as any
+    mockedAxios.get.mockResolvedValue({
+      data: {
+        data: [{
+          id: 3,
+          source: 'fotmob',
+          source_league_id: '47',
+          name: 'PL',
+          country: 'GB',
+          sport: 'football',
+          enabled: true,
+          created_at: '2026-09-10T10:00:00Z',
+          updated_at: '2026-09-10T11:00:00Z',
+        }],
+        total: 1,
+      },
+    })
+    const svc = new ScraperLeagueService()
+    const result = await svc.list({ page: 1, limit: 50 })
+    expect(result.data[0].id).toBe(3)
+    expect(result.data[0].created_at).toBe('2026-09-10T10:00:00Z')
+  })
 })

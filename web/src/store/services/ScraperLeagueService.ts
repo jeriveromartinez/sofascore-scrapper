@@ -43,6 +43,34 @@ export interface ScraperLeagueSearchResult {
   sport: string
 }
 
+/**
+ * Normalize a single ScraperLeague payload from the wire to the camelCase /
+ * snake_case shape the rest of the frontend expects.
+ *
+ * Background: the Go model `catalog.ScraperLeague` embeds `gorm.Model` and
+ * exposes its columns without explicit `json:` tags, so JSON tags fall back to
+ * the Go field names (`ID`, `Source`, `SourceLeagueId`, `CreatedAt`,
+ * `UpdatedAt`). After axios decodes the response, `item.id` is `undefined`
+ * and downstream code builds URLs like `/scraper-leagues/undefined`.
+ *
+ * This helper accepts BOTH casings so the service remains usable while
+ * upstream JSON tags are added (PR #122 covers the Go side; see its brief).
+ */
+export function normalizeScraperLeague(raw: unknown): ScraperLeague {
+  const r = (raw ?? {}) as Record<string, unknown>
+  return {
+    id: (r.ID ?? r.id) as number,
+    source: (r.Source ?? r.source) as string,
+    source_league_id: (r.SourceLeagueId ?? r.source_league_id) as string,
+    name: (r.Name ?? r.name) as string,
+    country: (r.Country ?? r.country) as string,
+    sport: (r.Sport ?? r.sport) as string,
+    enabled: (r.Enabled ?? r.enabled) as boolean,
+    created_at: (r.CreatedAt ?? r.created_at) as string,
+    updated_at: (r.UpdatedAt ?? r.updated_at) as string,
+  }
+}
+
 export class ScraperLeagueService {
   private readonly base = `${API_BASE_URL}/scraper-leagues`
 
@@ -65,17 +93,23 @@ export class ScraperLeagueService {
     if (filters.country) params.country = filters.country
     if (filters.q) params.q = filters.q
     const res = await axios.get(this.base, { params, headers: this.getAuthHeaders() })
-    return res.data
+    const payload = (res.data ?? {}) as { data?: unknown[]; total?: number; page?: number; limit?: number }
+    return {
+      data: Array.isArray(payload.data) ? payload.data.map(normalizeScraperLeague) : [],
+      total: payload.total ?? 0,
+      page: payload.page ?? filters.page,
+      limit: payload.limit ?? filters.limit,
+    }
   }
 
   async get(id: number): Promise<ScraperLeague> {
     const res = await axios.get(`${this.base}/${id}`, { headers: this.getAuthHeaders() })
-    return res.data
+    return normalizeScraperLeague(res.data)
   }
 
   async create(payload: Partial<ScraperLeague>): Promise<ScraperLeague> {
     const res = await axios.post(this.base, payload, { headers: this.getAuthHeaders() })
-    return res.data
+    return normalizeScraperLeague(res.data)
   }
 
   async update(id: number, fields: Partial<ScraperLeague>): Promise<void> {
