@@ -81,7 +81,7 @@ func (c *Client) ScheduledEvents(ctx context.Context, leagueID, date string) ([]
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("fotmob: parse matches: %w", err)
 	}
-	return resp.Matches, nil
+	return resp.Matches.AllMatches, nil
 }
 
 func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {

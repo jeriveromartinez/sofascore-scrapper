@@ -12,7 +12,7 @@ import (
 
 func TestSource_ScheduledEvents_MapsToMatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"matches":[{"id":"4193492","home":{"id":1,"name":"Chelsea","imageUrl":"https://x/c.png"},"away":{"id":2,"name":"Arsenal","imageUrl":"https://x/a.png"},"status":{"code":1,"type":"scheduled","finished":false,"started":false},"time":{"utcTime":"2026-09-10T20:00:00Z"}}]}`))
+		w.Write([]byte(`{"matches":{"allMatches":[{"id":"4193492","home":{"id":1,"name":"Chelsea","imageUrl":"https://x/c.png"},"away":{"id":2,"name":"Arsenal","imageUrl":"https://x/a.png"},"status":{"code":1,"type":"scheduled","finished":false,"started":false},"time":{"utcTime":"2026-09-10T20:00:00Z"}}]}}`))
 	}))
 	defer server.Close()
 

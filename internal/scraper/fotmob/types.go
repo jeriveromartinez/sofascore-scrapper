@@ -43,6 +43,8 @@ type apiLeagueRef struct {
 }
 
 type apiMatchesResponse struct {
-	Matches  []apiMatch `json:"matches"`
-	LeagueId int64      `json:"leagueId"`
+	Matches  struct {
+		AllMatches []apiMatch `json:"allMatches"`
+	} `json:"matches"`
+	LeagueId int64 `json:"leagueId"`
 }

@@ -12,7 +12,9 @@ import (
 func TestClient_ScheduledEvents_OK(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"matches":[{"id":"4193492","home":{"id":1,"name":"H"},"away":{"id":2,"name":"A"},"status":{"code":1,"type":"scheduled"}}]}`))
+		// Real FotMob wire shape: matches is an object with an
+		// allMatches field (fix B1, PR #122).
+		_, _ = w.Write([]byte(`{"matches":{"allMatches":[{"id":"4193492","home":{"id":1,"name":"H"},"away":{"id":2,"name":"A"},"status":{"code":1,"type":"scheduled"}}]}}`))
 	}))
 	defer server.Close()
 
@@ -35,7 +37,7 @@ func TestClient_ScheduledEvents_429_Retries(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
-		_, _ = w.Write([]byte(`{"matches":[]}`))
+		_, _ = w.Write([]byte(`{"matches":{"allMatches":[]}}`))
 	}))
 	defer server.Close()
 
@@ -58,7 +60,7 @@ func TestClient_ScheduledEvents_500_Retries(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		_, _ = w.Write([]byte(`{"matches":[{"id":"ok","home":{"id":1,"name":"H"},"away":{"id":2,"name":"A"}}]}`))
+		_, _ = w.Write([]byte(`{"matches":{"allMatches":[{"id":"ok","home":{"id":1,"name":"H"},"away":{"id":2,"name":"A"}}]}}`))
 	}))
 	defer server.Close()
 
