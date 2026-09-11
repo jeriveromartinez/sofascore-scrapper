@@ -82,6 +82,6 @@ describe('ScraperLeagueService', () => {
       })
     )
     expect(result).toHaveLength(1)
-    expect(result[0].name).toBe('PL')
+    expect(result[0]!.name).toBe('PL')
   })
 })
