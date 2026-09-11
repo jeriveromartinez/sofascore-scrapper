@@ -87,6 +87,9 @@ func New(cfg config.Config) (*App, error) {
 		if err := seeder.SeedDefaultAdmin(context.Background(), db); err != nil {
 			return nil, fmt.Errorf("seed default admin: %w", err)
 		}
+		if err := seeder.SeedDefaults(db, nil); err != nil {
+			return nil, fmt.Errorf("seed defaults: %w", err)
+		}
 	}
 
 	redisClient, err := redisplatform.New(context.Background(), cfg.Redis)

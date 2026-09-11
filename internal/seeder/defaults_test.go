@@ -6,6 +6,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"gorm.io/gorm"
@@ -134,5 +135,78 @@ func TestSeedDefaultAdmin_EmptyEventsTableIsNoop(t *testing.T) {
 	var admin users.User
 	if err := db.Where("email = ?", DefaultAdminEmail).First(&admin).Error; err != nil {
 		t.Fatalf("default admin not created: %v", err)
+	}
+}
+
+// TestSeed_LoadsInitialLeagues verifies that on first boot the FotMob
+// catalog is populated with a curated seed of world football leagues
+// large enough to give operators a working scraper out of the box.
+// The threshold (30) is intentionally below the brief's "~50" target
+// so the seed can evolve without breaking the test, but high enough
+// to catch accidental truncations of the curated list.
+//
+// If the catalog admin endpoints have already populated scraper_leagues,
+// the seed must be a no-op — operators retain control of which leagues
+// are tracked. That is asserted in TestSeed_NonEmptyCatalogIsNoop.
+func TestSeed_LoadsInitialLeagues(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&catalog.ScraperLeague{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+
+	if err := SeedDefaults(db, nil); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var count int64
+	if err := db.Model(&catalog.ScraperLeague{}).Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count < 30 {
+		t.Fatalf("expected at least 30 leagues seeded, got %d", count)
+	}
+}
+
+// TestSeed_NonEmptyCatalogIsNoop verifies the seed does not overwrite
+// an operator-curated catalog. If the catalog already contains any
+// league, SeedDefaults must leave it untouched (no inserts, no
+// deletes) so that disabling/enabling leagues via the admin endpoints
+// persists across boots.
+func TestSeed_NonEmptyCatalogIsNoop(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&catalog.ScraperLeague{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+	pre := catalog.ScraperLeague{
+		Source: "fotmob", SourceLeagueId: "99999",
+		Name: "Operator-configured league", Country: "XX", Sport: "football", Enabled: false,
+	}
+	if err := db.Create(&pre).Error; err != nil {
+		t.Fatalf("pre-insert: %v", err)
+	}
+
+	if err := SeedDefaults(db, nil); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var count int64
+	if err := db.Model(&catalog.ScraperLeague{}).Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("seed overwrote operator config: count = %d, want 1", count)
+	}
+	var got catalog.ScraperLeague
+	if err := db.First(&got, pre.ID).Error; err != nil {
+		t.Fatalf("re-read operator row: %v", err)
+	}
+	if got.Name != "Operator-configured league" {
+		t.Errorf("operator row mutated: name = %q", got.Name)
 	}
 }

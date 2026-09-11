@@ -232,12 +232,18 @@ func TestRouteCompatibility(t *testing.T) {
 		"POST /api/web/v1/domains",
 		"PUT /api/web/v1/domains/:id",
 		"DELETE /api/web/v1/domains/:id",
+		"GET /api/web/v1/scraper-leagues",
+		"POST /api/web/v1/scraper-leagues",
+		"GET /api/web/v1/scraper-leagues/search",
+		"GET /api/web/v1/scraper-leagues/:id",
+		"PATCH /api/web/v1/scraper-leagues/:id",
+		"DELETE /api/web/v1/scraper-leagues/:id",
 	} {
 		if !got[want] {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 67 {
-		t.Fatalf("got %d routes, want 67", len(got))
+	if len(got) != 73 {
+		t.Fatalf("got %d routes, want 73", len(got))
 	}
 }

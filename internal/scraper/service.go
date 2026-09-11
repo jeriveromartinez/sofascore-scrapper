@@ -16,6 +16,15 @@ const (
 	maxConcurrency           = 32
 )
 
+// CatalogSource returns the active leagues the scheduler should scrape.
+// The DB-backed implementation (*catalog.Repository) lives in
+// internal/scraper/catalog; we keep an interface here so this package
+// does not import catalog (which would create a cycle, since catalog
+// itself imports this package for the LeagueRef type).
+type CatalogSource interface {
+	ActiveLeagues(ctx context.Context) ([]LeagueRef, error)
+}
+
 type Service struct {
 	repo             *events.Repository
 	source           Source

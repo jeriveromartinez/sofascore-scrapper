@@ -239,6 +239,20 @@ func (f *serviceTestFakeSource) SearchLeagues(_ context.Context, _ string) ([]Le
 	return nil, nil
 }
 
+// serviceTestFakeCatalog is a CatalogSource stub used by the integration
+// test now that the memory-catalog package has been removed. It avoids
+// an import cycle with internal/scraper/catalog (which imports this
+// package for LeagueRef).
+type serviceTestFakeCatalog struct {
+	leagues []LeagueRef
+}
+
+func (c *serviceTestFakeCatalog) ActiveLeagues(_ context.Context) ([]LeagueRef, error) {
+	out := make([]LeagueRef, len(c.leagues))
+	copy(out, c.leagues)
+	return out, nil
+}
+
 func TestService_ScrapeToday_UpsertsFromSource(t *testing.T) {
 	db := setupScraperTestDB(t)
 	repo := events.NewRepository(db)
@@ -257,7 +271,7 @@ func TestService_ScrapeToday_UpsertsFromSource(t *testing.T) {
 			},
 		},
 	}
-	cat := NewMemoryCatalog([]LeagueRef{{Source: "fake", SourceLeagueId: "47", Name: "L"}})
+	cat := &serviceTestFakeCatalog{leagues: []LeagueRef{{Source: "fake", SourceLeagueId: "47", Name: "L"}}}
 	svc, err := NewService(repo, src, cat, 100, 4, slog.Default())
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
