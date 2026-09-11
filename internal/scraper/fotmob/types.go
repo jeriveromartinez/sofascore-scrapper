@@ -1,23 +1,23 @@
 package fotmob
 
 type apiMatch struct {
-	Id         string      `json:"id"`
-	Slug       string      `json:"slug"`
-	Home       apiTeam     `json:"home"`
-	Away       apiTeam     `json:"away"`
-	Status     apiStatus   `json:"status"`
-	Time       apiTime     `json:"time"`
+	Id         string       `json:"id"`
+	Slug       string       `json:"slug"`
+	Home       apiTeam      `json:"home"`
+	Away       apiTeam      `json:"away"`
+	Status     apiStatus    `json:"status"`
+	Time       apiTime      `json:"time"`
 	League     apiLeagueRef `json:"league"`
 	Tournament apiLeagueRef `json:"tournament"`
 }
 
 type apiTeam struct {
-	Id            int64  `json:"id"`
-	Name          string `json:"name"`
-	ImageUrl      string `json:"imageUrl"`
-	PrimaryColor  string `json:"primaryColor"`
+	Id             int64  `json:"id"`
+	Name           string `json:"name"`
+	ImageUrl       string `json:"imageUrl"`
+	PrimaryColor   string `json:"primaryColor"`
 	SecondaryColor string `json:"secondaryColor"`
-	TextColor     string `json:"textColor"`
+	TextColor      string `json:"textColor"`
 }
 
 type apiStatus struct {
@@ -31,7 +31,7 @@ type apiStatus struct {
 }
 
 type apiTime struct {
-	UtcTime                    string `json:"utcTime"`
+	UtcTime                     string `json:"utcTime"`
 	CurrentPeriodStartTimestamp int64  `json:"currentPeriodStartTimestamp"`
 }
 
