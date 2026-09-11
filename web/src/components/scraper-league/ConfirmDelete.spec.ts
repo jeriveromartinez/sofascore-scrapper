@@ -45,4 +45,13 @@ describe('ConfirmDelete', () => {
     expect(wrapper.emitted('confirm')).toHaveLength(1)
     expect(wrapper.emitted('cancel')).toBeFalsy()
   })
+
+  it('renders the modal root with the .modal-visible opt-in class', () => {
+    // F1 (PR #123): assets/vendor/css/core.css forces `.modal { display: none }`.
+    // Without the scoped `.modal-visible` override the modal content would be
+    // hidden even when the backdrop is on screen.
+    const wrapper = mount(ConfirmDelete, { props: { item } })
+    const modal = wrapper.find('.modal-visible')
+    expect(modal.exists()).toBe(true)
+  })
 })

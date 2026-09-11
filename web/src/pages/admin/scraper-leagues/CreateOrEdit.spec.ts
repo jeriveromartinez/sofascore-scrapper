@@ -51,4 +51,14 @@ describe('CreateOrEdit', () => {
       source: 'fotmob', source_league_id: '47', name: 'Premier League', country: 'GB', sport: 'football',
     }))
   })
+
+  it('renders the modal root with the .modal-visible opt-in class', () => {
+    // F1 (PR #123): assets/vendor/css/core.css forces `.modal { display: none }`
+    // for the Bootstrap modal lifecycle. Because we never add the `.show` class
+    // (no Bootstrap JS), the modal content would stay invisible without a
+    // scoped override. The component ships `.modal-visible` to opt back in.
+    const wrapper = mount(CreateOrEdit, { props: { item: null } })
+    const modal = wrapper.find('.modal-visible')
+    expect(modal.exists()).toBe(true)
+  })
 })

@@ -1,6 +1,6 @@
 <template>
   <div class="modal-backdrop" @click.self="$emit('close')">
-    <div class="modal">
+    <div class="modal modal-visible">
       <h2>{{ item ? 'Edit league' : 'Add new league' }}</h2>
 
       <label>Search</label>
@@ -101,3 +101,14 @@ async function onSave() {
   emit('saved')
 }
 </script>
+
+<style scoped>
+/* assets/vendor/css/core.css declares `.modal { display: none }` for the
+ * Bootstrap modal lifecycle. We don't bootstrap Bootstrap JS, so we never add
+ * the `.show` class that flips it back on — the modal content stays invisible.
+ * `modal-visible` is our opt-in: scoped to this component so we never silently
+ * override any real Bootstrap modal that might land on the same page later. */
+.modal-visible {
+  display: block !important;
+}
+</style>
