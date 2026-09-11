@@ -5,6 +5,8 @@ import {
   type ListFilters,
 } from '../services/ScraperLeagueService'
 
+export type { ScraperLeague, ListFilters }
+
 export const useScraperLeaguesStore = defineStore('scraperLeagues', {
   state: () => ({
     items: [] as ScraperLeague[],

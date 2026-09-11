@@ -4,7 +4,7 @@
 
     <div class="filters">
       <input v-model="searchQuery" placeholder="Search leagues" @input="onSearch" />
-      <button @click="openCreateModal">Add new</button>
+      <button class="add-new" @click="openCreateModal">Add new</button>
     </div>
 
     <table v-if="!store.loading && store.items.length > 0">
@@ -27,43 +27,49 @@
           <td>{{ item.country }}</td>
           <td>{{ item.sport }}</td>
           <td>
-            <label class="status-toggle-placeholder">
-              <input type="checkbox" :checked="item.enabled" @change="onToggle(item, ($event.target as HTMLInputElement).checked)" />
-              <span>{{ item.enabled ? 'Yes' : 'No' }}</span>
-            </label>
+            <StatusToggle
+              :modelValue="item.enabled"
+              @update:modelValue="(v: boolean) => onToggle(item, v)"
+            />
           </td>
           <td>
-            <button @click="openEditModal(item)">Edit</button>
-            <button @click="confirmDelete(item)">Delete</button>
+            <button class="edit" @click="openEditModal(item)">Edit</button>
+            <button class="delete" @click="confirmDelete(item)">Delete</button>
           </td>
         </tr>
       </tbody>
     </table>
 
     <p v-if="!store.loading && store.items.length === 0">No leagues configured yet.</p>
+
+    <CreateOrEdit
+      v-if="modalOpen"
+      :item="editTarget"
+      @close="closeModal"
+      @saved="closeModal"
+    />
+
+    <ConfirmDelete
+      v-if="deleteTarget"
+      :item="deleteTarget"
+      @cancel="deleteTarget = null"
+      @confirm="onConfirmDelete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useScraperLeaguesStore, type ScraperLeague } from '../../../store/pinia/scraperLeaguesStore'
+import StatusToggle from '../../../components/scraper-league/StatusToggle.vue'
+import ConfirmDelete from '../../../components/scraper-league/ConfirmDelete.vue'
+import CreateOrEdit from './CreateOrEdit.vue'
 
-// NOTE on i18n: the brief asks for vue-i18n translations ($t('scraperLeagues.title') etc.).
-// vue-i18n is not yet a dependency of this project (it is not in package.json or
-// package-lock.json), and Task 6 is the planned landing point for both the
-// dependency and the locale files. Until that lands this page uses plain English
-// string literals (matching the convention in every other page in this project,
-// e.g. pages/domains.vue). When the i18n layer is added in Task 6 the literal
-// here will be replaced with $t('scraperLeagues.title') and friends.
-//
-// Tasks 4 and 5 will introduce StatusToggle, ConfirmDelete, and CreateOrEdit
-// components under @/components/scraper-league/. Until those land, this page
-// uses inline placeholders (plain checkboxes/buttons) so the table renders and
-// the basic actions (toggle, edit, delete) still hit the store. When the
-// components land they will replace the inline markup; the event handlers
-// below are the same shape the components will emit.
 const store = useScraperLeaguesStore()
 const searchQuery = ref('')
+const modalOpen = ref(false)
+const editTarget = ref<ScraperLeague | null>(null)
+const deleteTarget = ref<ScraperLeague | null>(null)
 
 onMounted(() => store.fetch())
 
@@ -72,18 +78,33 @@ function onSearch() {
 }
 
 function openCreateModal() {
-  // Wired up in Task 4 (CreateOrEdit component).
+  editTarget.value = null
+  modalOpen.value = true
 }
 
-function openEditModal(_item: ScraperLeague) {
-  // Wired up in Task 4 (CreateOrEdit component).
+function openEditModal(item: ScraperLeague) {
+  editTarget.value = item
+  modalOpen.value = true
+}
+
+function closeModal() {
+  modalOpen.value = false
+  editTarget.value = null
 }
 
 async function onToggle(item: ScraperLeague, enabled: boolean) {
   await store.update(item.id, { enabled })
 }
 
-function confirmDelete(_item: ScraperLeague) {
-  // Wired up in Task 5 (ConfirmDelete component).
+function confirmDelete(item: ScraperLeague) {
+  deleteTarget.value = item
+}
+
+async function onConfirmDelete() {
+  const target = deleteTarget.value
+  deleteTarget.value = null
+  if (target) {
+    await store.remove(target.id)
+  }
 }
 </script>

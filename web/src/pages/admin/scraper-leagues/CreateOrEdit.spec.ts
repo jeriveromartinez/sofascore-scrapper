@@ -5,12 +5,9 @@ import CreateOrEdit from './CreateOrEdit.vue'
 import { useScraperLeaguesStore } from '../../../store/pinia/scraperLeaguesStore'
 import { ScraperLeagueService } from '../../../store/services/ScraperLeagueService'
 
-// vue-i18n is NOT installed in this project (verified in Task 3 review: not in
-// package.json, not in package-lock.json, not in node_modules). The modal uses
-// plain English string literals in the template (matching pages/scraper-leagues/index.vue
-// and every other page in the project) and Task 6 will swap them for $t() calls
-// once the dependency and locale files land. We therefore mount without the i18n
-// plugin — see the NOTE block at the top of CreateOrEdit.vue.
+// vue-i18n is NOT installed in this project, so we mount without the i18n
+// plugin and use plain English string literals in the template (matches the
+// repo-wide convention).
 vi.mock('../../../store/services/ScraperLeagueService')
 
 describe('CreateOrEdit', () => {
