@@ -152,7 +152,11 @@ func TestExternalEventFields(t *testing.T) {
 	}
 	fd := event.ProtoReflect().Descriptor()
 	assertFieldNumber(t, fd, "id", 1)
-	assertFieldNumber(t, fd, "external_match_id", 4)
+	// Wire-format compat: tag 4 carries the deprecated int64 view of
+	// the legacy SofaScore match id; the new string field lives at a
+	// fresh tag (20) so already-deployed clients keep reading int64
+	// at the same wire position. See fix A2 (PR #122).
+	assertFieldNumber(t, fd, "sofa_score_event_id_deprecated", 4)
 	assertFieldNumber(t, fd, "sport", 5)
 	assertFieldNumber(t, fd, "home_score", 6)
 	assertFieldNumber(t, fd, "home_team_id", 7)
@@ -163,6 +167,7 @@ func TestExternalEventFields(t *testing.T) {
 	assertFieldNumber(t, fd, "current_period_start_timestamp", 13)
 	assertFieldNumber(t, fd, "slug", 14)
 	assertFieldNumber(t, fd, "status_type", 18)
+	assertFieldNumber(t, fd, "external_match_id", 20)
 }
 
 func TestDeviceRegisterRequestFields(t *testing.T) {

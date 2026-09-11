@@ -41,6 +41,7 @@ func (s *Source) ScheduledEvents(ctx context.Context, league scraper.LeagueRef, 
 				Finished:  m.Status.Finished,
 				Started:   m.Status.Started,
 				Cancelled: m.Status.Cancelled,
+				ScoreStr:  m.Status.ScoreStr,
 			},
 			HomeTeam: scraper.Team{
 				SourceId:       m.Home.Id,

@@ -41,17 +41,76 @@ func ToEvent(source Match, sport string) events.Event {
 		startTs = 0
 	}
 
+	homeScore, awayScore := parseScoreStr(source.Status.ScoreStr)
+
 	return events.Event{
 		ExternalMatchId: source.SourceMatchId,
 		Source:          source.Source,
 		Sport:           sport,
 		Slug:            source.Slug,
 		StartTimestamp:  startTs,
-		StatusType:      source.Status.Type,
+		StatusType:      normalizeStatus(source.Status),
+		HomeTeamId:      homeTeam.TeamId,
+		AwayTeamId:      awayTeam.TeamId,
 		HomeTeamModel:   &homeTeam,
 		AwayTeamModel:   &awayTeam,
+		HomeScore:       homeScore,
+		AwayScore:       awayScore,
 		League:          &tournament,
 		LeagueId:        uint(parseLeagueID(source.League.SourceLeagueId)),
+	}
+}
+
+// parseScoreStr splits a "<home>-<away>" source score string into the
+// two integer halves expected by events.Event.HomeScore / AwayScore.
+// Empty or malformed input (anything that does not split cleanly into
+// two numeric halves) returns (0, 0). This is intentional: the
+// default-zero behavior keeps scheduled and unknown matches coherent
+// rather than emitting a partial / nonsense score.
+func parseScoreStr(s string) (int, int) {
+	if s == "" {
+		return 0, 0
+	}
+	parts := strings.SplitN(s, "-", 2)
+	if len(parts) != 2 {
+		return 0, 0
+	}
+	home, errHome := strconv.Atoi(strings.TrimSpace(parts[0]))
+	away, errAway := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errHome != nil || errAway != nil {
+		return 0, 0
+	}
+	return home, away
+}
+
+// normalizeStatus rewrites the FotMob (started, finished, cancelled)
+// bool triple into the values the events repository queries against.
+// The repository only selects events with status_type in
+// {notstarted, inprogress}, so any value outside the mapping below
+// (or an unrecognized status from a future source) becomes "" so the
+// row simply does not match a WHERE clause rather than silently
+// matching one.
+//
+// Mapping (fix B3, PR #122):
+//
+//	cancelled=true                             -> "cancelled"
+//	started=true && finished=true              -> "finished"
+//	started=true && finished=false             -> "inprogress"
+//	started=false && finished=false            -> "notstarted"
+//	anything else                              -> ""
+func normalizeStatus(s MatchStatus) string {
+	if s.Cancelled {
+		return "cancelled"
+	}
+	switch {
+	case s.Started && s.Finished:
+		return "finished"
+	case s.Started && !s.Finished:
+		return "inprogress"
+	case !s.Started && !s.Finished:
+		return "notstarted"
+	default:
+		return ""
 	}
 }
 

@@ -89,6 +89,13 @@ func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
 		return
 	}
 
+	// Capture the parent ctx BEFORE errgroup.WithContext so the
+	// completion hook sees a live context. errgroup.WithContext
+	// derives a ctx that gets canceled when g.Wait() returns, which
+	// means the hook used to always receive a canceled context —
+	// Redis (epoch increment) and similar IO from the hook would
+	// fail immediately. Fix B5 (PR #122).
+	parentCtx := ctx
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.concur)
 	for _, league := range leagues {
@@ -101,7 +108,7 @@ func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
 		s.logger.ErrorContext(ctx, "scrape today errors", slog.String("error", err.Error()))
 	}
 	if s.onScrapeComplete != nil {
-		_ = s.onScrapeComplete(ctx)
+		_ = s.onScrapeComplete(parentCtx)
 	}
 }
 

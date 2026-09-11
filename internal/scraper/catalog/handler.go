@@ -46,15 +46,22 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body", "message": err.Error()})
 		return
 	}
+	// Fix C1 (PR #122): createLeagueRequest.Enabled is *bool so we
+	// can distinguish "omitted" from "explicitly false". Default new
+	// leagues to enabled=true so ActiveLeagues picks them up
+	// immediately; an explicit enabled:false is still respected
+	// (admin opt-out for staging-only leagues etc.).
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
 	sl := ScraperLeague{
 		Source:         req.Source,
 		SourceLeagueId: req.SourceLeagueId,
 		Name:           req.Name,
 		Country:        req.Country,
 		Sport:          req.Sport,
-	}
-	if req.Enabled != nil {
-		sl.Enabled = *req.Enabled
+		Enabled:        enabled,
 	}
 	if err := h.svc.Create(c.Request.Context(), &sl); err != nil {
 		if errors.Is(err, ErrDuplicate) {

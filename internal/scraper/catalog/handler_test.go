@@ -28,7 +28,7 @@ func newTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 }
 
 func TestHandler_Create_Valid(t *testing.T) {
-	r, _ := newTestRouter(t)
+	r, db := newTestRouter(t)
 	body, _ := json.Marshal(map[string]any{
 		"source": "fotmob", "source_league_id": "47", "name": "Premier League", "country": "GB", "sport": "football",
 	})
@@ -38,6 +38,44 @@ func TestHandler_Create_Valid(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status: %d body: %s", w.Code, w.Body.String())
+	}
+
+	// Fix C1 (PR #122): when the client omits "enabled", the created
+	// league must default to enabled=true. Otherwise ActiveLeagues
+	// would silently drop it from the scheduler. Verify directly
+	// against the DB to dodge any client-side JSON tagging tricks.
+	var got ScraperLeague
+	if err := db.First(&got).Error; err != nil {
+		t.Fatalf("read back created league: %v", err)
+	}
+	if !got.Enabled {
+		t.Errorf("default-enabled behaviour broken: created league has Enabled=false")
+	}
+}
+
+// TestHandler_Create_ExplicitFalseStaysFalse is the inverse guard for
+// fix C1 (PR #122). The default-enable fix must NOT swallow an
+// explicit enabled:false — admins who explicitly disable a new league
+// (e.g. a staging-only league) must continue to be able to opt out.
+func TestHandler_Create_ExplicitFalseStaysFalse(t *testing.T) {
+	r, db := newTestRouter(t)
+	body, _ := json.Marshal(map[string]any{
+		"source": "fotmob", "source_league_id": "47", "name": "Premier League", "country": "GB", "sport": "football",
+		"enabled": false,
+	})
+	req := httptest.NewRequest("POST", "/api/admin/v1/scraper-leagues", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status: %d body: %s", w.Code, w.Body.String())
+	}
+	var got ScraperLeague
+	if err := db.First(&got).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if got.Enabled {
+		t.Errorf("explicit enabled:false must be respected; got Enabled=true")
 	}
 }
 

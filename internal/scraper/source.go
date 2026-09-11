@@ -34,6 +34,12 @@ type MatchStatus struct {
 	Finished    bool
 	Started     bool
 	Cancelled   bool
+	// ScoreStr is the source-supplied score string (e.g. "2-1").
+	// The FotMob /api/leagues response puts the score under
+	// apiStatus.scoreStr; downstream code parses it into HomeScore
+	// and AwayScore on events.Event. Empty when no score is yet
+	// available (scheduled matches, etc.).
+	ScoreStr string
 }
 
 type Team struct {

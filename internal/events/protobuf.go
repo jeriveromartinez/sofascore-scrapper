@@ -1,6 +1,7 @@
 package events
 
 import (
+	"strconv"
 	"time"
 
 	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
@@ -26,11 +27,23 @@ func EventToExternalProto(e Event) *pb.ExternalEvent {
 	homeTeam := TeamToProto(e.HomeTeamModel)
 	awayTeam := TeamToProto(e.AwayTeamModel)
 
+	// Backwards-compat shim for pre-FotMob clients (see fix A2,
+	// PR #122). When the stored ExternalMatchId is numeric we echo it
+	// into the deprecated int64 field so clients built against the
+	// old schema keep seeing the legacy sofa_score_event_id at tag 4.
+	// Non-numeric ids (e.g. "fotmob-abc-42") leave the deprecated
+	// field at the proto zero value: the int64 cannot represent them
+	// and new clients read the string field at tag 20.
+	var deprecatedID int64
+	if n, err := strconv.ParseInt(e.ExternalMatchId, 10, 64); err == nil {
+		deprecatedID = n
+	}
+
 	return &pb.ExternalEvent{
 		Id:                          uint32(e.ID),
 		CreatedAt:                   formatTime(e.CreatedAt),
 		UpdatedAt:                   formatTime(e.UpdatedAt),
-		ExternalMatchId:             e.ExternalMatchId,
+		SofaScoreEventIdDeprecated:  deprecatedID,
 		Sport:                       e.Sport,
 		HomeScore:                   int32(e.HomeScore),
 		HomeTeamId:                  e.HomeTeamId,
@@ -45,6 +58,7 @@ func EventToExternalProto(e Event) *pb.ExternalEvent {
 		TeamAway:                    awayTeam,
 		League:                      tournaments.TournamentPtrToProto(e.League),
 		Source:                      e.Source,
+		ExternalMatchId:             e.ExternalMatchId,
 	}
 }
 

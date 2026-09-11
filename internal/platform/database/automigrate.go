@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -67,12 +68,59 @@ var automigrateModels = []any{
 // If a model is missing from the list it is silently skipped. If a
 // foreign key references a model not yet created, GORM errors with
 // the model name and AutoMigrateAll returns that error.
+//
+// AutoMigrateAll also runs PreMigrateLegacyEvents before the
+// AutoMigrate loop so legacy events rows get a non-empty
+// external_match_id before the unique index is created. See that
+// helper's docstring for the rationale.
 func AutoMigrateAll(db *gorm.DB) error {
+	if err := PreMigrateLegacyEvents(db); err != nil {
+		return fmt.Errorf("pre-migrate legacy events: %w", err)
+	}
 	for i, model := range automigrateModels {
 		if err := db.AutoMigrate(model); err != nil {
 			return fmt.Errorf("automigrate %s (index %d): %w",
 				reflect.TypeOf(model).Elem().Name(), i, err)
 		}
+	}
+	return nil
+}
+
+// PreMigrateLegacyEvents backfills empty external_match_id values on
+// legacy events rows so the AutoMigrate that adds the unique index
+// idx_events_external_match_id can succeed.
+//
+// Code review on PR #118 (model reset, merged) flagged this race:
+// when the FotMob reset ships to a deployment that pre-existed with
+// events rows, the new not-null string column lands as "" for every
+// row, and the subsequent unique-index creation fails with a
+// duplicate-key error because every "" collides with every other "".
+//
+// The helper only touches rows where external_match_id is the empty
+// string. Fresh rows (already populated) are left alone. Rows whose
+// external_match_id column does not yet exist (i.e. the events table
+// itself has not been migrated) are skipped — the function is a no-op
+// against a fresh DB.
+//
+// It is safe to call before the events table is AutoMigrated; it is
+// also a no-op on an empty database. AutoMigrateAll calls this helper
+// before the AutoMigrate loop so the contract is "always safe to call
+// at boot".
+func PreMigrateLegacyEvents(db *gorm.DB) error {
+	if db == nil {
+		return errors.New("pre-migrate legacy events: nil db")
+	}
+	if !db.Migrator().HasTable(&events.Event{}) {
+		return nil
+	}
+	// Use gorm.Expr with the || string-concat operator instead of
+	// CONCAT() so the SQL stays portable between MySQL (production)
+	// and SQLite (unit tests). id is the primary key and is non-null,
+	// so the result is always a non-empty string.
+	if err := db.Model(&events.Event{}).
+		Where("external_match_id = ? OR external_match_id IS NULL", "").
+		Update("external_match_id", gorm.Expr("'legacy-' || id")).Error; err != nil {
+		return fmt.Errorf("backfill legacy external_match_id: %w", err)
 	}
 	return nil
 }

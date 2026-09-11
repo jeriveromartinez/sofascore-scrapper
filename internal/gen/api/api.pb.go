@@ -2406,29 +2406,48 @@ func (x *Team) GetName() string {
 	return ""
 }
 
+// ExternalEvent carries event metadata to mobile clients.
+//
+// Backwards compatibility (added 2026-09-11, PR #122 fix A2):
+// The pre-FotMob wire schema exposed tag 4 as `int64 sofa_score_event_id`.
+// PR #118 (model reset) silently changed that tag to a string
+// `external_match_id`, which broke already-deployed clients built
+// against the old schema. To restore compatibility we keep the old
+// int64 at tag 4 (renamed `sofa_score_event_id_deprecated` to make the
+// intent obvious) and place the new string at a fresh tag (20). Old
+// clients continue to read int64 at tag 4; new clients read string at
+// tag 20. See docs/integration-audit-roadmap.md for the rollout plan.
 type ExternalEvent struct {
-	state                       protoimpl.MessageState `protogen:"open.v1"`
-	Id                          uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	CreatedAt                   string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt                   string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	ExternalMatchId             string                 `protobuf:"bytes,4,opt,name=external_match_id,json=externalMatchId,proto3" json:"external_match_id,omitempty"`
-	Sport                       string                 `protobuf:"bytes,5,opt,name=sport,proto3" json:"sport,omitempty"`
-	HomeScore                   int32                  `protobuf:"varint,6,opt,name=home_score,json=homeScore,proto3" json:"home_score,omitempty"`
-	HomeTeamId                  int64                  `protobuf:"varint,7,opt,name=home_team_id,json=homeTeamId,proto3" json:"home_team_id,omitempty"`
-	AwayScore                   int32                  `protobuf:"varint,8,opt,name=away_score,json=awayScore,proto3" json:"away_score,omitempty"`
-	AwayTeamId                  int64                  `protobuf:"varint,9,opt,name=away_team_id,json=awayTeamId,proto3" json:"away_team_id,omitempty"`
-	ScrapedAt                   int64                  `protobuf:"varint,10,opt,name=scraped_at,json=scrapedAt,proto3" json:"scraped_at,omitempty"`
-	Category                    string                 `protobuf:"bytes,11,opt,name=category,proto3" json:"category,omitempty"`
-	StartTimestamp              int64                  `protobuf:"varint,12,opt,name=start_timestamp,json=startTimestamp,proto3" json:"start_timestamp,omitempty"`
-	CurrentPeriodStartTimestamp int64                  `protobuf:"varint,13,opt,name=current_period_start_timestamp,json=currentPeriodStartTimestamp,proto3" json:"current_period_start_timestamp,omitempty"`
-	Slug                        string                 `protobuf:"bytes,14,opt,name=slug,proto3" json:"slug,omitempty"`
-	TeamHome                    *Team                  `protobuf:"bytes,15,opt,name=team_home,json=teamHome,proto3" json:"team_home,omitempty"`
-	TeamAway                    *Team                  `protobuf:"bytes,16,opt,name=team_away,json=teamAway,proto3" json:"team_away,omitempty"`
-	League                      *Tournament            `protobuf:"bytes,17,opt,name=league,proto3" json:"league,omitempty"`
-	StatusType                  string                 `protobuf:"bytes,18,opt,name=status_type,json=statusType,proto3" json:"status_type,omitempty"`
-	Source                      string                 `protobuf:"bytes,19,opt,name=source,proto3" json:"source,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	CreatedAt string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Deprecated int64 view of the legacy SofaScore match id. Populated
+	// by the server only when the stored ExternalMatchId is numeric
+	// (i.e. pre-FotMob data). New clients should read the string field
+	// at tag 20 instead. Wire type MUST stay int64 for old clients.
+	SofaScoreEventIdDeprecated  int64       `protobuf:"varint,4,opt,name=sofa_score_event_id_deprecated,json=sofaScoreEventIdDeprecated,proto3" json:"sofa_score_event_id_deprecated,omitempty"`
+	Sport                       string      `protobuf:"bytes,5,opt,name=sport,proto3" json:"sport,omitempty"`
+	HomeScore                   int32       `protobuf:"varint,6,opt,name=home_score,json=homeScore,proto3" json:"home_score,omitempty"`
+	HomeTeamId                  int64       `protobuf:"varint,7,opt,name=home_team_id,json=homeTeamId,proto3" json:"home_team_id,omitempty"`
+	AwayScore                   int32       `protobuf:"varint,8,opt,name=away_score,json=awayScore,proto3" json:"away_score,omitempty"`
+	AwayTeamId                  int64       `protobuf:"varint,9,opt,name=away_team_id,json=awayTeamId,proto3" json:"away_team_id,omitempty"`
+	ScrapedAt                   int64       `protobuf:"varint,10,opt,name=scraped_at,json=scrapedAt,proto3" json:"scraped_at,omitempty"`
+	Category                    string      `protobuf:"bytes,11,opt,name=category,proto3" json:"category,omitempty"`
+	StartTimestamp              int64       `protobuf:"varint,12,opt,name=start_timestamp,json=startTimestamp,proto3" json:"start_timestamp,omitempty"`
+	CurrentPeriodStartTimestamp int64       `protobuf:"varint,13,opt,name=current_period_start_timestamp,json=currentPeriodStartTimestamp,proto3" json:"current_period_start_timestamp,omitempty"`
+	Slug                        string      `protobuf:"bytes,14,opt,name=slug,proto3" json:"slug,omitempty"`
+	TeamHome                    *Team       `protobuf:"bytes,15,opt,name=team_home,json=teamHome,proto3" json:"team_home,omitempty"`
+	TeamAway                    *Team       `protobuf:"bytes,16,opt,name=team_away,json=teamAway,proto3" json:"team_away,omitempty"`
+	League                      *Tournament `protobuf:"bytes,17,opt,name=league,proto3" json:"league,omitempty"`
+	StatusType                  string      `protobuf:"bytes,18,opt,name=status_type,json=statusType,proto3" json:"status_type,omitempty"`
+	Source                      string      `protobuf:"bytes,19,opt,name=source,proto3" json:"source,omitempty"`
+	// String view of the external match id (FotMob id, etc.). New
+	// clients read this. Lives at a fresh tag so the deprecated int64
+	// keeps its wire position.
+	ExternalMatchId string `protobuf:"bytes,20,opt,name=external_match_id,json=externalMatchId,proto3" json:"external_match_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ExternalEvent) Reset() {
@@ -2482,11 +2501,11 @@ func (x *ExternalEvent) GetUpdatedAt() string {
 	return ""
 }
 
-func (x *ExternalEvent) GetExternalMatchId() string {
+func (x *ExternalEvent) GetSofaScoreEventIdDeprecated() int64 {
 	if x != nil {
-		return x.ExternalMatchId
+		return x.SofaScoreEventIdDeprecated
 	}
-	return ""
+	return 0
 }
 
 func (x *ExternalEvent) GetSport() string {
@@ -2590,6 +2609,13 @@ func (x *ExternalEvent) GetStatusType() string {
 func (x *ExternalEvent) GetSource() string {
 	if x != nil {
 		return x.Source
+	}
+	return ""
+}
+
+func (x *ExternalEvent) GetExternalMatchId() string {
+	if x != nil {
+		return x.ExternalMatchId
 	}
 	return ""
 }
@@ -6006,14 +6032,14 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x0fsecondary_color\x18\x05 \x01(\tR\x0esecondaryColor\x12\x1d\n" +
 	"\n" +
 	"text_color\x18\x06 \x01(\tR\ttextColor\x12\x12\n" +
-	"\x04name\x18\a \x01(\tR\x04name\"\xa2\x05\n" +
+	"\x04name\x18\a \x01(\tR\x04name\"\xe6\x05\n" +
 	"\rExternalEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x03 \x01(\tR\tupdatedAt\x12*\n" +
-	"\x11external_match_id\x18\x04 \x01(\tR\x0fexternalMatchId\x12\x14\n" +
+	"updated_at\x18\x03 \x01(\tR\tupdatedAt\x12B\n" +
+	"\x1esofa_score_event_id_deprecated\x18\x04 \x01(\x03R\x1asofaScoreEventIdDeprecated\x12\x14\n" +
 	"\x05sport\x18\x05 \x01(\tR\x05sport\x12\x1d\n" +
 	"\n" +
 	"home_score\x18\x06 \x01(\x05R\thomeScore\x12 \n" +
@@ -6035,7 +6061,8 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x06league\x18\x11 \x01(\v2\x15.sofascore.TournamentR\x06league\x12\x1f\n" +
 	"\vstatus_type\x18\x12 \x01(\tR\n" +
 	"statusType\x12\x16\n" +
-	"\x06source\x18\x13 \x01(\tR\x06source\"\x9b\x01\n" +
+	"\x06source\x18\x13 \x01(\tR\x06source\x12*\n" +
+	"\x11external_match_id\x18\x14 \x01(\tR\x0fexternalMatchId\"\x9b\x01\n" +
 	"\n" +
 	"EventsList\x12,\n" +
 	"\x04data\x18\x01 \x03(\v2\x18.sofascore.ExternalEventR\x04data\x12\x12\n" +
