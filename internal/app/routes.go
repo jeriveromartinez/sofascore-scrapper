@@ -17,6 +17,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/fotmob"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
@@ -154,6 +155,17 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	domainHandler := domains.NewHandler(domainRepo)
 	domainHandler.RegisterRoutes(webV1, domains.HandlerDeps{AuthMiddleware: adminThenRl})
 
+	// Scraper catalog: admin endpoints for managing the leagues the
+	// scheduler scrapes. Registered under a sub-group of webV1 with
+	// adminThenRl so the existing middleware composition (auth ->
+	// rate-limit -> admin check) is applied.
+	catalogRepo := catalog.NewRepository(db)
+	catalogSrc := fotmob.NewSource(fotmob.NewClient(fotmob.ClientConfig{}), slog.Default())
+	catalogSvc := catalog.NewService(catalogRepo, catalogSrc)
+	catalogHandler := catalog.NewHandler(catalogSvc)
+	catalogAdminV1 := webV1.Group("", adminThenRl)
+	catalogHandler.RegisterRoutes(catalogAdminV1)
+
 	// Push notifications REST surface. The service was created
 	// in app.New so it can be shared with the realtime WS handler
 	// (which uses it as the AckHandler for incoming WsPushAck
@@ -204,11 +216,9 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger) (*scraper.Service, *reporting.AggregationRepository) {
 	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{})
 	src := fotmob.NewSource(fotmobClient, logger)
-	catalogStub := scraper.NewMemoryCatalog([]scraper.LeagueRef{
-		{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "GB", Sport: "football"},
-	})
+	catalogRepo := catalog.NewRepository(db)
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
-	scrapeSvc, err := scraper.NewService(eventsRepo, src, catalogStub, batchSize, concurrency, logger)
+	scrapeSvc, err := scraper.NewService(eventsRepo, src, catalogRepo, batchSize, concurrency, logger)
 	if err != nil {
 		panic("scraper: failed to create service: " + err.Error())
 	}
