@@ -75,21 +75,21 @@ func TestGetTopEvents_WithContext_ReturnsSameResultAsNoContext(t *testing.T) {
 		t.Fatalf("GetTopEvents(ctx) failed: %v", err)
 	}
 
-	// "12345" and "67890" appear as numeric casts; "0" also passes the
-	// `content NOT GLOB '*[^0-9]*'` filter and casts to 0, so it shows
+	// "12345" and "67890" pass the `content NOT GLOB '*[^0-9]*'`
+	// filter and show up as rows. "0" also passes that filter and shows
 	// up as an extra row. This is a known limitation — see issue tracker
 	// for the follow-up that excludes 0 via `> 0` (out of scope for
 	// this PR, which is about context propagation). Empty content is
 	// excluded by the `content != ''` filter.
-	want := map[int64]int64{12345: 2, 67890: 1, 0: 1}
+	want := map[string]int64{"12345": 2, "67890": 1, "0": 1}
 	if len(withCtx) != len(want) {
 		t.Fatalf("got %d stats, want %d (%v)", len(withCtx), len(want), withCtx)
 	}
 	for _, s := range withCtx {
-		if w, ok := want[s.SofaScoreEventId]; !ok {
-			t.Errorf("unexpected event id %d", s.SofaScoreEventId)
+		if w, ok := want[s.ExternalMatchId]; !ok {
+			t.Errorf("unexpected event id %s", s.ExternalMatchId)
 		} else if s.ViewCount != w {
-			t.Errorf("event %d: want view_count=%d, got %d", s.SofaScoreEventId, w, s.ViewCount)
+			t.Errorf("event %s: want view_count=%d, got %d", s.ExternalMatchId, w, s.ViewCount)
 		}
 	}
 }

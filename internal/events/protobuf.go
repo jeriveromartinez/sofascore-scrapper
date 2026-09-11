@@ -22,15 +22,15 @@ func TeamToProto(t *Team) *pb.Team {
 	}
 }
 
-func EventToProto(e Event) *pb.SofaScoreEvent {
+func EventToExternalProto(e Event) *pb.ExternalEvent {
 	homeTeam := TeamToProto(e.HomeTeamModel)
 	awayTeam := TeamToProto(e.AwayTeamModel)
 
-	return &pb.SofaScoreEvent{
+	return &pb.ExternalEvent{
 		Id:                          uint32(e.ID),
 		CreatedAt:                   formatTime(e.CreatedAt),
 		UpdatedAt:                   formatTime(e.UpdatedAt),
-		SofaScoreEventId:            e.SofaScoreEventId,
+		ExternalMatchId:             e.ExternalMatchId,
 		Sport:                       e.Sport,
 		HomeScore:                   int32(e.HomeScore),
 		HomeTeamId:                  e.HomeTeamId,
@@ -44,13 +44,14 @@ func EventToProto(e Event) *pb.SofaScoreEvent {
 		TeamHome:                    homeTeam,
 		TeamAway:                    awayTeam,
 		League:                      tournaments.TournamentPtrToProto(e.League),
+		Source:                      e.Source,
 	}
 }
 
-func EventsToProto(events []Event) []*pb.SofaScoreEvent {
-	result := make([]*pb.SofaScoreEvent, 0, len(events))
+func EventsToProto(events []Event) []*pb.ExternalEvent {
+	result := make([]*pb.ExternalEvent, 0, len(events))
 	for _, e := range events {
-		result = append(result, EventToProto(e))
+		result = append(result, EventToExternalProto(e))
 	}
 	return result
 }

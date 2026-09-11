@@ -4,9 +4,9 @@ import "testing"
 
 func TestTeamToProtoAlwaysEmitsCanonicalLocalLogoURL(t *testing.T) {
 	tests := []struct {
-		name         string
-		storedLogo   string
-		wantLogoURL  string
+		name        string
+		storedLogo  string
+		wantLogoURL string
 	}{
 		{
 			name:        "empty stored URL still resolves to canonical local path",
@@ -85,8 +85,8 @@ func TestTeamToProtoUsesTeamIDForCanonicalPath(t *testing.T) {
 	}
 }
 
-func TestEventToProtoHandlesMissingTeams(t *testing.T) {
-	event := EventToProto(Event{})
+func TestEventToExternalProtoHandlesMissingTeams(t *testing.T) {
+	event := EventToExternalProto(Event{})
 
 	if event.TeamHome != nil {
 		t.Fatalf("TeamHome = %#v, want nil", event.TeamHome)

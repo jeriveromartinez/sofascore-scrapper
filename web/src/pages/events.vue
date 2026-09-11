@@ -2,7 +2,7 @@
 import { onMounted, ref } from "vue";
 import { useCursorPagination } from "../composables/useCursorPagination";
 import { eventsApiService } from "../store/services";
-import type { EventPageResponse, EventsPageFilters, SofaScoreEvent } from "../store/services/models";
+import type { EventPageResponse, EventsPageFilters, ExternalEvent } from "../store/services/models";
 import { formatUnixTimestamp } from "../utils/time";
 import EventsFilterBar from "./EventsFilterBar.vue";
 import PaginationControls from "../components/PaginationControls.vue";
@@ -32,7 +32,7 @@ const filters = ref<EventsPageFilters>({
   tz: detectBrowserTZ(),
 });
 
-const pagination = useCursorPagination<SofaScoreEvent>({
+const pagination = useCursorPagination<ExternalEvent>({
   routeName: "Events",
   defaultSize: 20,
   filters: () => filters.value,
@@ -91,7 +91,7 @@ onMounted(() => pagination.loadPage());
           </thead>
           <tbody>
             <tr v-for="event in pagination.state.data" :key="event.id">
-              <td class="d-none d-md-table-cell">{{ event.sofaScoreEventId }}</td>
+              <td class="d-none d-md-table-cell">{{ event.externalMatchId }}</td>
               <td class="d-none d-lg-table-cell">{{ event.league?.name || "-" }}</td>
               <td class="d-none d-lg-table-cell">{{ event.sport }}</td>
               <td>

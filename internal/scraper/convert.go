@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
@@ -45,7 +46,7 @@ func ToEvent(source APIEvent, sport string) events.Event {
 	}
 
 	return events.Event{
-		SofaScoreEventId:            source.ID,
+		ExternalMatchId:             strconv.FormatInt(source.ID, 10),
 		HomeScore:                   source.HomeScore.Current,
 		HomeTeamId:                  source.HomeTeam.ID,
 		AwayScore:                   source.AwayScore.Current,
@@ -70,7 +71,7 @@ func ToEvent(source APIEvent, sport string) events.Event {
 func ToScrapeBatch(apiEvents []*APIEvent, sport string) events.ScrapeBatch {
 	teamMap := make(map[int64]events.Team)
 	tournamentMap := make(map[uint]tournaments.Tournament)
-	eventMap := make(map[int64]events.Event)
+	eventMap := make(map[string]events.Event)
 
 	for _, apiEvent := range apiEvents {
 		homeTeam := ToTeam(apiEvent.HomeTeam)
@@ -81,7 +82,7 @@ func ToScrapeBatch(apiEvents []*APIEvent, sport string) events.ScrapeBatch {
 		teamMap[homeTeam.TeamId] = homeTeam
 		teamMap[awayTeam.TeamId] = awayTeam
 		tournamentMap[tournament.ID] = tournament
-		eventMap[event.SofaScoreEventId] = event
+		eventMap[event.ExternalMatchId] = event
 	}
 
 	teams := make([]events.Team, 0, len(teamMap))
@@ -103,7 +104,7 @@ func ToScrapeBatch(apiEvents []*APIEvent, sport string) events.ScrapeBatch {
 		e.League = nil
 		evts = append(evts, e)
 	}
-	sort.Slice(evts, func(i, j int) bool { return evts[i].SofaScoreEventId < evts[j].SofaScoreEventId })
+	sort.Slice(evts, func(i, j int) bool { return evts[i].ExternalMatchId < evts[j].ExternalMatchId })
 
 	return events.ScrapeBatch{
 		Teams:       teams,

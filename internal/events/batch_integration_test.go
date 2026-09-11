@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -38,16 +39,16 @@ func testTournament(id uint) tournaments.Tournament {
 
 func testEvent(sofaID int64, homeID int64, awayID int64) Event {
 	return Event{
-		SofaScoreEventId: sofaID,
-		Sport:            "football",
-		HomeScore:        0,
-		HomeTeamId:       homeID,
-		AwayScore:        0,
-		AwayTeamId:       awayID,
-		ScrapedAt:        1000,
-		Slug:             "test-event",
-		LeagueId:         1,
-		StatusType:       "inprogress",
+		ExternalMatchId: strconv.FormatInt(sofaID, 10),
+		Sport:           "football",
+		HomeScore:       0,
+		HomeTeamId:      homeID,
+		AwayScore:       0,
+		AwayTeamId:      awayID,
+		ScrapedAt:       1000,
+		Slug:            "test-event",
+		LeagueId:        1,
+		StatusType:      "inprogress",
 	}
 }
 
@@ -122,7 +123,7 @@ func TestUpsertScrapeBatch_UpdatesMutableFields(t *testing.T) {
 		Teams:       []Team{Team{TeamId: 10, Name: "Original", LogoUrl: "https://img.sofascore.com/api/v1/team/10/image", PrimaryColor: "#111", SecondaryColor: "#222", TextColor: "#333"}},
 		Tournaments: []tournaments.Tournament{{Model: gorm.Model{ID: 1}, Name: "Old League", Slug: "old-league", Region: "Old"}},
 		Events: []Event{{
-			SofaScoreEventId: 1, Sport: "football", HomeScore: 0, HomeTeamId: 10,
+			ExternalMatchId: "1", Sport: "football", HomeScore: 0, HomeTeamId: 10,
 			AwayScore: 0, AwayTeamId: 20, Slug: "old-slug", LeagueId: 1,
 			StatusType: "notstarted", ScrapedAt: 1000,
 		}},
@@ -136,7 +137,7 @@ func TestUpsertScrapeBatch_UpdatesMutableFields(t *testing.T) {
 		Teams:       []Team{Team{TeamId: 10, Name: "Updated", LogoUrl: "https://img.sofascore.com/api/v1/team/10/image", PrimaryColor: "#AAA", SecondaryColor: "#BBB", TextColor: "#CCC"}},
 		Tournaments: []tournaments.Tournament{{Model: gorm.Model{ID: 1}, Name: "New League", Slug: "new-league", Region: "New"}},
 		Events: []Event{{
-			SofaScoreEventId:            1,
+			ExternalMatchId:             "1",
 			Sport:                       "basketball",
 			HomeScore:                   10,
 			HomeTeamId:                  10,
@@ -174,7 +175,7 @@ func TestUpsertScrapeBatch_UpdatesMutableFields(t *testing.T) {
 	}
 
 	var event Event
-	db.Where("sofa_score_event_id = ?", 1).First(&event)
+	db.Where("external_match_id = ?", "1").First(&event)
 	if event.Sport != "basketball" {
 		t.Errorf("event sport: want basketball, got %s", event.Sport)
 	}
@@ -200,7 +201,7 @@ func TestUpsertScrapeBatch_RollbackOnFailure(t *testing.T) {
 	validTournaments := []tournaments.Tournament{testTournament(1)}
 
 	// An event with missing required fields that should fail on SQLite constraint
-	badEvent := Event{SofaScoreEventId: 1, Sport: "", HomeTeamId: 0, AwayTeamId: 0}
+	badEvent := Event{ExternalMatchId: "1", Sport: "", HomeTeamId: 0, AwayTeamId: 0}
 
 	batch := ScrapeBatch{
 		Teams:       validTeams,

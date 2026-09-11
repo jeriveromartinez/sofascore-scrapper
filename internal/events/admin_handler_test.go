@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func getAdminEvents(t *testing.T, handler *AdminHandler, target string) (*httpte
 func TestAdminEventsDateUsesUnixMilliseconds(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
 	day := time.Date(2026, time.July, 17, 0, 0, 0, 0, time.UTC)
-	if err := db.Create(&Event{SofaScoreEventId: 1, StartTimestamp: day.Add(12 * time.Hour).UnixMilli()}).Error; err != nil {
+	if err := db.Create(&Event{ExternalMatchId: "1", StartTimestamp: day.Add(12 * time.Hour).UnixMilli()}).Error; err != nil {
 		t.Fatalf("seed event: %v", err)
 	}
 
@@ -66,8 +67,8 @@ func TestAdminEventsDateUsesUnixMilliseconds(t *testing.T) {
 func TestAdminEventsWithoutDateUsesUnixMilliseconds(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
 	if err := db.Create(&[]Event{
-		{SofaScoreEventId: 1, StartTimestamp: time.Now().Add(-time.Hour).UnixMilli()},
-		{SofaScoreEventId: 2, StartTimestamp: time.Now().Add(time.Hour).UnixMilli()},
+		{ExternalMatchId: "1", StartTimestamp: time.Now().Add(-time.Hour).UnixMilli()},
+		{ExternalMatchId: "2", StartTimestamp: time.Now().Add(time.Hour).UnixMilli()},
 	}).Error; err != nil {
 		t.Fatalf("seed events: %v", err)
 	}
@@ -80,8 +81,8 @@ func TestAdminEventsWithoutDateUsesUnixMilliseconds(t *testing.T) {
 	if len(response.Data) != 1 {
 		t.Fatalf("events: want 1 future event, got %d", len(response.Data))
 	}
-	if response.Data[0].SofaScoreEventId != 2 {
-		t.Fatalf("event: want SofaScore ID 2, got %d", response.Data[0].SofaScoreEventId)
+	if response.Data[0].ExternalMatchId != "2" {
+		t.Fatalf("event: want ExternalMatchId 2, got %q", response.Data[0].ExternalMatchId)
 	}
 }
 
@@ -136,10 +137,10 @@ func TestHandleGetEventsPage_DescendingOrder(t *testing.T) {
 	now := time.Now().UnixMilli()
 	for i, ts := range []int64{now, now + 3600_000, now + 7200_000} {
 		if err := db.Create(&Event{
-			SofaScoreEventId: int64(1000 + i),
-			StartTimestamp:   ts,
-			Sport:            "football",
-			StatusType:       "notstarted",
+			ExternalMatchId: strconv.Itoa(1000 + i),
+			StartTimestamp:  ts,
+			Sport:           "football",
+			StatusType:      "notstarted",
 		}).Error; err != nil {
 			t.Fatalf("seed event: %v", err)
 		}
@@ -170,8 +171,8 @@ func TestHandleGetEventsPage_DefaultsFromToTodayUTC(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
 	now := time.Now()
 	if err := db.Create(&[]Event{
-		{SofaScoreEventId: 4000, StartTimestamp: now.Add(-25 * time.Hour).UnixMilli(), Sport: "football", StatusType: "notstarted"},
-		{SofaScoreEventId: 4001, StartTimestamp: now.Add(time.Hour).UnixMilli(), Sport: "football", StatusType: "notstarted"},
+		{ExternalMatchId: "4000", StartTimestamp: now.Add(-25 * time.Hour).UnixMilli(), Sport: "football", StatusType: "notstarted"},
+		{ExternalMatchId: "4001", StartTimestamp: now.Add(time.Hour).UnixMilli(), Sport: "football", StatusType: "notstarted"},
 	}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -180,7 +181,7 @@ func TestHandleGetEventsPage_DefaultsFromToTodayUTC(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
 	}
-	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 4001 {
+	if len(response.Data) != 1 || response.Data[0].ExternalMatchId != "4001" {
 		t.Fatalf("want only the future event (id 4001), got %d events", len(response.Data))
 	}
 }
@@ -231,8 +232,8 @@ func TestHandleGetEventsPage_FromInUserTZ(t *testing.T) {
 	beforeAucklandMidnight := time.Date(2026, 8, 26, 11, 0, 0, 0, time.UTC)
 	afterAucklandMidnight := time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC)
 	if err := db.Create(&[]Event{
-		{SofaScoreEventId: 6000, StartTimestamp: beforeAucklandMidnight.UnixMilli(), Sport: "football", StatusType: "notstarted"},
-		{SofaScoreEventId: 6001, StartTimestamp: afterAucklandMidnight.UnixMilli(), Sport: "football", StatusType: "notstarted"},
+		{ExternalMatchId: "6000", StartTimestamp: beforeAucklandMidnight.UnixMilli(), Sport: "football", StatusType: "notstarted"},
+		{ExternalMatchId: "6001", StartTimestamp: afterAucklandMidnight.UnixMilli(), Sport: "football", StatusType: "notstarted"},
 	}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -242,10 +243,10 @@ func TestHandleGetEventsPage_FromInUserTZ(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
 	}
-	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 6001 {
-		ids := make([]int64, 0, len(response.Data))
+	if len(response.Data) != 1 || response.Data[0].ExternalMatchId != "6001" {
+		ids := make([]string, 0, len(response.Data))
 		for _, e := range response.Data {
-			ids = append(ids, e.SofaScoreEventId)
+			ids = append(ids, e.ExternalMatchId)
 		}
 		t.Fatalf("want only event 6001 ('from' parsed in Pacific/Auckland, not UTC), got %v", ids)
 	}
@@ -267,13 +268,13 @@ func TestHandleGetEventsPage_FromInNonUTCBoundary(t *testing.T) {
 	midnightUTC := time.Date(nowInTZ.Year(), nowInTZ.Month(), nowInTZ.Day(), 0, 0, 0, 0, loc).UTC()
 	anchor := midnightUTC.Add(-30 * time.Minute)
 	if err := db.Create(&Event{
-		SofaScoreEventId: 5000, StartTimestamp: anchor.Add(-30 * time.Minute).UnixMilli(),
+		ExternalMatchId: "5000", StartTimestamp: anchor.Add(-30 * time.Minute).UnixMilli(),
 		Sport: "football", StatusType: "notstarted",
 	}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	if err := db.Create(&Event{
-		SofaScoreEventId: 5001, StartTimestamp: anchor.Add(time.Hour).UnixMilli(),
+		ExternalMatchId: "5001", StartTimestamp: anchor.Add(time.Hour).UnixMilli(),
 		Sport: "football", StatusType: "notstarted",
 	}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -284,7 +285,7 @@ func TestHandleGetEventsPage_FromInNonUTCBoundary(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d (%s)", recorder.Code, recorder.Body.String())
 	}
-	if len(response.Data) != 1 || response.Data[0].SofaScoreEventId != 5001 {
+	if len(response.Data) != 1 || response.Data[0].ExternalMatchId != "5001" {
 		t.Fatalf("want only event 5001 (post-midnight in TZ), got %d events", len(response.Data))
 	}
 }

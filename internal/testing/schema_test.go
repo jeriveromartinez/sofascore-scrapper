@@ -199,7 +199,7 @@ func TestSchemaDomain(t *testing.T) {
 	}
 }
 
-func TestSchemaSofaScoreEvent(t *testing.T) {
+func TestSchemaExternalEvent(t *testing.T) {
 	s, err := schema.Parse(&events.Event{}, &sync.Map{}, schema.NamingStrategy{})
 	if err != nil {
 		t.Fatalf("schema.Parse failed: %v", err)
@@ -207,11 +207,11 @@ func TestSchemaSofaScoreEvent(t *testing.T) {
 	if s.Table != "events" {
 		t.Errorf("expected table 'events', got %q", s.Table)
 	}
-	eventID := s.LookUpField("SofaScoreEventId")
+	eventID := s.LookUpField("ExternalMatchId")
 	if eventID == nil {
-		t.Error("expected field 'SofaScoreEventId' in Event")
-	} else if !hasUniqueIndex(s, "SofaScoreEventId") {
-		t.Error("SofaScoreEventId should have unique index")
+		t.Error("expected field 'ExternalMatchId' in Event")
+	} else if !hasUniqueIndex(s, "ExternalMatchId") {
+		t.Error("ExternalMatchId should have unique index")
 	}
 }
 

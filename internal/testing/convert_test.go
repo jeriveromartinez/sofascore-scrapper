@@ -193,14 +193,14 @@ func TestTeamPtrToProto(t *testing.T) {
 	}
 }
 
-func TestEventToProto(t *testing.T) {
+func TestEventToExternalProto(t *testing.T) {
 	homeTeam := &events.Team{TeamId: 1, Name: "Home"}
 	awayTeam := &events.Team{TeamId: 2, Name: "Away"}
 	league := &tournaments.Tournament{Name: "Champions League"}
 	league.ID = 3
 
 	e := events.Event{
-		SofaScoreEventId:            100,
+		ExternalMatchId:             "100",
 		Sport:                       "football",
 		HomeScore:                   2,
 		HomeTeamId:                  1,
@@ -217,7 +217,7 @@ func TestEventToProto(t *testing.T) {
 	}
 	e.ID = 50
 
-	result := events.EventToProto(e)
+	result := events.EventToExternalProto(e)
 	if result == nil {
 		t.Fatal("expected non-nil")
 	}
@@ -248,8 +248,8 @@ func TestEventsToProto(t *testing.T) {
 	home := &events.Team{TeamId: 10, Name: "H", LogoUrl: "/team/10/image"}
 	away := &events.Team{TeamId: 20, Name: "A", LogoUrl: "/team/20/image"}
 	evs := []events.Event{
-		{SofaScoreEventId: 1, HomeTeamModel: home, AwayTeamModel: away},
-		{SofaScoreEventId: 2, HomeTeamModel: home, AwayTeamModel: away},
+		{ExternalMatchId: "1", HomeTeamModel: home, AwayTeamModel: away},
+		{ExternalMatchId: "2", HomeTeamModel: home, AwayTeamModel: away},
 	}
 
 	result := events.EventsToProto(evs)

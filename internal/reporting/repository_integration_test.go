@@ -43,21 +43,21 @@ func TestGetTopEvents_NumericContentOnly(t *testing.T) {
 	}
 
 	for _, s := range stats {
-		if s.SofaScoreEventId == 0 {
-			t.Errorf("unexpected zero SofaScoreEventId, non-numeric content should be excluded")
+		if s.ExternalMatchId == "" {
+			t.Errorf("unexpected empty ExternalMatchId, non-numeric content should be excluded")
 		}
 	}
 
 	found12345 := false
 	found67890 := false
 	for _, s := range stats {
-		if s.SofaScoreEventId == 12345 {
+		if s.ExternalMatchId == "12345" {
 			found12345 = true
 			if s.ViewCount != 2 {
 				t.Errorf("event 12345: want view_count=2, got %d", s.ViewCount)
 			}
 		}
-		if s.SofaScoreEventId == 67890 {
+		if s.ExternalMatchId == "67890" {
 			found67890 = true
 			if s.ViewCount != 1 {
 				t.Errorf("event 67890: want view_count=1, got %d", s.ViewCount)
@@ -91,17 +91,17 @@ func TestGetTopEvents_DeterministicOrdering(t *testing.T) {
 		t.Fatalf("expected at least 3 results, got %d", len(stats))
 	}
 
-	if stats[0].SofaScoreEventId != 100 {
-		t.Errorf("first event: want 100 (2 views), got %d", stats[0].SofaScoreEventId)
+	if stats[0].ExternalMatchId != "100" {
+		t.Errorf("first event: want 100 (2 views), got %s", stats[0].ExternalMatchId)
 	}
 	if stats[0].ViewCount != 2 {
 		t.Errorf("first event views: want 2, got %d", stats[0].ViewCount)
 	}
-	if stats[1].SofaScoreEventId != 200 {
-		t.Errorf("second event: want 200 (2 views), got %d (tie-break by sofa_score_event_id ASC)", stats[1].SofaScoreEventId)
+	if stats[1].ExternalMatchId != "200" {
+		t.Errorf("second event: want 200 (2 views), got %s (tie-break by external_match_id ASC)", stats[1].ExternalMatchId)
 	}
-	if stats[2].SofaScoreEventId != 300 {
-		t.Errorf("third event: want 300 (1 view), got %d", stats[2].SofaScoreEventId)
+	if stats[2].ExternalMatchId != "300" {
+		t.Errorf("third event: want 300 (1 view), got %s", stats[2].ExternalMatchId)
 	}
 }
 
