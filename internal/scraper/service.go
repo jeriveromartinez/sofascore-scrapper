@@ -18,23 +18,28 @@ const (
 
 type Service struct {
 	repo             *events.Repository
-	client           SofaScoreClient
+	source           Source
+	catalog          CatalogSource
 	batchSize        int
 	concur           int
 	onScrapeComplete func(context.Context) error
 	logger           *slog.Logger
 }
 
-func NewService(repo *events.Repository, client SofaScoreClient, batchSize int, concurrency int, logger *slog.Logger) (*Service, error) {
+func NewService(repo *events.Repository, source Source, catalog CatalogSource, batchSize int, concurrency int, logger *slog.Logger) (*Service, error) {
 	if concurrency == 0 {
 		concurrency = DefaultScrapeConcurrency
 	}
 	if concurrency < minConcurrency || concurrency > maxConcurrency {
 		return nil, fmt.Errorf("scraper: concurrency must be between %d and %d, got %d", minConcurrency, maxConcurrency, concurrency)
 	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Service{
 		repo:      repo,
-		client:    client,
+		source:    source,
+		catalog:   catalog,
 		batchSize: batchSize,
 		concur:    concurrency,
 		logger:    logger,
@@ -45,82 +50,74 @@ func (s *Service) SetOnScrapeComplete(fn func(context.Context) error) {
 	s.onScrapeComplete = fn
 }
 
-func (s *Service) Scrape(ctx context.Context, sport string, date time.Time) error {
-	apiEvents, err := s.client.ScheduledEvents(ctx, sport, date)
+func (s *Service) scrapeLeague(ctx context.Context, league LeagueRef, date time.Time) error {
+	matches, err := s.source.ScheduledEvents(ctx, league, date)
 	if err != nil {
-		return fmt.Errorf("scraper: %s on %s: %w", sport, date.Format("2006-01-02"), err)
+		return fmt.Errorf("scraper: %s on %s: %w", league.SourceLeagueId, date.Format("2006-01-02"), err)
 	}
-	batch := ToScrapeBatch(apiEvents, sport)
+	if len(matches) == 0 {
+		return nil
+	}
+	sport := league.Sport
+	if sport == "" {
+		sport = "football"
+	}
+	batch := ToScrapeBatch(matches, sport)
 	if err := s.repo.UpsertScrapeBatch(ctx, batch, s.batchSize); err != nil {
-		return fmt.Errorf("scraper: upsert %s on %s: %w", sport, date.Format("2006-01-02"), err)
+		return fmt.Errorf("scraper: upsert %s on %s: %w", league.SourceLeagueId, date.Format("2006-01-02"), err)
 	}
-	if s.onScrapeComplete != nil {
-		_ = s.onScrapeComplete(ctx)
-	}
-	s.logger.InfoContext(ctx, "scraped events",
-		slog.String("sport", sport),
-		slog.String("date", date.Format("2006-01-02")),
-		slog.Int("count", len(apiEvents)),
-	)
-	return nil
-}
-
-func (s *Service) ScrapeCountry(ctx context.Context, countryCode string) error {
-	events, err := s.client.TrendingEvents(ctx, countryCode)
-	if err != nil {
-		return fmt.Errorf("scraper: country %s: %w", countryCode, err)
-	}
-	batch := ToScrapeBatch(events, countryCode)
-	if err := s.repo.UpsertScrapeBatch(ctx, batch, s.batchSize); err != nil {
-		return fmt.Errorf("scraper: upsert country %s: %w", countryCode, err)
-	}
-	if s.onScrapeComplete != nil {
-		_ = s.onScrapeComplete(ctx)
-	}
-	s.logger.InfoContext(ctx, "scraped country events",
-		slog.String("country", countryCode),
-		slog.Int("count", len(events)),
-	)
 	return nil
 }
 
 func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
+	leagues, err := s.catalog.ActiveLeagues(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "scraper: catalog error", slog.String("error", err.Error()))
+		return
+	}
+	if len(leagues) == 0 {
+		s.logger.WarnContext(ctx, "scraper: no active leagues in catalog")
+		return
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.concur)
-
-	for _, sport := range GET_SPORTS() {
-		sport := sport
+	for _, league := range leagues {
+		league := league
 		g.Go(func() error {
-			return s.Scrape(ctx, sport, date)
+			return s.scrapeLeague(ctx, league, date)
 		})
 	}
-	for _, country := range GET_COUNTRIES() {
-		country := country
-		g.Go(func() error {
-			return s.ScrapeCountry(ctx, country)
-		})
-	}
-
 	if err := g.Wait(); err != nil {
 		s.logger.ErrorContext(ctx, "scrape today errors", slog.String("error", err.Error()))
+	}
+	if s.onScrapeComplete != nil {
+		_ = s.onScrapeComplete(ctx)
 	}
 }
 
 func (s *Service) ScrapeNext7Days(ctx context.Context) {
+	leagues, err := s.catalog.ActiveLeagues(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "scraper: catalog error", slog.String("error", err.Error()))
+		return
+	}
+	if len(leagues) == 0 {
+		return
+	}
+
 	now := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.concur)
-
-	for _, sport := range GET_SPORTS() {
-		sport := sport
+	for _, league := range leagues {
+		league := league
 		for i := 1; i <= 7; i++ {
 			i := i
 			g.Go(func() error {
-				return s.Scrape(ctx, sport, now.Add(time.Duration(i)*24*time.Hour))
+				return s.scrapeLeague(ctx, league, now.Add(time.Duration(i)*24*time.Hour))
 			})
 		}
 	}
-
 	if err := g.Wait(); err != nil {
 		s.logger.ErrorContext(ctx, "scrape next 7 days errors", slog.String("error", err.Error()))
 	}
