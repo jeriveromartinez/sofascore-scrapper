@@ -17,6 +17,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/fotmob"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
@@ -201,12 +202,13 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 }
 
 func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger) (*scraper.Service, *reporting.AggregationRepository) {
-	client, err := scraper.NewClient(scraper.ClientConfig{})
-	if err != nil {
-		panic("scraper: failed to create client: " + err.Error())
-	}
+	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{})
+	src := fotmob.NewSource(fotmobClient, logger)
+	catalogStub := scraper.NewMemoryCatalog([]scraper.LeagueRef{
+		{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "GB", Sport: "football"},
+	})
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
-	scrapeSvc, err := scraper.NewService(eventsRepo, client, batchSize, concurrency, logger)
+	scrapeSvc, err := scraper.NewService(eventsRepo, src, catalogStub, batchSize, concurrency, logger)
 	if err != nil {
 		panic("scraper: failed to create service: " + err.Error())
 	}

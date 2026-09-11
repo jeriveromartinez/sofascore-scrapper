@@ -24,7 +24,7 @@ func ToTeam(source Team) events.Team {
 func ToTournament(source LeagueRef) tournaments.Tournament {
 	slug := strings.ToLower(strings.ReplaceAll(source.Name, " ", "-"))
 	return tournaments.Tournament{
-		Model:  gorm.Model{},
+		Model:  gorm.Model{ID: parseLeagueID(source.SourceLeagueId)},
 		Name:   source.Name,
 		Slug:   slug,
 		Region: source.Country,
