@@ -30,15 +30,20 @@ type LeagueSearchResult struct {
 type MatchStatus struct {
 	Code        int
 	Description string
-	Type        string
-	Finished    bool
-	Started     bool
-	Cancelled   bool
+	// Type is the source's short status label (e.g. "FT" for
+	// full-time on FotMob /api/data/matches). Empty when the
+	// upstream payload does not provide one.
+	Type      string
+	Finished  bool
+	Started   bool
+	Cancelled bool
 	// ScoreStr is the source-supplied score string (e.g. "2-1").
-	// The FotMob /api/leagues response puts the score under
-	// apiStatus.scoreStr; downstream code parses it into HomeScore
-	// and AwayScore on events.Event. Empty when no score is yet
-	// available (scheduled matches, etc.).
+	// Kept for backwards compatibility with sources that only
+	// expose a free-form score string; the canonical score halves
+	// live on Match.HomeScore and Match.AwayScore and ToEvent
+	// reads those directly. Empty when the source has no score
+	// yet (scheduled matches, etc.) or when the source exposes
+	// scores only as ints.
 	ScoreStr string
 }
 
@@ -56,8 +61,16 @@ type Match struct {
 	SourceMatchId  string
 	Slug           string
 	StartTimestamp time.Time
-	Status         MatchStatus
-	HomeTeam       Team
-	AwayTeam       Team
-	League         LeagueRef
+	// HomeScore and AwayScore are the source's authoritative
+	// scores. PR #124: the FotMob /api/data/matches payload
+	// exposes per-team `score` ints directly, so we carry them
+	// through as ints instead of parsing them out of a
+	// status-side ScoreStr string. They default to 0 when the
+	// match has not started yet.
+	HomeScore int
+	AwayScore int
+	Status    MatchStatus
+	HomeTeam  Team
+	AwayTeam  Team
+	League    LeagueRef
 }

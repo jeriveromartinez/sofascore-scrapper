@@ -1,0 +1,148 @@
+{
+  "leagues": [
+    {
+      "ccode": "GER",
+      "id": 54,
+      "primaryId": 54,
+      "name": "Bundesliga",
+      "matches": [
+        {
+          "id": 5881169,
+          "leagueId": 54,
+          "time": "11.09.2026 20:30",
+          "home": {
+            "id": 8149,
+            "score": 1,
+            "name": "Union Berlin",
+            "shortName": "Union Berlin",
+            "longName": "1. FC Union Berlin"
+          },
+          "away": {
+            "id": 10189,
+            "score": 3,
+            "name": "Schalke 04",
+            "shortName": "Schalke 04",
+            "longName": "FC Schalke 04"
+          },
+          "eliminatedTeamId": null,
+          "statusId": 6,
+          "tournamentStage": "3",
+          "status": {
+            "utcTime": "2026-09-11T18:30:00.000Z",
+            "halfs": {
+              "firstHalfStarted": "11.09.2026 20:30:34",
+              "secondHalfStarted": "11.09.2026 21:34:07"
+            },
+            "periodLength": 45,
+            "finished": true,
+            "started": true,
+            "cancelled": false,
+            "awarded": false,
+            "scoreStr": "1 - 3",
+            "reason": {
+              "short": "FT",
+              "shortKey": "fulltime_short",
+              "long": "Full-Time",
+              "longKey": "finished"
+            }
+          },
+          "timeTS": 1789151400000
+        },
+        {
+          "id": 5881170,
+          "leagueId": 54,
+          "time": "11.09.2026 20:30",
+          "home": {
+            "id": 9828,
+            "score": 0,
+            "name": "Bayern Munich",
+            "shortName": "Bayern",
+            "longName": "FC Bayern München"
+          },
+          "away": {
+            "id": 9829,
+            "score": 0,
+            "name": "Borussia Dortmund",
+            "shortName": "BVB",
+            "longName": "Borussia Dortmund"
+          },
+          "eliminatedTeamId": null,
+          "statusId": 0,
+          "tournamentStage": "3",
+          "status": {
+            "utcTime": "2026-09-11T20:30:00.000Z",
+            "halfs": {},
+            "periodLength": 0,
+            "finished": false,
+            "started": false,
+            "cancelled": false,
+            "awarded": false,
+            "scoreStr": "",
+            "reason": {
+              "short": "NS",
+              "shortKey": "notstarted_short",
+              "long": "Not Started",
+              "longKey": "notstarted"
+            }
+          },
+          "timeTS": 1789158600000
+        }
+      ],
+      "internalRank": 20,
+      "simpleLeague": false,
+      "localRank": 21
+    },
+    {
+      "ccode": "ESP",
+      "id": 87,
+      "primaryId": 87,
+      "name": "LaLiga",
+      "matches": [
+        {
+          "id": 5868059,
+          "leagueId": 87,
+          "time": "11.09.2026 21:00",
+          "home": {
+            "id": 8302,
+            "score": 1,
+            "name": "Sevilla",
+            "longName": "Sevilla FC"
+          },
+          "away": {
+            "id": 10267,
+            "score": 0,
+            "name": "Valencia",
+            "longName": "Valencia CF"
+          },
+          "eliminatedTeamId": null,
+          "statusId": 6,
+          "tournamentStage": "5",
+          "status": {
+            "utcTime": "2026-09-11T19:00:00.000Z",
+            "halfs": {
+              "firstHalfStarted": "11.09.2026 21:02:40",
+              "secondHalfStarted": "11.09.2026 22:11:29"
+            },
+            "periodLength": 45,
+            "finished": true,
+            "started": true,
+            "cancelled": false,
+            "awarded": false,
+            "scoreStr": "1 - 0",
+            "reason": {
+              "short": "FT",
+              "shortKey": "fulltime_short",
+              "long": "Full-Time",
+              "longKey": "finished"
+            }
+          },
+          "timeTS": 1789153200000
+        }
+      ],
+      "internalRank": 10,
+      "simpleLeague": false,
+      "localRank": 20
+    }
+  ],
+  "date": "20260911"
+}
