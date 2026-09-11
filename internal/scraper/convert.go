@@ -47,13 +47,44 @@ func ToEvent(source Match, sport string) events.Event {
 		Sport:           sport,
 		Slug:            source.Slug,
 		StartTimestamp:  startTs,
-		StatusType:      source.Status.Type,
+		StatusType:      normalizeStatus(source.Status),
 		HomeTeamId:      homeTeam.TeamId,
 		AwayTeamId:      awayTeam.TeamId,
 		HomeTeamModel:   &homeTeam,
 		AwayTeamModel:   &awayTeam,
 		League:          &tournament,
 		LeagueId:        uint(parseLeagueID(source.League.SourceLeagueId)),
+	}
+}
+
+// normalizeStatus rewrites the FotMob (started, finished, cancelled)
+// bool triple into the values the events repository queries against.
+// The repository only selects events with status_type in
+// {notstarted, inprogress}, so any value outside the mapping below
+// (or an unrecognized status from a future source) becomes "" so the
+// row simply does not match a WHERE clause rather than silently
+// matching one.
+//
+// Mapping (fix B3, PR #122):
+//
+//	cancelled=true                             -> "cancelled"
+//	started=true && finished=true              -> "finished"
+//	started=true && finished=false             -> "inprogress"
+//	started=false && finished=false            -> "notstarted"
+//	anything else                              -> ""
+func normalizeStatus(s MatchStatus) string {
+	if s.Cancelled {
+		return "cancelled"
+	}
+	switch {
+	case s.Started && s.Finished:
+		return "finished"
+	case s.Started && !s.Finished:
+		return "inprogress"
+	case !s.Started && !s.Finished:
+		return "notstarted"
+	default:
+		return ""
 	}
 }
 
