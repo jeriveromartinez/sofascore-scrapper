@@ -160,7 +160,7 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	// adminThenRl so the existing middleware composition (auth ->
 	// rate-limit -> admin check) is applied.
 	catalogRepo := catalog.NewRepository(db)
-	catalogSrc := fotmob.NewSource(fotmob.NewClient(fotmob.ClientConfig{}), slog.Default())
+	catalogSrc := fotmob.NewSource(fotmob.NewClient(fotmob.ClientConfig{Timezone: cfg.FotMobTimezone}), slog.Default())
 	catalogSvc := catalog.NewService(catalogRepo, catalogSrc)
 	catalogHandler := catalog.NewHandler(catalogSvc)
 	catalogAdminV1 := webV1.Group("", adminThenRl)
@@ -213,8 +213,8 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger) (*scraper.Service, *reporting.AggregationRepository) {
-	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{})
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string) (*scraper.Service, *reporting.AggregationRepository) {
+	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{Timezone: timezone})
 	src := fotmob.NewSource(fotmobClient, logger)
 	catalogRepo := catalog.NewRepository(db)
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
