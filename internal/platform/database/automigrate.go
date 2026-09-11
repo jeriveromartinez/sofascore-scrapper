@@ -12,6 +12,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"gorm.io/gorm"
@@ -54,6 +55,9 @@ var automigrateModels = []any{
 	&push.ScheduledPushTarget{},
 	&push.ScheduledPushTimer{},
 	&push.DeliveryAttempt{},
+
+	// Lote 4 — scraper catalog (no FKs)
+	&catalog.ScraperLeague{},
 }
 
 // AutoMigrateAll runs db.AutoMigrate over every model in
