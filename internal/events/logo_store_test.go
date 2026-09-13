@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	utls "github.com/refraction-networking/utls"
 )
 
 func TestNewImageHTTPClientUsesImageTimeout(t *testing.T) {
@@ -22,14 +20,25 @@ func TestNewImageHTTPClientUsesImageTimeout(t *testing.T) {
 	}
 }
 
-func TestNewImageHTTPClientUsesUTLSTransport(t *testing.T) {
+// TestNewImageHTTPClientUsesStandardTransport pins the transport to
+// the standard library's *http.Transport. The previous uTLS-backed
+// implementation (utls.HelloRandomizedALPN pinned to TLS 1.2 with a
+// randomized fingerprint) was rejected by the Cloudflare/CloudFront
+// CDNs that front img.sofascore.com and images.fotmob.com with HTTP
+// 403, which made the LogoScheduler silently skip every team. A
+// default *http.Transport negotiates TLS 1.2/1.3 with the Go runtime's
+// stable fingerprint, which both CDNs accept.
+func TestNewImageHTTPClientUsesStandardTransport(t *testing.T) {
 	client := newImageHTTPClient()
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("client transport = %T, want *http.Transport", client.Transport)
 	}
-	if transport.DialTLSContext == nil {
-		t.Fatal("image transport must provide a custom TLS dialer")
+	if transport.DialTLSContext != nil {
+		t.Fatal("image transport must not override the standard library's TLS dialer (uTLS breaks Cloudflare/CloudFront CDNs)")
+	}
+	if transport.TLSHandshakeTimeout == 0 {
+		t.Fatal("image transport must set a TLSHandshakeTimeout so a stuck dial does not stall the worker pool")
 	}
 }
 
@@ -84,43 +93,57 @@ func TestDownloadTeamLogoWithContextCancelsRequest(t *testing.T) {
 	}
 }
 
-func TestDownloadTeamLogoUsesUTLSTransportForTLS(t *testing.T) {
+// TestDownloadTeamLogoNegotiatesTLS13 ensures the image client can
+// complete a TLS 1.3 handshake against a TLS 1.3-only server. The
+// previous uTLS-backed client was hard-pinned to TLS 1.2 (it called
+// SetTLSVers with VersionTLS12 on both ends and disabled the TLS 1.3
+// extension) and therefore could not talk to any CDN that had
+// deprecated TLS 1.0/1.1. Cloudflare/CloudFront in front of
+// img.sofascore.com would reject the resulting ClientHello with HTTP
+// 403. Using the standard *http.Transport lets the Go runtime pick
+// the best protocol the server offers.
+//
+// The test wires in the server's certificate directly so the
+// transport can verify the TLS handshake. Without that, the test
+// certificate is self-signed and the stdlib transport — which uses
+// the system trust store — would reject it. That is independent of
+// the TLS version being negotiated: it only proves the client is
+// willing to negotiate TLS 1.3 when the server offers it.
+func TestDownloadTeamLogoNegotiatesTLS13(t *testing.T) {
 	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
 
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil {
 			t.Fatal("expected TLS request")
 		}
-		if r.TLS.Version != tls.VersionTLS12 {
-			t.Fatalf("TLS version = %x, want %x", r.TLS.Version, tls.VersionTLS12)
+		if r.TLS.Version != tls.VersionTLS13 {
+			t.Fatalf("TLS version = %x, want %x", r.TLS.Version, tls.VersionTLS13)
 		}
-		if r.TLS.NegotiatedProtocol != "http/1.1" {
-			t.Fatalf("negotiated protocol = %q, want http/1.1", r.TLS.NegotiatedProtocol)
-		}
-		if r.Proto != "HTTP/1.1" {
-			t.Fatalf("HTTP version = %s, want HTTP/1.1", r.Proto)
-		}
-		_, _ = w.Write([]byte("test-image"))
+		_, _ = w.Write([]byte("tls13-image"))
 	}))
-	server.EnableHTTP2 = false
-	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13}
 	server.StartTLS()
 	defer server.Close()
 
 	roots := x509.NewCertPool()
 	roots.AddCert(server.Certificate())
-	client := newImageHTTPClientWithTLSConfig(&utls.Config{RootCAs: roots})
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: roots},
+		},
+		Timeout: imageDownloadTimeout,
+	}
 
-	path, err := downloadTeamLogo(123, server.URL, client)
+	path, err := downloadTeamLogoWithContext(context.Background(), 123, server.URL, client)
 	if err != nil {
-		t.Fatalf("downloadTeamLogo returned error: %v", err)
+		t.Fatalf("downloadTeamLogoWithContext returned error: %v", err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read downloaded logo: %v", err)
 	}
-	if string(data) != "test-image" {
-		t.Fatalf("downloaded data = %q, want test-image", data)
+	if string(data) != "tls13-image" {
+		t.Fatalf("downloaded data = %q, want tls13-image", data)
 	}
 }
 

@@ -25,17 +25,21 @@ func ToTeam(source Team) events.Team {
 // for a team. The source-agnostic Team.LogoURL is empty when the
 // upstream payload does not include the field — FotMob's 2026
 // /api/data/matches payload is one such case. As a fallback, derive
-// the public FotMob CDN URL for the team ID so the LogoScheduler has
-// something to download.
+// the public SofaScore CDN URL for the team ID so the LogoScheduler
+// has something to download.
 //
-// The CDN URL pattern (https://images.fotmob.com/image_resources/
-// logo/teamlogo_<id>.png) is the one FotMob serves on its own web
-// pages; it is verified by hand against the live FotMob UI as of
-// 2026-09-13. The CDN still requires a Referer + browser-context
-// headers that the current LogoScheduler cannot satisfy, so
-// downloads will keep 403'ing until the scheduler is upgraded to use
-// the rod browser context — but at least the URL is correct so the
-// fix is one-line away when that lands.
+// The CDN URL pattern (https://img.sofascore.com/api/v1/team/<id>/image)
+// is the same one the SofaScore web app and the img.sofascore.com CDN
+// serve; it returns the team badge PNG with no further host allow-list
+// restrictions. Verified by hand against the live CDN on 2026-09-13
+// (returns HTTP 200 with Referer https://img.sofascore.com/).
+//
+// Earlier we pointed the fallback at images.fotmob.com/image_resources/
+// logo/teamlogo_<id>.png; that URL pattern is rejected by the
+// CloudFront distribution in front of the bucket (403 AccessDenied
+// for every Referer we tried). SofaScore's CDN accepts the standard
+// library TLS fingerprint and only checks Referer, which is what the
+// LogoScheduler already sends.
 //
 // If LogoURL is already set (e.g. for a future source that ships a
 // full image URL), it is returned verbatim — the source wins.
@@ -46,7 +50,7 @@ func LogoURLForSource(sourceID int64, logoURL string) string {
 	if sourceID == 0 {
 		return ""
 	}
-	return "https://images.fotmob.com/image_resources/logo/teamlogo_" + strconv.FormatInt(sourceID, 10) + ".png"
+	return "https://img.sofascore.com/api/v1/team/" + strconv.FormatInt(sourceID, 10) + "/image"
 }
 
 func ToTournament(source LeagueRef) tournaments.Tournament {

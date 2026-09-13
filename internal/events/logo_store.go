@@ -2,7 +2,6 @@ package events
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -11,8 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	utls "github.com/refraction-networking/utls"
 )
 
 const defaultStoragePath = "./image_storage"
@@ -21,72 +18,32 @@ const imageDownloadTimeout = 10 * time.Second
 
 const imageBrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 
+// newImageHTTPClient returns the HTTP client used to download team
+// logos. It uses the standard library's *http.Transport so the Go
+// runtime negotiates TLS 1.2/1.3 with its stable, Cloudflare/CloudFront-
+// accepted fingerprint.
+//
+// Why not uTLS: the previous implementation forced TLS 1.2 with
+// utls.HelloRandomizedALPN (a random JA3 fingerprint). Both the
+// img.sofascore.com and images.fotmob.com CDNs sit behind Cloudflare/
+// CloudFront, which rejects randomized JA3s with HTTP 403. Forcing
+// TLS 1.2 also broke against any CDN that had deprecated TLS 1.0/1.1.
+// Since CDN image endpoints do not require impersonation (they only
+// check the Referer / User-Agent, both of which the client sends
+// explicitly), the default transport is both simpler and reliable.
 func newImageHTTPClient() *http.Client {
-	return newImageHTTPClientWithTLSConfig(nil)
-}
-
-func newImageHTTPClientWithTLSConfig(tlsConfig *utls.Config) *http.Client {
-	dialTLS := dialImageTLS
-	if tlsConfig != nil {
-		dialTLS = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return dialImageTLSWithConfig(ctx, network, addr, tlsConfig)
-		}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   imageDownloadTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout: imageDownloadTimeout,
 	}
-
 	return &http.Client{
-		Transport: &http.Transport{DialTLSContext: dialTLS},
+		Transport: transport,
 		Timeout:   imageDownloadTimeout,
 	}
-}
-
-func dialImageTLS(ctx context.Context, network, addr string) (net.Conn, error) {
-	return dialImageTLSWithConfig(ctx, network, addr, nil)
-}
-
-func dialImageTLSWithConfig(ctx context.Context, network, addr string, tlsConfig *utls.Config) (net.Conn, error) {
-	host, _, _ := net.SplitHostPort(addr)
-	raw, err := (&net.Dialer{Timeout: imageDownloadTimeout}).DialContext(ctx, network, addr)
-	if err != nil {
-		return nil, err
-	}
-
-	config := &utls.Config{
-		ServerName: host,
-		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS12,
-		NextProtos: []string{"http/1.1"},
-	}
-	if tlsConfig != nil {
-		config = tlsConfig.Clone()
-		config.ServerName = host
-		config.MinVersion = tls.VersionTLS12
-		config.MaxVersion = tls.VersionTLS12
-		config.NextProtos = []string{"http/1.1"}
-	}
-
-	weights := utls.DefaultWeights
-	// Omit the TLS 1.3 extension so SetTLSVers can set an exact TLS 1.2 range.
-	weights.TLSVersMax_Set_VersionTLS13 = 0
-	clientHelloID := utls.HelloRandomizedALPN
-	clientHelloID.Weights = &weights
-	conn := utls.UClient(raw, config, clientHelloID)
-	if err := conn.BuildHandshakeState(); err != nil {
-		_ = raw.Close()
-		return nil, err
-	}
-	if err := conn.SetTLSVers(tls.VersionTLS12, tls.VersionTLS12, conn.Extensions); err != nil {
-		_ = raw.Close()
-		return nil, err
-	}
-	if err := conn.BuildHandshakeState(); err != nil {
-		_ = raw.Close()
-		return nil, err
-	}
-	if err := conn.HandshakeContext(ctx); err != nil {
-		_ = raw.Close()
-		return nil, err
-	}
-	return conn, nil
 }
 
 func StoragePath() string {
