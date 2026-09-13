@@ -14,13 +14,22 @@ import (
 )
 
 const (
-	browserUserAgent      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+	// PR #124: Chrome/120 is the user-agent the bjrsti gem uses
+	// and the UA under which the FotMob /api/data/matches endpoint
+	// was verified to return HTTP 200 without an x-mas token. The
+	// previous Chrome/145 string was tied to a different endpoint
+	// shape that no longer exists.
+	browserUserAgent      = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 	defaultMaxRetries     = 3
 	defaultRequestTimeout = 30 * time.Second
 	defaultMaxResponse    = 10 * 1024 * 1024
 	defaultMaxBackoff     = 30 * time.Second
 	baseBackoff           = 1 * time.Second
 	rateLimit             = 200 * time.Millisecond
+	// defaultTimezone matches bjrsti and the env var the operator
+	// can override (FOTMOB_TIMEZONE). Europe/Paris keeps the daily
+	// payload grouping aligned with FotMob's editorial day.
+	defaultTimezone = "Europe/Paris"
 )
 
 type ClientConfig struct {
@@ -29,6 +38,10 @@ type ClientConfig struct {
 	RequestTimeout   time.Duration
 	ResponseMaxBytes int64
 	MaxBackoff       time.Duration
+	// Timezone is appended to the /api/data/matches URL as
+	// `?timezone=…` and is what FotMob uses to bucket matches into
+	// "today" / "yesterday" / "tomorrow". Default: Europe/Paris.
+	Timezone string
 }
 
 func (c ClientConfig) withDefaults() ClientConfig {
@@ -47,6 +60,9 @@ func (c ClientConfig) withDefaults() ClientConfig {
 	if c.MaxBackoff <= 0 {
 		c.MaxBackoff = defaultMaxBackoff
 	}
+	if c.Timezone == "" {
+		c.Timezone = defaultTimezone
+	}
 	return c
 }
 
@@ -56,6 +72,7 @@ type Client struct {
 	maxRetries       int
 	responseMaxBytes int64
 	maxBackoff       time.Duration
+	timezone         string
 	lastCall         time.Time
 	rateMu           chan struct{}
 }
@@ -68,21 +85,57 @@ func NewClient(cfg ClientConfig) *Client {
 		maxRetries:       cfg.MaxRetries,
 		responseMaxBytes: cfg.ResponseMaxBytes,
 		maxBackoff:       cfg.MaxBackoff,
+		timezone:         cfg.Timezone,
 		rateMu:           make(chan struct{}, 1),
 	}
 }
 
-func (c *Client) ScheduledEvents(ctx context.Context, leagueID, date string) ([]apiMatch, error) {
-	path := fmt.Sprintf("/api/leagues?id=%s&date=%s", leagueID, date)
-	body, err := c.doRequest(ctx, path)
+// ScheduledEvents fetches the full day for `date` from FotMob's
+// /api/data/matches endpoint and returns only the matches that
+// belong to the league identified by `leagueID` (FotMob's id is a
+// numeric string in the catalog; the URL itself does not carry a
+// league filter). An unknown league is a valid empty result — the
+// scheduler treats an empty day as a no-op and the caller does not
+// have to special-case it.
+func (c *Client) ScheduledEvents(ctx context.Context, leagueID string, date time.Time) ([]apiMatch, error) {
+	dayMatches, err := c.dayMatches(ctx, date)
 	if err != nil {
 		return nil, err
 	}
+	want, err := strconv.ParseInt(leagueID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("fotmob: invalid league id %q: %w", leagueID, err)
+	}
+	for _, lg := range dayMatches.Leagues {
+		if lg.Id == want {
+			if lg.Matches == nil {
+				return []apiMatch{}, nil
+			}
+			return lg.Matches, nil
+		}
+	}
+	return []apiMatch{}, nil
+}
+
+// dayMatches performs the actual HTTP round-trip and returns the
+// full per-league payload for the day. The path format is the
+// documented one (`/api/data/matches?date=YYYYMMDD&timezone=…`);
+// the date format is YYYYMMDD with no hyphens to match bjrsti and
+// the upstream convention.
+func (c *Client) dayMatches(ctx context.Context, date time.Time) (apiMatchesResponse, error) {
+	path := fmt.Sprintf("/api/data/matches?date=%s&timezone=%s",
+		date.UTC().Format("20060102"),
+		c.timezone,
+	)
+	body, err := c.doRequest(ctx, path)
+	if err != nil {
+		return apiMatchesResponse{}, err
+	}
 	var resp apiMatchesResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("fotmob: parse matches: %w", err)
+		return apiMatchesResponse{}, fmt.Errorf("fotmob: parse matches: %w", err)
 	}
-	return resp.Matches.AllMatches, nil
+	return resp, nil
 }
 
 // Suggest queries FotMob's public suggest endpoint and returns the raw
@@ -223,9 +276,12 @@ func setBrowserHeaders(req *http.Request) {
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Pragma", "no-cache")
 	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="145", "Not?A_Brand";v="24", "Google Chrome";v="145"`)
+	// PR #124: Sec-Ch-Ua now advertises Chrome/120 instead of
+	// Chrome/145 so the client presents a consistent browser
+	// fingerprint with the User-Agent header.
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="120", "Not?A_Brand";v="24", "Google Chrome";v="120"`)
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"macOS"`)
 	req.Header.Set("Sec-Fetch-Dest", "empty")
 	req.Header.Set("Sec-Fetch-Mode", "cors")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")

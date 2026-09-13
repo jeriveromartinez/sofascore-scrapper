@@ -72,6 +72,13 @@ type Config struct {
 	// default-admin seeder on startup. Used when the operator manages
 	// schema externally or wants a hot path with no DB write.
 	SkipMigrate bool
+	// FotMobTimezone is appended to the
+	// /api/data/matches URL as `?timezone=…`; FotMob uses it to
+	// bucket matches into "today/yesterday/tomorrow". Defaults to
+	// Europe/Paris so the daily scrape lines up with FotMob's
+	// editorial day (matches are published with the venue's local
+	// evening as "today's slate").
+	FotMobTimezone string
 }
 
 func Load() (Config, error) {
@@ -95,6 +102,7 @@ func Load() (Config, error) {
 		PushTimerTickInterval:  getDuration("PUSH_TIMER_TICK_INTERVAL", 5*time.Second),
 		PushTimerBatchLimit:    getInt("PUSH_TIMER_BATCH_LIMIT", 100),
 		SkipMigrate:            getBool("SKIP_MIGRATE", false),
+		FotMobTimezone:         getEnv("FOTMOB_TIMEZONE", "Europe/Paris"),
 		Database: Database{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "3306"),

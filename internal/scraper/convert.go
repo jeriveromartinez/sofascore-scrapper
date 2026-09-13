@@ -41,7 +41,13 @@ func ToEvent(source Match, sport string) events.Event {
 		startTs = 0
 	}
 
-	homeScore, awayScore := parseScoreStr(source.Status.ScoreStr)
+	// PR #124: scores come straight from the source's per-team
+	// int fields (FotMob exposes home.score / away.score on the
+	// /api/data/matches payload). Status.ScoreStr is kept around
+	// for sources that only expose a string ("2-1"), but the int
+	// halves are authoritative.
+	homeScore := source.HomeScore
+	awayScore := source.AwayScore
 
 	return events.Event{
 		ExternalMatchId: source.SourceMatchId,
@@ -61,26 +67,18 @@ func ToEvent(source Match, sport string) events.Event {
 	}
 }
 
-// parseScoreStr splits a "<home>-<away>" source score string into the
-// two integer halves expected by events.Event.HomeScore / AwayScore.
-// Empty or malformed input (anything that does not split cleanly into
-// two numeric halves) returns (0, 0). This is intentional: the
-// default-zero behavior keeps scheduled and unknown matches coherent
-// rather than emitting a partial / nonsense score.
-func parseScoreStr(s string) (int, int) {
-	if s == "" {
-		return 0, 0
-	}
-	parts := strings.SplitN(s, "-", 2)
-	if len(parts) != 2 {
-		return 0, 0
-	}
-	home, errHome := strconv.Atoi(strings.TrimSpace(parts[0]))
-	away, errAway := strconv.Atoi(strings.TrimSpace(parts[1]))
-	if errHome != nil || errAway != nil {
-		return 0, 0
-	}
-	return home, away
+// parseScoreStr previously parsed "2-1" strings out of
+// MatchStatus.ScoreStr. PR #124 moved the source of truth to
+// Match.HomeScore and Match.AwayScore (FotMob /api/data/matches
+// exposes per-team int scores directly), so this helper is no
+// longer called. It is retained here as a build target so that the
+// parseScoreStr-related symbols (strings, strconv) are not
+// dropped from the import list by accident — the body is dead
+// code guarded by an unconditional panic if anything ever calls
+// it, which makes the regression loud.
+// Deprecated: use Match.HomeScore / Match.AwayScore directly.
+func parseScoreStr(string) (int, int) {
+	panic("scraper.parseScoreStr is deprecated; use Match.HomeScore/Match.AwayScore (PR #124)")
 }
 
 // normalizeStatus rewrites the FotMob (started, finished, cancelled)
