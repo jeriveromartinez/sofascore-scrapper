@@ -7,12 +7,12 @@ const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
 });
 
 const emit = defineEmits<{
-  submit: [payload: { id: number | null; email: string; password: string }];
+  submit: [payload: { id: number | null; email: string; password: string; role: string }];
 }>();
 
 const modal = reactive({
   open: false,
-  form: { id: null as number | null, email: "", password: "" },
+  form: { id: null as number | null, email: "", password: "", role: "user" },
   error: "",
   loading: false,
 });
@@ -21,14 +21,14 @@ function reset(): void {
   modal.open = false;
   modal.error = "";
   modal.loading = false;
-  modal.form = { id: null, email: "", password: "" };
+  modal.form = { id: null, email: "", password: "", role: "user" };
 }
 
 function open(entity?: User): void {
   modal.error = "";
   modal.form = entity
-    ? { id: entity.id, email: entity.email, password: "" }
-    : { id: null, email: "", password: "" };
+    ? { id: entity.id, email: entity.email, password: "", role: entity.role ?? "user" }
+    : { id: null, email: "", password: "", role: "user" };
   modal.open = true;
 }
 
@@ -47,6 +47,7 @@ async function submit(): Promise<void> {
       id: modal.form.id,
       email: modal.form.email,
       password: modal.form.password,
+      role: modal.form.role,
     });
     if (props.autoCloseModal) reset();
   } finally {
@@ -106,6 +107,13 @@ defineExpose({ open, reset });
               <small v-if="modal.form.id" class="text-muted">
                 Déjela vacía para mantener la contraseña actual.
               </small>
+            </div>
+            <div v-if="modal.form.id" class="col-12">
+              <label class="form-label">Rol</label>
+              <select v-model="modal.form.role" class="form-select" data-testid="user-role">
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
             </div>
             <div v-if="modal.error" class="col-12">
               <div class="alert alert-danger mb-0">{{ modal.error }}</div>
