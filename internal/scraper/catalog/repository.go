@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 	"gorm.io/gorm"
@@ -107,6 +108,37 @@ func (r *Repository) SoftDelete(ctx context.Context, id uint) error {
 func (r *Repository) ActiveLeagues(ctx context.Context) ([]scraper.LeagueRef, error) {
 	var rows []ScraperLeague
 	if err := r.db.WithContext(ctx).Where("enabled = ?", true).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]scraper.LeagueRef, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, scraper.LeagueRef{
+			Source:         r.Source,
+			SourceLeagueId: r.SourceLeagueId,
+			Name:           r.Name,
+			Country:        r.Country,
+			Sport:          r.Sport,
+		})
+	}
+	return out, nil
+}
+
+// SearchLocalByName looks up entries already in scraper_leagues
+// whose name matches the search term. It returns only live (non-soft-
+// deleted) rows. Used by Service.SearchLeagues to prefer the
+// verified-on-this-deployment IDs over the upstream FotMob search
+// results, which can be stale. The match is case-insensitive and
+// requires the term to appear anywhere in the name.
+func (r *Repository) SearchLocalByName(ctx context.Context, query string) ([]scraper.LeagueRef, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, nil
+	}
+	var rows []ScraperLeague
+	if err := r.db.WithContext(ctx).
+		Where("LOWER(name) LIKE ?", "%"+strings.ToLower(q)+"%").
+		Order("name ASC").
+		Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]scraper.LeagueRef, 0, len(rows))

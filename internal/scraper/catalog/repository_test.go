@@ -77,3 +77,52 @@ func TestRepository_SoftDelete(t *testing.T) {
 		t.Fatalf("expected nil after soft delete, got %+v", got)
 	}
 }
+
+func TestRepository_SearchLocalByName(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewRepository(db)
+	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "GB", Sport: "football", Enabled: true})
+	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "87", Name: "LaLiga", Country: "ES", Sport: "football", Enabled: true})
+	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "54", Name: "Bundesliga", Country: "DE", Sport: "football", Enabled: true})
+
+	// Empty query short-circuits.
+	if got, err := repo.SearchLocalByName(context.Background(), "   "); err != nil || got != nil {
+		t.Errorf("empty query: got=%v err=%v, want both nil", got, err)
+	}
+
+	// Case-insensitive substring match.
+	got, err := repo.SearchLocalByName(context.Background(), "PREMIER")
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(got) != 1 || got[0].SourceLeagueId != "47" {
+		t.Errorf("want only Premier League, got %+v", got)
+	}
+
+	// Substring in the middle.
+	got, _ = repo.SearchLocalByName(context.Background(), "iga")
+	if len(got) != 2 {
+		t.Errorf("want LaLiga+Bundesliga, got %d rows: %+v", len(got), got)
+	}
+
+	// No match.
+	got, _ = repo.SearchLocalByName(context.Background(), "NBA")
+	if len(got) != 0 {
+		t.Errorf("want 0 rows for NBA, got %d", len(got))
+	}
+}
+
+func TestRepository_SearchLocalByName_IgnoresSoftDeleted(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewRepository(db)
+	live := &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "GB", Sport: "football", Enabled: true}
+	deleted := &ScraperLeague{Source: "fotmob", SourceLeagueId: "87", Name: "Premier League", Country: "ES", Sport: "football", Enabled: true}
+	repo.Create(context.Background(), live)
+	repo.Create(context.Background(), deleted)
+	repo.SoftDelete(context.Background(), deleted.ID)
+
+	got, _ := repo.SearchLocalByName(context.Background(), "Premier")
+	if len(got) != 1 || got[0].SourceLeagueId != "47" {
+		t.Errorf("want only live Premier League (47), got %+v", got)
+	}
+}
