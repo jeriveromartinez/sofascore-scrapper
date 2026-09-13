@@ -129,6 +129,58 @@ func (r *Repository) ActiveLeagues(ctx context.Context) ([]scraper.LeagueRef, er
 // verified-on-this-deployment IDs over the upstream FotMob search
 // results, which can be stale. The match is case-insensitive and
 // requires the term to appear anywhere in the name.
+// EnsureLeague upserts a league row for the given
+// (source, source_league_id) pair. Idempotent: if the row
+// already exists it is left untouched, so operator-set
+// enabled flags and curated name overrides are preserved.
+//
+// Used by the scraper dispatch loop when a bulk-fetch source
+// (TheSportsDB) returns matches for a league that is not yet
+// in the catalog. Without this the bulk path would silently
+// drop every new league TheSportsDB picks up; with this the
+// admin sees the new leagues on the next dashboard load and
+// can disable unwanted ones.
+func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, league scraper.LeagueRef) error {
+	if sourceLeagueID == "" {
+		return errors.New("catalog: EnsureLeague requires source_league_id")
+	}
+	source := league.Source
+	if source == "" {
+		return errors.New("catalog: EnsureLeague requires league.Source")
+	}
+	// Cheap pre-check so we don't fire a SELECT FOR UPDATE on
+	// every dispatch tick.
+	var existing ScraperLeague
+	err := r.db.WithContext(ctx).
+		Where("source = ? AND source_league_id = ?", source, sourceLeagueID).
+		First(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	row := &ScraperLeague{
+		Source:         source,
+		SourceLeagueId: sourceLeagueID,
+		Name:           league.Name,
+		Sport:          league.Sport,
+		Country:        league.Country,
+		Enabled:        true,
+	}
+	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
+		if isUniqueViolation(err) {
+			return nil // raced with another worker; treat as success
+		}
+		return err
+	}
+	return nil
+}
+
+// SearchLocalByName is a free-text match against the Name
+// column. Used by the admin catalog search box; the backend
+// keeps its scope narrow (LIKE %q%) so it works without
+// indexes and is safe to call on every keystroke.
 func (r *Repository) SearchLocalByName(ctx context.Context, query string) ([]scraper.LeagueRef, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {

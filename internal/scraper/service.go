@@ -25,6 +25,21 @@ type CatalogSource interface {
 	ActiveLeagues(ctx context.Context) ([]LeagueRef, error)
 }
 
+// EnsureLeague is the optional surface a CatalogSource can
+// implement to receive auto-created league rows. The bulk-fetch
+// dispatch path calls this for any idLeague seen in the
+// upstream payload that is not already in the catalog; the
+// catalog implementation is responsible for the upsert (and
+// for keeping operator-set enabled flags on existing rows).
+//
+// Catalog backends that want the catalog frozen at boot (e.g.
+// the FotMob seed) can simply not implement this interface —
+// the dispatch loop type-asserts and skips the auto-create
+// step when the assertion fails.
+type EnsureLeague interface {
+	EnsureLeague(ctx context.Context, sourceLeagueID string, league LeagueRef) error
+}
+
 // SourceDispatcher routes a league to the source that owns it.
 // It is keyed by league.Source (the value of ScraperLeague.Source
 // in the catalog: "fotmob", "sportsdb", ...).
@@ -211,10 +226,18 @@ func (s *Service) dispatchSource(
 }
 
 // dispatchDayMatch handles the bulk-fetch path: one HTTP call,
-// N league buckets, parallel upserts. Matches whose
-// League.SourceLeagueId is not in srcLeagues are silently dropped
-// (e.g. a competitor league that happens to share the same
-// upstream day payload).
+// N league buckets, parallel upserts. For sources whose catalog
+// is intentionally narrow (FotMob, football-only) the bucket
+// loop iterates srcLeagues and drops unknown-league matches.
+//
+// For sources whose catalog is the full universe of upstream
+// leagues (TheSportsDB), the catalog can grow on the fly: any
+// league ID seen in the day payload that is not yet in the
+// catalog is upserted via ensureLeague (enabled=true), so the
+// admin sees it on the next dashboard load and can choose to
+// disable it. The auto-create path is guarded by an interface
+// assertion so the FotMob fast-path keeps its stricter
+// behaviour.
 func (s *Service) dispatchDayMatch(
 	ctx context.Context,
 	dm DayMatcher,
@@ -235,14 +258,51 @@ func (s *Service) dispatchDayMatch(
 	for _, m := range matches {
 		byLeague[m.League.SourceLeagueId] = append(byLeague[m.League.SourceLeagueId], m)
 	}
+
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.concur)
+
+	// Step 1: enabled leagues from the catalog. Their canonical
+	// sport/country override the upstream payload's verbose
+	// strings on the way to the upsert.
 	for _, league := range srcLeagues {
 		league := league
 		g.Go(func() error {
 			return s.upsertLeagueMatches(ctx, league, date, byLeague[league.SourceLeagueId])
 		})
 	}
+
+	// Step 2: league IDs present in the day payload that are
+	// not yet in the catalog. Only run when the catalog supports
+	// dynamic auto-create (the interface assertion below). The
+	// FotMob path returns nil here so its narrow catalog stays
+	// narrow; the sportsdb path picks up every league the
+	// upstream publishes events for.
+	if el, ok := s.catalog.(EnsureLeague); ok {
+		for _, ms := range byLeague {
+			if len(ms) == 0 {
+				continue
+			}
+			first := ms[0]
+			id := first.League.SourceLeagueId
+			// Skip leagues already handled by step 1.
+			if _, known := byLeagueToRef(srcLeagues, id); known {
+				continue
+			}
+			league := first.League // canonical sport already from NormalizeSport
+			g.Go(func() error {
+				if err := el.EnsureLeague(ctx, id, league); err != nil {
+					s.logger.WarnContext(ctx, "scrape: ensure league failed",
+						slog.String("source", src.Name()),
+						slog.String("source_league_id", id),
+						slog.String("error", err.Error()))
+					return nil
+				}
+				return s.upsertLeagueMatches(ctx, league, date, byLeague[id])
+			})
+		}
+	}
+
 	if err := g.Wait(); err != nil {
 		s.logger.ErrorContext(ctx, "scrape day: league upserts",
 			slog.String("source", src.Name()),
@@ -254,6 +314,17 @@ func (s *Service) dispatchDayMatch(
 		_ = s.onScrapeComplete(parentCtx)
 	}
 	return nil
+}
+
+// byLeagueToRef is a tiny helper: returns (league, true) when
+// id is in srcLeagues. Avoids a map allocation on the hot path.
+func byLeagueToRef(srcLeagues []LeagueRef, id string) (LeagueRef, bool) {
+	for _, l := range srcLeagues {
+		if l.SourceLeagueId == id {
+			return l, true
+		}
+	}
+	return LeagueRef{}, false
 }
 
 // dispatchPerLeague handles sources that don't expose a bulk
