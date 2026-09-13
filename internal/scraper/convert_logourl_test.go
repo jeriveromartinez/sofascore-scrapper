@@ -16,10 +16,10 @@ func TestLogoURLForSource(t *testing.T) {
 			want:     "https://cdn.example.com/team/9825.png",
 		},
 		{
-			name:     "empty_url_falls_back_to_fotmob_cdn",
+			name:     "empty_url_falls_back_to_sofascore_cdn",
 			sourceID: 9825,
 			logoURL:  "",
-			want:     "https://images.fotmob.com/image_resources/logo/teamlogo_9825.png",
+			want:     "https://img.sofascore.com/api/v1/team/9825/image",
 		},
 		{
 			name:     "zero_id_with_empty_url_stays_empty",
