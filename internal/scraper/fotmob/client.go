@@ -122,9 +122,20 @@ func (c *Client) ScheduledEvents(ctx context.Context, leagueID string, date time
 // documented one (`/api/data/matches?date=YYYYMMDD&timezone=…`);
 // the date format is YYYYMMDD with no hyphens to match bjrsti and
 // the upstream convention.
+//
+// The date parameter must reflect the configured timezone's local
+// day, not the host's UTC day. The Docker image runs in UTC by
+// default; when the cron triggers between 22:00–23:59 UTC, Paris
+// (UTC+2 in summer) is already on the NEXT calendar day. Without
+// the timezone conversion the request fetches yesterday's matches
+// in Paris and the next cron tick silently misses the day boundary.
 func (c *Client) dayMatches(ctx context.Context, date time.Time) (apiMatchesResponse, error) {
+	loc, err := time.LoadLocation(c.timezone)
+	if err != nil {
+		return apiMatchesResponse{}, fmt.Errorf("fotmob: load timezone %q: %w", c.timezone, err)
+	}
 	path := fmt.Sprintf("/api/data/matches?date=%s&timezone=%s",
-		date.UTC().Format("20060102"),
+		date.In(loc).Format("20060102"),
 		c.timezone,
 	)
 	body, err := c.doRequest(ctx, path)

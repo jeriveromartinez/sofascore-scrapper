@@ -25,14 +25,55 @@ func NewSource(client *Client, logger *slog.Logger) *Source {
 
 func (s *Source) Name() string { return "fotmob" }
 
-func (s *Source) ScheduledEvents(ctx context.Context, league scraper.LeagueRef, date time.Time) ([]scraper.Match, error) {
-	apiMatches, err := s.client.ScheduledEvents(ctx, league.SourceLeagueId, date)
+// DayMatches fetches the entire per-day payload from FotMob in a
+// single HTTP round-trip and converts every league group into
+// per-league Match slices. Each Match's League.SourceLeagueId is set
+// to the upstream id so Service can dispatch by the configured
+// league list.
+//
+// The scheduler prefers DayMatches over ScheduledEvents because the
+// /api/data/matches endpoint has no per-league filter — calling
+// ScheduledEvents per league would issue one HTTP request per
+// (league, date) pair. DayMatches is the P2 #1 dedup fix for PR
+// #124: 1 round-trip per date instead of N.
+func (s *Source) DayMatches(ctx context.Context, date time.Time) ([]scraper.Match, error) {
+	resp, err := s.client.dayMatches(ctx, date)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]scraper.Match, 0, len(apiMatches))
-	for _, m := range apiMatches {
-		out = append(out, s.toMatch(m, league))
+	out := make([]scraper.Match, 0)
+	for _, lg := range resp.Leagues {
+		leagueRef := scraper.LeagueRef{
+			Source:         s.Name(),
+			SourceLeagueId: strconv.FormatInt(lg.Id, 10),
+			Name:           lg.Name,
+			// Codex P1 on PR #128: the upstream payload only carries
+			// the Ccode (e.g. "ENG", "INT"); the rest of the system
+			// expects a non-empty Country on every Match. Copy the
+			// upstream Ccode verbatim — it is already the short
+			// code the scraper uses (e.g. "GB" for "England" from
+			// the curated seed was a coincidence; Ccode is the
+			// canonical FotMob short form).
+			Country: lg.Ccode,
+			Sport:   "football",
+		}
+		for _, m := range lg.Matches {
+			out = append(out, s.toMatch(m, leagueRef))
+		}
+	}
+	return out, nil
+}
+
+func (s *Source) ScheduledEvents(ctx context.Context, league scraper.LeagueRef, date time.Time) ([]scraper.Match, error) {
+	matches, err := s.DayMatches(ctx, date)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]scraper.Match, 0)
+	for _, m := range matches {
+		if m.League.SourceLeagueId == league.SourceLeagueId {
+			out = append(out, m)
+		}
 	}
 	return out, nil
 }

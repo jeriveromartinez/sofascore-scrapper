@@ -225,3 +225,84 @@ func TestClient_ScheduledEvents_4xx_NoRetry(t *testing.T) {
 		t.Fatalf("expected single call (no retries on 4xx), got calls=%d", calls)
 	}
 }
+
+// TestClient_DayMatches_DateUsesConfiguredTimezone is the regression
+// test for the P1 Codex finding on PR #124: the per-day query
+// parameter must reflect the configured timezone (default
+// Europe/Paris), not the host's local time.
+//
+// Scenario: a Docker container whose host clock is UTC runs the
+// scraper at 22:30 UTC = 00:30 Europe/Paris on the NEXT calendar
+// day. The "current day" in Paris is therefore the next day, but
+// date.UTC().Format(...) returns today's UTC date — so the query
+// fetches yesterday's matches in Paris.
+//
+// The fix: compute the date in c.timezone before formatting. This
+// test captures the URL the client actually built and asserts that
+// the date field reflects the configured timezone's local day.
+func TestClient_DayMatches_DateUsesConfiguredTimezone(t *testing.T) {
+	cases := []struct {
+		name          string
+		timezone      string
+		// "now" expressed as a UTC instant. The cron would call
+		// dayMatches with date=time.Now() — for the test we pass an
+		// explicit instant so the assertion is deterministic.
+		now           time.Time
+		wantDateParam string
+	}{
+		{
+			// 22:30 UTC = 00:30 CEST on Sept 15. With timezone=Paris
+			// the request must ask for Sept 15, not Sept 14.
+			name:          "paris_after_midnight",
+			timezone:      "Europe/Paris",
+			now:           time.Date(2026, 9, 14, 22, 30, 0, 0, time.UTC),
+			wantDateParam: "20260915",
+		},
+		{
+			// 21:30 UTC = 16:30 CDT on Sept 14. With timezone=Chicago
+			// the request must ask for Sept 14.
+			name:          "chicago_afternoon",
+			timezone:      "America/Chicago",
+			now:           time.Date(2026, 9, 14, 21, 30, 0, 0, time.UTC),
+			wantDateParam: "20260914",
+		},
+		{
+			// 06:00 UTC on Sept 15 — both UTC and Europe/Paris agree.
+			name:          "paris_morning_no_boundary",
+			timezone:      "Europe/Paris",
+			now:           time.Date(2026, 9, 15, 6, 0, 0, 0, time.UTC),
+			wantDateParam: "20260915",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				capturedPath = r.URL.String()
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"leagues":[]}`))
+			}))
+			defer server.Close()
+
+			c := NewClient(ClientConfig{
+				BaseURL:    server.URL,
+				Timezone:   tc.timezone,
+				MaxRetries: 1,
+			})
+			if _, err := c.dayMatches(context.Background(), tc.now); err != nil {
+				t.Fatalf("dayMatches: %v", err)
+			}
+			wantSubstr := "date=" + tc.wantDateParam
+			if !strings.Contains(capturedPath, wantSubstr) {
+				t.Errorf("path = %q, want it to contain %q (configured TZ %s, host UTC %s)",
+					capturedPath, wantSubstr, tc.timezone, tc.now.Format(time.RFC3339))
+			}
+			// The configured timezone must also appear in the URL so
+			// FotMob buckets correctly.
+			wantTzSubstr := "timezone=" + tc.timezone
+			if !strings.Contains(capturedPath, wantTzSubstr) {
+				t.Errorf("path = %q, want it to contain %q", capturedPath, wantTzSubstr)
+			}
+		})
+	}
+}
