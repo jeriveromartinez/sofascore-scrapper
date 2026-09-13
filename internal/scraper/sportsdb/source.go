@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
@@ -31,6 +32,16 @@ type Source struct {
 	client *sportsdb.Client
 	logger *slog.Logger
 }
+
+// TeamIDPrefix namespaces TheSportsDB team IDs into the shared
+// `teams` table so they cannot collide with FotMob team IDs
+// (which range from 0 to ~1.7M in our observed dataset). The
+// prefix 2_000_000_000 sits well above any FotMob ID and below
+// math.MaxInt64, so adding `sportsdb_id + TeamIDPrefix` is safe
+// even for 6-7 digit upstream IDs. The DB unique index is on
+// `team_id` alone (no `source` column), so prefixing is the
+// schema-free way to keep two sources' rows distinct.
+const TeamIDPrefix int64 = 2_000_000_000
 
 // NewSource wraps a sportsdb.Client with the Source interface.
 // The logger is optional and falls back to slog.Default().
@@ -84,25 +95,42 @@ func (s *Source) toMatch(league scraper.LeagueRef, raw sportsdb.Event) scraper.M
 		Country:        league.Country,
 	}
 	return scraper.Match{
-		Source:        s.Name(),
-		SourceMatchId: raw.IDEvent,
+		Source:         s.Name(),
+		SourceMatchId:  raw.IDEvent,
 		StartTimestamp: raw.Timestamp,
-		HomeScore:     raw.HomeScore,
-		AwayScore:     raw.AwayScore,
+		HomeScore:      raw.HomeScore,
+		AwayScore:      raw.AwayScore,
 		Status: scraper.MatchStatus{
 			Finished:  !raw.Timestamp.After(time.Now()) && (raw.HomeScore != 0 || raw.AwayScore != 0),
 			Started:   !raw.Timestamp.After(time.Now()),
 			Cancelled: false,
 		},
-		HomeTeam: scraper.Team{
-			SourceId: 0,
-			Name:     raw.HomeTeam,
-		},
-		AwayTeam: scraper.Team{
-			SourceId: 0,
-			Name:     raw.AwayTeam,
-		},
-		League: matchLeague,
+		HomeTeam: s.teamFromEvent(raw.HomeTeam, raw.IDHomeTeam, raw.HomeTeamBadge),
+		AwayTeam: s.teamFromEvent(raw.AwayTeam, raw.IDAwayTeam, raw.AwayTeamBadge),
+		League:   matchLeague,
+	}
+}
+
+// teamFromEvent builds a scraper.Team from the upstream event's
+// name, ID, and badge URL. The ID is prefixed with TeamIDPrefix so
+// the row lands in the shared `teams` table without colliding with
+// any FotMob-sourced row (see TeamIDPrefix comment).
+//
+// When the upstream omits the ID (older fixtures) or badge (teams
+// still being indexed), we leave SourceId=0 / LogoURL="" so the
+// event still persists — the team row will simply not link to a
+// logo download and the UI will fall back to the placeholder.
+func (s *Source) teamFromEvent(name, idRaw, badge string) scraper.Team {
+	var sourceID int64
+	if idRaw != "" {
+		if n, err := strconv.ParseInt(idRaw, 10, 64); err == nil && n > 0 {
+			sourceID = n + TeamIDPrefix
+		}
+	}
+	return scraper.Team{
+		SourceId: sourceID,
+		Name:     name,
+		LogoURL:  badge,
 	}
 }
 
