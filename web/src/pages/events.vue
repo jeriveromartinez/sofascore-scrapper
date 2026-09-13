@@ -6,6 +6,7 @@ import type { EventPageResponse, EventsPageFilters, ExternalEvent } from "../sto
 import { formatUnixTimestamp } from "../utils/time";
 import EventsFilterBar from "./EventsFilterBar.vue";
 import PaginationControls from "../components/PaginationControls.vue";
+import TeamBadge from "../components/TeamBadge.vue";
 
 function detectBrowserTZ(): string {
   try {
@@ -96,24 +97,20 @@ onMounted(() => pagination.loadPage());
               <td class="d-none d-lg-table-cell">{{ event.sport }}</td>
               <td>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                  <img
+                  <TeamBadge
                     :src="event.teamHome?.logoUrl"
-                    :alt="event.teamHome?.name ?? 'Home Team'"
+                    :alt="event.teamHome?.name ?? 'Home'"
+                    :size="30"
                     class="me-1"
-                    width="30px"
-                    height="30px"
-                    style="object-fit: contain"
                   />
                   <span class="text-nowrap">{{ event.teamHome?.name ?? "Home" }}</span>
                   <span class="mx-1">vs</span>
                   <span class="text-nowrap">{{ event.teamAway?.name ?? "Away" }}</span>
-                  <img
+                  <TeamBadge
                     :src="event.teamAway?.logoUrl"
-                    :alt="event.teamAway?.name ?? 'Away Team'"
+                    :alt="event.teamAway?.name ?? 'Away'"
+                    :size="30"
                     class="ms-1"
-                    width="30px"
-                    height="30px"
-                    style="object-fit: contain"
                   />
                 </div>
                 <small class="d-md-none text-body-secondary d-block mt-1">
