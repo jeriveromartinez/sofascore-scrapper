@@ -170,13 +170,52 @@ func TestSeed_LoadsInitialLeagues(t *testing.T) {
 	}
 }
 
-// TestSeed_NonEmptyCatalogIsNoop verifies the seed preserves
-// operator-added rows that are not in the curated list. The curated
-// seed may run on every boot and reconcile any matching row, but a
-// row whose source_league_id is not in the curated slice (e.g. one
-// the operator added via /#/scraper-leagues or
-// /scraper-leagues/search) must be left untouched — its name,
-// enabled flag, and any other field stay as the operator set them.
+// TestSeed_LoadsNonFootballLeagues verifies that the curated
+// non-football seed (NBA, NFL, MLB, NHL via TheSportsDB) is
+// inserted on first boot alongside the football leagues. The
+// sport column carries the canonical lowercase form so the API
+// filter does not break on a future upstream rename.
+func TestSeed_LoadsNonFootballLeagues(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&catalog.ScraperLeague{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+	if err := SeedDefaults(db, nil); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	wantSports := map[string]bool{
+		"basketball":       false,
+		"american-football": false,
+		"baseball":         false,
+		"ice-hockey":       false,
+	}
+	var rows []catalog.ScraperLeague
+	if err := db.Unscoped().Where("source = ?", "sportsdb").Find(&rows).Error; err != nil {
+		t.Fatalf("find sportsdb rows: %v", err)
+	}
+	for _, r := range rows {
+		if r.Source != "sportsdb" {
+			t.Errorf("row %s source = %q, want sportsdb", r.SourceLeagueId, r.Source)
+		}
+		if seen, ok := wantSports[r.Sport]; ok {
+			if seen {
+				t.Errorf("sport %q appears more than once", r.Sport)
+			}
+			wantSports[r.Sport] = true
+		}
+	}
+	for sport, seen := range wantSports {
+		if !seen {
+			t.Errorf("expected at least one seeded league with sport %q", sport)
+		}
+	}
+}
+
+
 func TestSeed_NonEmptyCatalogIsNoop(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -202,8 +241,10 @@ func TestSeed_NonEmptyCatalogIsNoop(t *testing.T) {
 	if err := db.Unscoped().Model(&catalog.ScraperLeague{}).Count(&total).Error; err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	if total != int64(1+len(initialLeagues)) {
-		t.Fatalf("expected %d rows (curated + operator), got %d", 1+len(initialLeagues), total)
+	wantTotal := int64(1 + len(initialLeagues) + len(initialNonFootballLeagues))
+	if total != wantTotal {
+		t.Fatalf("expected %d rows (curated football + curated non-football + operator), got %d",
+			wantTotal, total)
 	}
 	// The operator row must survive untouched: same id, same name,
 	// same disabled state.
@@ -339,13 +380,16 @@ func TestSeed_OnlySoftDeletedRowsIsNoop(t *testing.T) {
 		t.Error("SeedDefaults un-soft-deleted the curated row; operator intent broken")
 	}
 
-	// The other 93 curated entries are inserted fresh.
+	// The other curated entries are inserted fresh: every
+	// football league except the soft-deleted one, plus the
+	// non-football leagues (NBA, NFL, MLB, NHL).
 	var visible int64
 	if err := db.Model(&catalog.ScraperLeague{}).Count(&visible).Error; err != nil {
 		t.Fatalf("visible count: %v", err)
 	}
-	if visible != int64(len(initialLeagues)-1) {
-		t.Errorf("expected %d visible rows (curated minus the soft-deleted one), got %d",
-			len(initialLeagues)-1, visible)
+	wantVisible := int64(len(initialLeagues)-1 + len(initialNonFootballLeagues))
+	if visible != wantVisible {
+		t.Errorf("expected %d visible rows (curated football minus soft-deleted + curated non-football), got %d",
+			wantVisible, visible)
 	}
 }
