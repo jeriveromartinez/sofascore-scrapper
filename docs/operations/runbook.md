@@ -13,6 +13,7 @@ Day-to-day procedures for the on-call operator. Pair this with
 | `iptv_redis_outage` | See [Redis Outage Behavior](#redis-outage-behavior) |
 | `iptv_apk_storage_full` | `du -sh /opt/iptv/apk_storage/*`; prune old upload chunks |
 | `iptv_scrape_403` | SofaScore is blocking this IP. Cosmetic; scraper retries on next tick. |
+| `iptv_scraper_silent` | Logs show no `scraper: … errors` and `teams`/`events` tables are growing. If the table is stuck at zero rows, see [Scraper catalog](#scraper-catalog) — the FotMob endpoint URL changed in 2026; old builds hit `/api/leagues` (404). Rebuild from a branch with the b8d3291 fix (or later) and confirm `curl https://www.fotmob.com/api/data/matches?date=YYYYMMDD&timezone=Europe/Paris` returns 200. |
 
 ## Redis outage behavior
 
@@ -128,3 +129,83 @@ and refuses to run once `users` already has a row, so it must run
 before the server's first normal boot. Start the server afterward
 and the first human registers at `/register` using the token; that
 account becomes the sole admin via the existing first-user rule.
+
+## Scraper catalog
+
+The scraper only runs against leagues present in the `scraper_leagues`
+table with `enabled = true`. On a fresh DB the server auto-seeds a
+curated list of leagues whose `source_league_id` was verified against
+FotMob's real catalog on 2026-09-13. As of that date the seed has
+41 entries (top 5 European leagues + second divisions + rest of
+Europe top flights, the main LATAM / USA / Asia leagues FotMob
+covers, a few national cups, and the women's top flights). Each
+verified entry's `name` matches the upstream `name` field FotMob
+serves, so admins can spot mismatches at a glance.
+
+If the seed has `enabled` rows that FotMob no longer serves (e.g.
+the upstream platform dropped a league), the scraper silently returns
+no matches for those rows — they cost nothing but a rate-limited HTTP
+call.
+
+### Adding a league
+
+Two paths. The admin UI at `/#/scraper-leagues` has an "Add new" button
+that hits `POST /api/web/v1/scraper-leagues`. If you don't know the
+`source_league_id`, search first:
+
+```bash
+curl -sH "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://your.host/api/web/v1/scraper-leagues/search?q=premier"
+```
+
+The search endpoint hits FotMob's `/api/searchapi/suggest?term=…` and
+filters for `type=league` entries. It returns `{data: [{source,
+source_league_id, name, country, sport}, …]}`. Pick one and POST it
+back; the service layer normalizes the country to uppercase and
+defaults `enabled=true` so the next cron tick picks it up.
+
+### Removing / disabling
+
+```bash
+curl -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}' \
+  "https://your.host/api/web/v1/scraper-leagues/<id>"
+```
+
+or hit `DELETE` to soft-delete (the row stays in the table with
+`deleted_at` set; the unique index keeps the seed idempotent on
+restart).
+
+### Editing the seed
+
+The curated list lives in `internal/seeder/defaults.go`. Each new
+FotMob platform upgrade may assign different ids; if you discover a
+wrong id during scrape, add a comment with the verified id and PR it.
+A wrong id is harmless (no matches) but eats one rate-limited HTTP call
+per cron tick.
+
+## User roles
+
+Roles are `user` (default) and `admin`. The first user becomes admin
+via the bootstrap invitation flow. Admins can change anyone's role
+through `/#/users` → Edit → Role dropdown, which hits
+`PUT /api/web/v1/users/:id/role`. The handler refuses to demote the
+last admin (`409 Conflict` with `cannot demote the last
+administrator`) so the system can't lock itself out of the admin API.
+
+## Team logos
+
+The `/#/events` page renders team logos via
+`/api/app/v1/teams/logo/<team_id>` — a local proxy that reads from
+`IMAGE_STORAGE_PATH`/teams/<id>. The download path is async (via
+`LogoScheduler`) and uses the source URL's origin as the `Referer`
+header so the request matches the upstream CDN's expectation
+(FotMob's CDN rejects requests with the wrong `Referer`).
+
+When a logo file is missing the proxy returns 404; the frontend
+`TeamBadge` component catches that and falls back to a circular
+initials chip, so the table row stays visually complete instead of
+rendering blank space. **A fallback chip is not a broken deployment
+signal** — it's the expected UI state until the logo scheduler
+finishes downloading the file.
