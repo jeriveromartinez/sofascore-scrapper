@@ -47,7 +47,15 @@ func (s *Source) DayMatches(ctx context.Context, date time.Time) ([]scraper.Matc
 			Source:         s.Name(),
 			SourceLeagueId: strconv.FormatInt(lg.Id, 10),
 			Name:           lg.Name,
-			Sport:          "football",
+			// Codex P1 on PR #128: the upstream payload only carries
+			// the Ccode (e.g. "ENG", "INT"); the rest of the system
+			// expects a non-empty Country on every Match. Copy the
+			// upstream Ccode verbatim — it is already the short
+			// code the scraper uses (e.g. "GB" for "England" from
+			// the curated seed was a coincidence; Ccode is the
+			// canonical FotMob short form).
+			Country: lg.Ccode,
+			Sport:   "football",
 		}
 		for _, m := range lg.Matches {
 			out = append(out, s.toMatch(m, leagueRef))

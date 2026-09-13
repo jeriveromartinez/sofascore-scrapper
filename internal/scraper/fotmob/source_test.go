@@ -170,3 +170,84 @@ func TestSource_SearchLeagues_EmptyQueryReturnsEmpty(t *testing.T) {
 		t.Fatalf("want 0, got %d", len(results))
 	}
 }
+
+// TestSource_DayMatches_PopulatesCountryFromCcode is the regression
+// test for the P1 Codex finding on PR #128: the new DayMatches path
+// was synthesizing LeagueRef with Country="", which lost the
+// upstream Ccode for every match and broke downstream consumers
+// (admin UI filter, country-prefix display, etc.). The fix is to
+// copy the upstream Ccode verbatim into LeagueRef.Country.
+func TestSource_DayMatches_PopulatesCountryFromCcode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"leagues": [
+				{
+					"id": 47,
+					"primaryId": 47,
+					"ccode": "ENG",
+					"name": "Premier League",
+					"matches": [
+						{
+							"id": 5795448,
+							"leagueId": 47,
+							"time": "13.09.2026 15:00",
+							"home": {"id": 8669, "score": 0, "name": "Coventry"},
+							"away": {"id": 10204, "score": 0, "name": "Brighton"},
+							"statusId": 1,
+							"status": {"utcTime": "2026-09-13T13:00:00Z", "started": false, "cancelled": false, "finished": false}
+						}
+					]
+				},
+				{
+					"id": 42,
+					"primaryId": 42,
+					"ccode": "INT",
+					"name": "Champions League",
+					"matches": [
+						{
+							"id": 5795449,
+							"leagueId": 42,
+							"time": "13.09.2026 20:00",
+							"home": {"id": 8634, "score": 0, "name": "Real Madrid"},
+							"away": {"id": 9825, "score": 0, "name": "Arsenal"},
+							"statusId": 1,
+							"status": {"utcTime": "2026-09-13T20:00:00Z", "started": false, "cancelled": false, "finished": false}
+						}
+					]
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	c := NewClient(ClientConfig{BaseURL: server.URL})
+	src := NewSource(c, nil)
+
+	matches, err := src.DayMatches(context.Background(), time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("DayMatches: %v", err)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("want 2 matches, got %d", len(matches))
+	}
+
+	wantByID := map[string]string{
+		"5795448": "ENG",
+		"5795449": "INT",
+	}
+	for _, m := range matches {
+		want, ok := wantByID[m.SourceMatchId]
+		if !ok {
+			t.Errorf("unexpected match id %q", m.SourceMatchId)
+			continue
+		}
+		if m.League.Country != want {
+			t.Errorf("match %q country: got %q, want %q (from upstream ccode)",
+				m.SourceMatchId, m.League.Country, want)
+		}
+		if m.League.Name == "" {
+			t.Errorf("match %q name: empty", m.SourceMatchId)
+		}
+	}
+}
