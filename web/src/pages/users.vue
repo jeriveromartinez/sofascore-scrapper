@@ -30,13 +30,17 @@ function openEdit(user: User): void {
   modalRef.value?.open(user);
 }
 
-async function onSubmit(payload: { id: number | null; email: string; password: string }): Promise<void> {
+async function onSubmit(payload: { id: number | null; email: string; password: string; role: string }): Promise<void> {
   try {
     if (payload.id) {
+      const current = pagination.state.data.find((u) => u.id === payload.id);
       await usersApiService.updateUser(payload.id, {
         email: payload.email,
         password: payload.password,
       });
+      if (current && current.role !== payload.role) {
+        await usersApiService.setUserRole(payload.id, payload.role);
+      }
       modalRef.value?.reset();
       toast.success("Usuario actualizado");
     } else {

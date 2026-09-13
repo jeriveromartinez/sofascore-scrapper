@@ -48,3 +48,20 @@ type apiMatchesResponse struct {
 	} `json:"matches"`
 	LeagueId int64 `json:"leagueId"`
 }
+
+// apiSuggestResponse models FotMob's /api/searchapi/suggest payload.
+// The endpoint returns a heterogeneous list of typed entries
+// (league/team/player/manager). Only the league-typed entries are
+// relevant to the catalog seeder; the rest are filtered out by
+// Source.SearchLeagues.
+type apiSuggestResponse struct {
+	Suggestions []apiSuggestEntry `json:"suggestions"`
+}
+
+type apiSuggestEntry struct {
+	Type    string `json:"type"`
+	Id      int64  `json:"id"`
+	Name    string `json:"name"`
+	Country string `json:"country"`
+	Sport   string `json:"sport"`
+}

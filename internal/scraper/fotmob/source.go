@@ -2,7 +2,10 @@ package fotmob
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
@@ -66,9 +69,31 @@ func (s *Source) ScheduledEvents(ctx context.Context, league scraper.LeagueRef, 
 }
 
 func (s *Source) SearchLeagues(ctx context.Context, query string) ([]scraper.LeagueSearchResult, error) {
-	// Implementación contra /api/searchapi/suggest?term=...
-	// Se agrega en PR 3 (cuando el admin UI lo necesite).
-	return nil, nil
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, nil
+	}
+	resp, err := s.client.Suggest(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("fotmob: suggest %q: %w", q, err)
+	}
+	out := make([]scraper.LeagueSearchResult, 0, len(resp.Suggestions))
+	for _, e := range resp.Suggestions {
+		if !strings.EqualFold(e.Type, "league") {
+			continue
+		}
+		if e.Id == 0 {
+			continue
+		}
+		out = append(out, scraper.LeagueSearchResult{
+			Source:         s.Name(),
+			SourceLeagueId: strconv.FormatInt(e.Id, 10),
+			Name:           e.Name,
+			Country:        strings.ToUpper(strings.TrimSpace(e.Country)),
+			Sport:          e.Sport,
+		})
+	}
+	return out, nil
 }
 
 var _ scraper.Source = (*Source)(nil)
