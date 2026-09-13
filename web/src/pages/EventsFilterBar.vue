@@ -5,7 +5,17 @@ import type { EventsPageFilters } from "../store/services/models/apiModels";
 const props = defineProps<{ modelValue: EventsPageFilters }>();
 const emit = defineEmits<{ (e: "update:modelValue", value: EventsPageFilters): void }>();
 
-const SPORTS = ["football", "basketball", "tennis", "baseball", "volleyball", "hockey"] as const;
+// Categories surfaced here are limited to the non-football
+// sports the multi-sport scraper (TheSportsDB, PR #131) seeds
+// in `internal/seeder/defaults.go`. Football events live on the
+// FotMob source and are excluded so the dropdown reads as a
+// switch between scrapers, not a free-form sport selector.
+//
+// Adding a new TheSportsDB sport requires two changes:
+//   1. Seed a `scraper_leagues` row in `initialNonFootballLeagues`
+//      with the canonical lowercase sport string.
+//   2. Append that sport to this list.
+const SPORTS = ["basketball", "american-football", "baseball", "ice-hockey"] as const;
 const STATUSES = [
   { value: "", label: "Todos" },
   { value: "inprogress", label: "En vivo" },

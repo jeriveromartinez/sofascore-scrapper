@@ -130,12 +130,25 @@ type cachedEntry struct {
 // straight pass-through of the TheSportsDB eventsday.php payload —
 // the scraper source layer maps this to scraper.Match.
 type Event struct {
-	IDEvent     string
-	IDAPI       string
-	HomeTeam    string
-	AwayTeam    string
-	HomeScore   int
-	AwayScore   int
+	IDEvent   string
+	IDAPI     string
+	HomeTeam  string
+	AwayTeam  string
+	HomeScore int
+	AwayScore int
+	// IDHomeTeam and IDAwayTeam are the TheSportsDB team IDs
+	// (e.g. "134923" for Cincinnati Bengals). Empty when the
+	// upstream omits the field (older fixtures, teams still
+	// being indexed). The scraper namespace-prefixes these so
+	// they don't collide with FotMob team IDs in the shared
+	// teams table.
+	IDHomeTeam string
+	IDAwayTeam string
+	// HomeTeamBadge and AwayTeamBadge are the TheSportsDB badge
+	// URLs (e.g. https://r2.thesportsdb.com/images/media/team/
+	// badge/...). Empty when the upstream has no badge yet.
+	HomeTeamBadge string
+	AwayTeamBadge string
 	// Timestamp is the wall-clock UTC for the match kick-off,
 	// derived from dateEvent + strTime + strTimestamp (the latter
 	// wins when present so the upstream's authoritative value
@@ -433,19 +446,23 @@ func (c *Client) storeDayCache(leagueID, date string, events []Event, err error)
 // dayEvent is the wire shape of a single event in the
 // eventsday.php payload. We only decode the fields we need.
 type dayEvent struct {
-	IDEvent     string `json:"idEvent"`
-	IDAPI       string `json:"idAPIfootball"`
-	HomeTeam    string `json:"strHomeTeam"`
-	AwayTeam    string `json:"strAwayTeam"`
-	HomeScore   string `json:"intHomeScore"`
-	AwayScore   string `json:"intAwayScore"`
-	DateEvent   string `json:"dateEvent"`
-	StrTime     string `json:"strTime"`
-	StrTimeLocal string `json:"strTimeLocal"`
-	StrTimestamp string `json:"strTimestamp"`
-	League      string `json:"strLeague"`
-	Sport       string `json:"strSport"`
-	Postponed   string `json:"strPostponed"`
+	IDEvent        string `json:"idEvent"`
+	IDAPI          string `json:"idAPIfootball"`
+	HomeTeam       string `json:"strHomeTeam"`
+	AwayTeam       string `json:"strAwayTeam"`
+	HomeScore      string `json:"intHomeScore"`
+	AwayScore      string `json:"intAwayScore"`
+	DateEvent      string `json:"dateEvent"`
+	StrTime        string `json:"strTime"`
+	StrTimeLocal   string `json:"strTimeLocal"`
+	StrTimestamp   string `json:"strTimestamp"`
+	League         string `json:"strLeague"`
+	Sport          string `json:"strSport"`
+	Postponed      string `json:"strPostponed"`
+	IDHomeTeam     string `json:"idHomeTeam"`
+	IDAwayTeam     string `json:"idAwayTeam"`
+	HomeTeamBadge  string `json:"strHomeTeamBadge"`
+	AwayTeamBadge  string `json:"strAwayTeamBadge"`
 }
 
 type dayEventsResponse struct {
@@ -503,16 +520,20 @@ func decodeDayEvent(raw dayEvent) Event {
 	home, _ := strconv.Atoi(raw.HomeScore)
 	away, _ := strconv.Atoi(raw.AwayScore)
 	return Event{
-		IDEvent:   raw.IDEvent,
-		IDAPI:     raw.IDAPI,
-		HomeTeam:  raw.HomeTeam,
-		AwayTeam:  raw.AwayTeam,
-		HomeScore: home,
-		AwayScore: away,
-		Timestamp: ts,
-		Postponed: strings.EqualFold(raw.Postponed, "yes"),
-		League:    raw.League,
-		Sport:     raw.Sport,
+		IDEvent:        raw.IDEvent,
+		IDAPI:          raw.IDAPI,
+		HomeTeam:       raw.HomeTeam,
+		AwayTeam:       raw.AwayTeam,
+		HomeScore:      home,
+		AwayScore:      away,
+		IDHomeTeam:     raw.IDHomeTeam,
+		IDAwayTeam:     raw.IDAwayTeam,
+		HomeTeamBadge:  raw.HomeTeamBadge,
+		AwayTeamBadge:  raw.AwayTeamBadge,
+		Timestamp:      ts,
+		Postponed:      strings.EqualFold(raw.Postponed, "yes"),
+		League:         raw.League,
+		Sport:          raw.Sport,
 	}
 }
 

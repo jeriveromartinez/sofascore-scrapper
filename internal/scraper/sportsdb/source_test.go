@@ -100,6 +100,70 @@ func TestSource_SearchLeaguesReturnsNotImplemented(t *testing.T) {
 	}
 }
 
+// TestSource_PopulatesTeamIDsAndLogos covers the team-link fix
+// from PR #132: eventsday.php returns idHomeTeam/idAwayTeam and
+// strHomeTeamBadge/strAwayTeamBadge, and toMatch must wire them
+// into scraper.Match so the events table gets FK links to a row
+// in the teams table with a downloadable logo URL.
+//
+// Regression guard: if toMatch stops forwarding the new fields,
+// the events list will show empty teams for every TheSportsDB
+// sport (NBA/NFL/MLB/NHL) and this test will fail.
+func TestSource_PopulatesTeamIDsAndLogos(t *testing.T) {
+	server := newFixtureServer(`{"events":[
+		{"idEvent":"1","strHomeTeam":"Cincinnati Bengals","strAwayTeam":"Tampa Bay Buccaneers","dateEvent":"2026-09-13","strTimestamp":"2026-09-13T17:00:00","strLeague":"NFL","strSport":"American Football","intHomeScore":"33","intAwayScore":"27","idHomeTeam":"134923","idAwayTeam":"134945","strHomeTeamBadge":"https://r2.thesportsdb.com/images/media/team/badge/h1ce8y1784717263.png","strAwayTeamBadge":"https://r2.thesportsdb.com/images/media/team/badge/2dfpdl1537820969.png"}
+	]}`)
+	defer server.Close()
+
+	client := sportsdb.NewClient(sportsdb.Options{BaseURL: server.URL + "/api/v1/json/3"})
+	src := NewSource(client)
+	league := scraper.LeagueRef{
+		Source: "sportsdb", SourceLeagueId: "4391",
+		Name: "NFL", Country: "USA", Sport: "american-football",
+	}
+	matches, err := src.ScheduledEvents(context.Background(), league, time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("ScheduledEvents returned error: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("got %d matches, want 1", len(matches))
+	}
+	m := matches[0]
+
+	// Team IDs must be prefixed with TeamIDPrefix so they don't
+	// collide with FotMob-sourced teams in the shared table.
+	wantHome := int64(134923) + TeamIDPrefix
+	wantAway := int64(134945) + TeamIDPrefix
+	if m.HomeTeam.SourceId != wantHome {
+		t.Errorf("HomeTeam.SourceId = %d, want %d (prefix %d + id 134923)", m.HomeTeam.SourceId, wantHome, TeamIDPrefix)
+	}
+	if m.AwayTeam.SourceId != wantAway {
+		t.Errorf("AwayTeam.SourceId = %d, want %d (prefix %d + id 134945)", m.AwayTeam.SourceId, wantAway, TeamIDPrefix)
+	}
+
+	// Logo URLs come from the upstream payload (strHomeTeamBadge),
+	// not from the SofaScore CDN fallback, so the LogoScheduler
+	// downloads them directly.
+	if m.HomeTeam.LogoURL != "https://r2.thesportsdb.com/images/media/team/badge/h1ce8y1784717263.png" {
+		t.Errorf("HomeTeam.LogoURL = %q, want the upstream badge URL", m.HomeTeam.LogoURL)
+	}
+	if m.AwayTeam.LogoURL != "https://r2.thesportsdb.com/images/media/team/badge/2dfpdl1537820969.png" {
+		t.Errorf("AwayTeam.LogoURL = %q, want the upstream badge URL", m.AwayTeam.LogoURL)
+	}
+}
+
+// TestSource_PrefixedTeamIDsDoNotCollideWithFotMob pins the
+// namespacing invariant: a TheSportsDB ID and a FotMob ID that
+// happen to share the same numeric value must end up as distinct
+// team_id rows in the shared teams table.
+func TestSource_PrefixedTeamIDsDoNotCollideWithFotMob(t *testing.T) {
+	const upstreamID = int64(9885) // Juventus on FotMob, hypothetical TheSportsDB club
+	prefixed := upstreamID + TeamIDPrefix
+	if prefixed <= 1_701_119 {
+		t.Fatalf("TeamIDPrefix = %d; namespace must exceed observed FotMob max (~1.7M) so collisions stay impossible. prefixed=%d would collide", TeamIDPrefix, prefixed)
+	}
+}
+
 // newFixtureServer wires an httptest server that returns the
 // supplied JSON payload verbatim regardless of path / query.
 func newFixtureServer(payload string) *httptest.Server {
