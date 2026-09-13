@@ -170,11 +170,13 @@ func TestSeed_LoadsInitialLeagues(t *testing.T) {
 	}
 }
 
-// TestSeed_NonEmptyCatalogIsNoop verifies the seed does not overwrite
-// an operator-curated catalog. If the catalog already contains any
-// league, SeedDefaults must leave it untouched (no inserts, no
-// deletes) so that disabling/enabling leagues via the admin endpoints
-// persists across boots.
+// TestSeed_NonEmptyCatalogIsNoop verifies the seed preserves
+// operator-added rows that are not in the curated list. The curated
+// seed may run on every boot and reconcile any matching row, but a
+// row whose source_league_id is not in the curated slice (e.g. one
+// the operator added via /#/scraper-leagues or
+// /scraper-leagues/search) must be left untouched — its name,
+// enabled flag, and any other field stay as the operator set them.
 func TestSeed_NonEmptyCatalogIsNoop(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -195,36 +197,101 @@ func TestSeed_NonEmptyCatalogIsNoop(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	var count int64
-	if err := db.Model(&catalog.ScraperLeague{}).Count(&count).Error; err != nil {
+	// The curated seed plus the operator row should both be present.
+	var total int64
+	if err := db.Unscoped().Model(&catalog.ScraperLeague{}).Count(&total).Error; err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("seed overwrote operator config: count = %d, want 1", count)
+	if total != int64(1+len(initialLeagues)) {
+		t.Fatalf("expected %d rows (curated + operator), got %d", 1+len(initialLeagues), total)
 	}
+	// The operator row must survive untouched: same id, same name,
+	// same disabled state.
 	var got catalog.ScraperLeague
-	if err := db.First(&got, pre.ID).Error; err != nil {
+	if err := db.Where("source_league_id = ?", "99999").First(&got).Error; err != nil {
 		t.Fatalf("re-read operator row: %v", err)
 	}
 	if got.Name != "Operator-configured league" {
 		t.Errorf("operator row mutated: name = %q", got.Name)
 	}
+	if got.Enabled {
+		t.Errorf("operator row re-enabled: enabled = true")
+	}
+}
+
+// TestSeed_UpsertsCuratedRowsWhenKeyMatches verifies the reconciliation
+// half of SeedDefaults: when a curated row already exists in the DB
+// with a stale name/country, SeedDefaults must update those fields to
+// the curated values (instead of skipping the entire seed like
+// before). The operator's `enabled` flag must be preserved so that
+// disabling a curated league survives across boots.
+//
+// Without the upsert, deployments running an older curated seed
+// never get name/ID corrections when the seed evolves — they keep
+// the wrong entries and the scraper silently returns no matches for
+// them. The unique key for the upsert is (source, source_league_id);
+// rows whose key is not in the curated seed must be left alone
+// (operators may have added them by hand or via SearchLeagues).
+func TestSeed_UpsertsCuratedRowsWhenKeyMatches(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&catalog.ScraperLeague{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+	// Pre-insert Premier League with deliberately stale values and
+	// explicitly enabled=false. SeedDefaults must rewrite name/country/sport
+	// to the curated values but leave `enabled=false` alone.
+	stale := catalog.ScraperLeague{
+		Source: "fotmob", SourceLeagueId: "47",
+		Name: "STALE NAME — please overwrite", Country: "ZZ", Sport: "cricket", Enabled: false,
+	}
+	if err := db.Create(&stale).Error; err != nil {
+		t.Fatalf("pre-insert stale: %v", err)
+	}
+
+	if err := SeedDefaults(db, nil); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var got catalog.ScraperLeague
+	if err := db.Where("source = ? AND source_league_id = ?", "fotmob", "47").First(&got).Error; err != nil {
+		t.Fatalf("re-read curated row: %v", err)
+	}
+	if got.Name == stale.Name {
+		t.Errorf("seed did not overwrite stale name: still %q", got.Name)
+	}
+	if got.Country == "ZZ" {
+		t.Errorf("seed did not overwrite stale country: still %q", got.Country)
+	}
+	if got.Sport == "cricket" {
+		t.Errorf("seed did not overwrite stale sport: still %q", got.Sport)
+	}
+	if got.Enabled {
+		t.Errorf("seed re-enabled a curated row the operator disabled: enabled = true")
+	}
 }
 
 // TestSeed_OnlySoftDeletedRowsIsNoop covers fix C2 (PR #120 codex
-// review). The catalog DELETE endpoint uses GORM soft-delete (it sets
-// DeletedAt). GORM's default scoped Count ignores soft-deleted rows
-// and returns 0; SeedDefaults used that count to decide whether to
-// insert, so the unique index on source_league_id collided with the
-// still-present soft-deleted rows and app.New failed at boot.
+// review) AND the reconciliation behaviour introduced when the
+// curated seed evolved.
 //
-// The fix: SeedDefaults must use Unscoped().Count so soft-deleted rows
-// count as "table not empty", which is the correct semantic for the
-// unique-index guard. This test seeds a row, soft-deletes it, runs
-// SeedDefaults, and asserts:
-//   - SeedDefaults returns nil (no unique-index collision);
-//   - the soft-deleted row is still in the table;
-//   - no fresh curated seed rows were inserted.
+// The catalog DELETE endpoint uses GORM soft-delete (sets DeletedAt).
+// GORM's default scoped Count ignores soft-deleted rows and returns
+// 0; the pre-PR #120 SeedDefaults used that count to decide whether
+// to insert, so the unique index on source_league_id collided with
+// the still-present soft-deleted rows and app.New failed at boot.
+//
+// The PR #120 fix: SeedDefaults must use Unscoped().Count so soft-
+// deleted rows count as "table not empty", which is the correct
+// semantic for the unique-index guard.
+//
+// The PR #126 follow-up reconciliation: for a curated row whose
+// key IS already in the table (soft-deleted or not), SeedDefaults
+// must NOT un-soft-delete it — the operator's "do not scrape this"
+// intent must survive a boot. The soft-deleted curated entry is
+// skipped; the other 93 curated entries are inserted fresh.
 func TestSeed_OnlySoftDeletedRowsIsNoop(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -261,22 +328,24 @@ func TestSeed_OnlySoftDeletedRowsIsNoop(t *testing.T) {
 		t.Fatalf("seed after soft-delete: %v (likely unique-index collision)", err)
 	}
 
-	// Soft-deleted row must still be present (unscoped).
-	var unscoped int64
-	if err := db.Unscoped().Model(&catalog.ScraperLeague{}).Count(&unscoped).Error; err != nil {
-		t.Fatalf("unscoped count: %v", err)
+	// The soft-deleted curated row for id=47 must still be present
+	// (unscoped) and still soft-deleted — the operator's choice is
+	// preserved across boots.
+	var sd catalog.ScraperLeague
+	if err := db.Unscoped().Where("source_league_id = ?", "47").First(&sd).Error; err != nil {
+		t.Fatalf("soft-deleted row not found: %v", err)
 	}
-	if unscoped != 1 {
-		t.Fatalf("unscoped count expected 1, got %d", unscoped)
+	if !sd.DeletedAt.Valid {
+		t.Error("SeedDefaults un-soft-deleted the curated row; operator intent broken")
 	}
-	// The visible (non-deleted) league count must remain zero: the
-	// soft-deleted row is the only one and SeedDefaults must not
-	// have inserted any fresh curated seed.
+
+	// The other 93 curated entries are inserted fresh.
 	var visible int64
 	if err := db.Model(&catalog.ScraperLeague{}).Count(&visible).Error; err != nil {
 		t.Fatalf("visible count: %v", err)
 	}
-	if visible != 0 {
-		t.Errorf("SeedDefaults inserted fresh curated seed despite soft-deleted row: visible count = %d, want 0", visible)
+	if visible != int64(len(initialLeagues)-1) {
+		t.Errorf("expected %d visible rows (curated minus the soft-deleted one), got %d",
+			len(initialLeagues)-1, visible)
 	}
 }

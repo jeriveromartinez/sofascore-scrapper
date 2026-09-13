@@ -2,6 +2,7 @@
 package seeder
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -9,12 +10,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// SeedDefaults runs the first-boot data seed for the FotMob catalog.
-// On a fresh database (scraper_leagues empty) it inserts the curated
-// initialLeagues slice so the catalog has something to scrape against
-// on first run. If the user has already configured leagues (manually
-// via the catalog admin endpoints), the seed is a no-op — operators
-// retain control and the curated list never overwrites their choices.
+// SeedDefaults reconciles the scraper_leagues table with the curated
+// initialLeagues slice on every boot. For each curated row:
+//
+//   - If no row exists with that source_league_id, the curated row
+//     is inserted.
+//   - If a row exists with that source_league_id and is NOT
+//     soft-deleted, its name/country/sport columns are rewritten to
+//     the curated values (so deployments running an older seed pick
+//     up ID corrections and FotMob name updates). The `enabled` flag
+//     is left untouched — operators who disabled a curated league keep
+//     that choice across boots.
+//   - If a row exists with that source_league_id but IS soft-deleted,
+//     the curated row is skipped. The operator's intent ("do not
+//     scrape this league") is preserved across boots.
+//
+// Rows whose source_league_id is not in the curated slice (e.g.
+// operator-added leagues via /#/scraper-leagues or
+// /scraper-leagues/search) are left untouched.
+//
+// Note on FotMob ID changes: if the curated seed renames the id for a
+// league (e.g. an upstream FotMob id change), the OLD row stays in
+// the table under its previous id. Operators see two rows in
+// /#/scraper-leagues and can disable the old one manually. See
+// docs/operations/runbook.md for the cleanup SQL.
 //
 // The seed runs inside a single transaction so partial inserts cannot
 // leave the table in a half-populated state. If the scraper_leagues
@@ -33,29 +52,51 @@ func SeedDefaults(db *gorm.DB, logger *slog.Logger) error {
 		logger = slog.Default()
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		var existing int64
-		// Fix C2 (PR #122): Unscoped count so soft-deleted rows are
-		// counted as "table not empty". The catalog DELETE endpoint
-		// uses GORM soft-delete (sets DeletedAt); the underlying row
-		// stays in the table and the unique index on source_league_id
-		// still applies, so re-inserting the curated seed would
-		// collide. Without Unscoped, GORM's default scope returns 0
-		// after DELETE-all + restart, SeedDefaults tries to insert,
-		// and app.New fails at boot.
-		if err := tx.Unscoped().Model(&catalog.ScraperLeague{}).Count(&existing).Error; err != nil {
-			return fmt.Errorf("count scraper_leagues: %w", err)
-		}
-		if existing > 0 {
-			return nil
-		}
+		inserted := 0
+		updated := 0
+		skipped := 0
 		for i := range initialLeagues {
-			if err := tx.Create(&initialLeagues[i]).Error; err != nil {
-				return fmt.Errorf("seed scraper_league %s/%s: %w",
-					initialLeagues[i].Source, initialLeagues[i].SourceLeagueId, err)
+			curated := initialLeagues[i]
+			var existing catalog.ScraperLeague
+			err := tx.Unscoped().
+				Where("source_league_id = ?", curated.SourceLeagueId).
+				First(&existing).Error
+			switch {
+			case errors.Is(err, gorm.ErrRecordNotFound):
+				// Brand-new curated row: insert.
+				if createErr := tx.Create(&curated).Error; createErr != nil {
+					return fmt.Errorf("seed scraper_league %s/%s: %w",
+						curated.Source, curated.SourceLeagueId, createErr)
+				}
+				inserted++
+			case err != nil:
+				return fmt.Errorf("lookup scraper_league %s/%s: %w",
+					curated.Source, curated.SourceLeagueId, err)
+			case existing.DeletedAt.Valid:
+				// Operator soft-deleted this curated entry — honor
+				// the deletion across boots; skip the reconciliation.
+				skipped++
+			default:
+				// Existing live row: rewrite name/country/sport to
+				// the curated values. DO NOT touch `enabled` — see
+				// comment above.
+				if updateErr := tx.Unscoped().Model(&existing).
+					Updates(map[string]any{
+						"name":    curated.Name,
+						"country": curated.Country,
+						"sport":   curated.Sport,
+					}).Error; updateErr != nil {
+					return fmt.Errorf("update scraper_league %s/%s: %w",
+						curated.Source, curated.SourceLeagueId, updateErr)
+				}
+				updated++
 			}
 		}
-		logger.Info("seeded initial scraper leagues",
-			slog.Int("count", len(initialLeagues)),
+		logger.Info("reconciled scraper leagues with curated seed",
+			slog.Int("curated", len(initialLeagues)),
+			slog.Int("inserted", inserted),
+			slog.Int("updated", updated),
+			slog.Int("skipped_soft_deleted", skipped),
 		)
 		return nil
 	})
