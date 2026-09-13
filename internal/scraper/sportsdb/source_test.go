@@ -164,6 +164,63 @@ func TestSource_PrefixedTeamIDsDoNotCollideWithFotMob(t *testing.T) {
 	}
 }
 
+// TestSource_DayMatches_ReturnsAllLeagues locks in the bulk-fetch
+// path: one HTTP call yields matches across multiple leagues.
+// Without this the source would fall back to per-league fan-out
+// and burn the free-tier rate limit on the same calendar day.
+func TestSource_DayMatches_ReturnsAllLeagues(t *testing.T) {
+	server := newFixtureServer(`{"events":[
+		{"idEvent":"1","idLeague":"4387","strHomeTeam":"Lakers","strAwayTeam":"Celtics","dateEvent":"2026-01-15","strTimestamp":"2026-01-15T00:00:00","strLeague":"NBA","strSport":"Basketball","strCountry":"USA","intHomeScore":"100","intAwayScore":"99","idHomeTeam":"1","idAwayTeam":"2","strPostponed":"no"},
+		{"idEvent":"2","idLeague":"4391","strHomeTeam":"Bengals","strAwayTeam":"Buccaneers","dateEvent":"2026-01-15","strTimestamp":"2026-01-15T17:00:00","strLeague":"NFL","strSport":"American Football","strCountry":"USA","intHomeScore":"33","intAwayScore":"27","idHomeTeam":"3","idAwayTeam":"4","strPostponed":"no"}
+	]}`)
+	defer server.Close()
+
+	client := sportsdb.NewClient(sportsdb.Options{BaseURL: server.URL + "/api/v1/json/3"})
+	src := NewSource(client)
+	matches, err := src.DayMatches(context.Background(), time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("DayMatches: %v", err)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("got %d matches, want 2 (one per league)", len(matches))
+	}
+	// Each match's League.SourceLeagueId must carry the event's
+	// idLeague so the dispatcher can bucket by league.
+	if matches[0].League.SourceLeagueId != "4387" || matches[0].League.Sport != "basketball" {
+		t.Errorf("matches[0].League = %+v, want NBA / basketball", matches[0].League)
+	}
+	if matches[1].League.SourceLeagueId != "4391" || matches[1].League.Sport != "american-football" {
+		t.Errorf("matches[1].League = %+v, want NFL / american-football", matches[1].League)
+	}
+}
+
+// TestSource_DayMatches_DropsPostponedAndUnbound covers the two
+// invariants the day-wide path relies on: postponed matches are
+// skipped (so a rescheduled fixture doesn't overwrite fresh data)
+// and events without an idLeague binding are dropped (so we
+// never persist a synthetic league).
+func TestSource_DayMatches_DropsPostponedAndUnbound(t *testing.T) {
+	server := newFixtureServer(`{"events":[
+		{"idEvent":"1","idLeague":"4387","strHomeTeam":"Lakers","strAwayTeam":"Celtics","dateEvent":"2026-01-15","strTimestamp":"2026-01-15T00:00:00","strLeague":"NBA","strSport":"Basketball","intHomeScore":"100","intAwayScore":"99","strPostponed":"no"},
+		{"idEvent":"2","idLeague":"4387","strHomeTeam":"Heat","strAwayTeam":"Bulls","dateEvent":"2026-01-15","strTimestamp":"2026-01-15T00:00:00","strLeague":"NBA","strSport":"Basketball","strPostponed":"yes"},
+		{"idEvent":"3","strHomeTeam":"NoLeague","strAwayTeam":"Bound","dateEvent":"2026-01-15","strTimestamp":"2026-01-15T00:00:00","strSport":"Unknown","intHomeScore":"0","intAwayScore":"0","strPostponed":"no"}
+	]}`)
+	defer server.Close()
+
+	client := sportsdb.NewClient(sportsdb.Options{BaseURL: server.URL + "/api/v1/json/3"})
+	src := NewSource(client)
+	matches, err := src.DayMatches(context.Background(), time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("DayMatches: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("got %d matches, want 1 (postponed + no-league must both be dropped)", len(matches))
+	}
+	if matches[0].HomeTeam.Name != "Lakers" {
+		t.Errorf("kept match = %q, want Lakers", matches[0].HomeTeam.Name)
+	}
+}
+
 // newFixtureServer wires an httptest server that returns the
 // supplied JSON payload verbatim regardless of path / query.
 func newFixtureServer(payload string) *httptest.Server {

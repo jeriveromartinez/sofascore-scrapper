@@ -19,15 +19,16 @@ import (
 )
 
 // Source implements scraper.Source on top of TheSportsDB's
-// eventsday.php endpoint. The endpoint is per-league
-// (`l=<leagueID>`), so the source does NOT implement
-// scraper.DayMatcher — the Service routes each configured
-// league through ScheduledEvents instead.
+// eventsday.php endpoint. The endpoint supports both a
+// league-filtered form (`l=<id>`) and a day-wide form (no
+// filter), so the source implements both DayMatcher (for the
+// bulk path) and Source.ScheduledEvents (per-league).
 //
-// The shared rate limiter (in sportsdb.Client) spaces these
-// per-league calls 5s apart, well below the 30 req/min free-tier
-// quota. With 4 non-football leagues (NBA/NFL/MLB/NHL) the
-// backfill is one HTTP call every 5s = ~20s total.
+// PR #133 extended the source to bulk-fetch every event for a
+// day in a single HTTP call. The free-tier quota on
+// eventsday.php is 3 req/min, so this collapses the per-league
+// fan-out (NBA/NFL/MLB/NHL = 4 req/min) into one req/min and
+// leaves room for future sports without re-tuning the cron.
 type Source struct {
 	client *sportsdb.Client
 	logger *slog.Logger
@@ -51,9 +52,44 @@ func NewSource(client *sportsdb.Client) *Source {
 
 func (s *Source) Name() string { return "sportsdb" }
 
+// DayMatches fetches every event TheSportsDB publishes for the
+// given date — across every sport, every league, every match —
+// in a single HTTP round-trip. The implementation uses the
+// unfiltered form of eventsday.php; the dispatch layer is
+// responsible for partitioning the result by league and routing
+// each bucket to the catalog.
+//
+// The returned matches carry LeagueRef.SourceLeagueId as the
+// only field the upstream guarantees. Name/Sport/Country are
+// populated from the upstream event payload (canonical sport
+// via sportsdb.NormalizeSport) as a fallback so the dispatch
+// layer can persist even before the catalog has been
+// populated by the discovery job.
+func (s *Source) DayMatches(ctx context.Context, date time.Time) ([]scraper.Match, error) {
+	dateStr := date.Format("2006-01-02")
+	raw, err := s.client.EventsDayAll(ctx, dateStr)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: day-all on %s: %w", dateStr, err)
+	}
+	out := make([]scraper.Match, 0, len(raw))
+	for _, ev := range raw {
+		if ev.Postponed {
+			continue
+		}
+		if ev.IDLeague == "" {
+			// Event has no league binding (shouldn't happen
+			// but be defensive). Skip rather than dump it
+			// under a synthetic league.
+			continue
+		}
+		out = append(out, s.eventToMatch(ev))
+	}
+	return out, nil
+}
+
 // ScheduledEvents fetches the day's events for a single league
 // and converts them to scraper.Match. Postponed matches
-// (strPostponed="yes") are dropped — the daily upsert would
+// (strPostponed:"yes") are dropped — the daily upsert would
 // otherwise overwrite a rescheduled fixture with stale data.
 func (s *Source) ScheduledEvents(ctx context.Context, league scraper.LeagueRef, date time.Time) ([]scraper.Match, error) {
 	day, err := s.fetchLeagueDay(ctx, league, date)
@@ -64,7 +100,8 @@ func (s *Source) ScheduledEvents(ctx context.Context, league scraper.LeagueRef, 
 }
 
 // fetchLeagueDay pulls one league's day payload and converts
-// each Event into a scraper.Match.
+// each Event into a scraper.Match. Used by ScheduledEvents; the
+// day-wide DayMatches path calls EventsDayAll instead.
 func (s *Source) fetchLeagueDay(ctx context.Context, league scraper.LeagueRef, date time.Time) ([]scraper.Match, error) {
 	dateStr := date.Format("2006-01-02")
 	events, err := s.client.EventsByDay(ctx, league.SourceLeagueId, dateStr)
@@ -81,18 +118,47 @@ func (s *Source) fetchLeagueDay(ctx context.Context, league scraper.LeagueRef, d
 	return out, nil
 }
 
+// toMatch is the per-league path: it uses the catalog-supplied
+// LeagueRef so the persisted sport stays canonical (lowercase
+// "basketball" not TheSportsDB's verbose "Basketball").
 func (s *Source) toMatch(league scraper.LeagueRef, raw sportsdb.Event) scraper.Match {
-	// Use the league passed in by the Service so we honour the
-	// canonical sport string ("basketball", "american-football",
-	// etc.) the operator configured in the catalog. TheSportsDB's
-	// own strSport is uppercase + verbose ("Basketball"), and
-	// mixing the two would break sport filters in the API layer.
 	matchLeague := scraper.LeagueRef{
 		Source:         s.Name(),
 		SourceLeagueId: league.SourceLeagueId,
 		Name:           raw.League,
 		Sport:          league.Sport,
 		Country:        league.Country,
+	}
+	return scraper.Match{
+		Source:         s.Name(),
+		SourceMatchId:  raw.IDEvent,
+		StartTimestamp: raw.Timestamp,
+		HomeScore:      raw.HomeScore,
+		AwayScore:      raw.AwayScore,
+		Status: scraper.MatchStatus{
+			Finished:  !raw.Timestamp.After(time.Now()) && (raw.HomeScore != 0 || raw.AwayScore != 0),
+			Started:   !raw.Timestamp.After(time.Now()),
+			Cancelled: false,
+		},
+		HomeTeam: s.teamFromEvent(raw.HomeTeam, raw.IDHomeTeam, raw.HomeTeamBadge),
+		AwayTeam: s.teamFromEvent(raw.AwayTeam, raw.IDAwayTeam, raw.AwayTeamBadge),
+		League:   matchLeague,
+	}
+}
+
+// eventToMatch is the day-wide path: it does not know which
+// league came from the operator's catalog, so it uses the
+// upstream's idLeague / strLeague / strSport / strCountry and
+// canonicalises the sport via sportsdb.NormalizeSport. The
+// dispatch loop overrides the sport with the catalog's value
+// if the row exists there.
+func (s *Source) eventToMatch(raw sportsdb.Event) scraper.Match {
+	matchLeague := scraper.LeagueRef{
+		Source:         s.Name(),
+		SourceLeagueId: raw.IDLeague,
+		Name:           raw.League,
+		Sport:          sportsdb.NormalizeSport(raw.Sport),
+		Country:        raw.Country,
 	}
 	return scraper.Match{
 		Source:         s.Name(),
