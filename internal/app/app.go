@@ -183,7 +183,7 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}
 
-	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis), a.logoScheduler, a.logger, a.Cfg.FotMobTimezone)
+	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis), a.logoScheduler, a.logger, a.Cfg.FotMobTimezone, a.Cfg.TheSportsDBAPIKey)
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))

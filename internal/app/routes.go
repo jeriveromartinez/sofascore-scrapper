@@ -19,7 +19,9 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/fotmob"
+	sportsdbsource "github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/sportsdb"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/sportsdb"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	goredis "github.com/redis/go-redis/v9"
@@ -213,12 +215,14 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string, theSportsDBAPIKey string) (*scraper.Service, *reporting.AggregationRepository) {
 	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{Timezone: timezone})
-	src := fotmob.NewSource(fotmobClient, logger)
+	fotmobSrc := fotmob.NewSource(fotmobClient, logger)
+	sportsdbSrc := sportsdbsource.NewSource(sportsdb.NewClient(sportsdb.Options{APIKey: theSportsDBAPIKey}))
+	dispatcher := scraper.NewSourceDispatcher(fotmobSrc, sportsdbSrc)
 	catalogRepo := catalog.NewRepository(db)
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
-	scrapeSvc, err := scraper.NewService(eventsRepo, src, catalogRepo, batchSize, concurrency, logger)
+	scrapeSvc, err := scraper.NewService(eventsRepo, dispatcher, catalogRepo, batchSize, concurrency, logger)
 	if err != nil {
 		panic("scraper: failed to create service: " + err.Error())
 	}
