@@ -62,10 +62,36 @@ func (s *Service) ActiveLeagues(ctx context.Context) ([]scraper.LeagueRef, error
 }
 
 func (s *Service) SearchLeagues(ctx context.Context, query string) ([]scraper.LeagueSearchResult, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, nil
+	}
+	// Prefer the verified-on-this-deployment catalog: any
+	// scraper_leagues row whose name matches the term has a
+	// source_league_id that the operator already knows scrapes
+	// (or knows doesn't, and can disable). Returning the upstream
+	// FotMob suggest list first would surface stale IDs (e.g. 48
+	// for EFL Championship instead of the verified 938218) and the
+	// admin who posted that ID would get nothing forever.
+	if local, err := s.repo.SearchLocalByName(ctx, q); err != nil {
+		return nil, err
+	} else if len(local) > 0 {
+		out := make([]scraper.LeagueSearchResult, 0, len(local))
+		for _, lg := range local {
+			out = append(out, scraper.LeagueSearchResult{
+				Source:         lg.Source,
+				SourceLeagueId: lg.SourceLeagueId,
+				Name:           lg.Name,
+				Country:        lg.Country,
+				Sport:          lg.Sport,
+			})
+		}
+		return out, nil
+	}
 	if s.search == nil {
 		return nil, nil
 	}
-	return s.search.SearchLeagues(ctx, query)
+	return s.search.SearchLeagues(ctx, q)
 }
 
 func validate(sl *ScraperLeague) error {
