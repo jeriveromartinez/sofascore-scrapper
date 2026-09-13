@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -391,5 +392,226 @@ func TestTeamLogoURL_429CachedAsNegativeHit(t *testing.T) {
 	// throttled server).
 	if got := atomic.LoadInt32(&hits); got > 1 {
 		t.Errorf("upstream hits = %d, want <= 1 (negative cache must suppress retries)", got)
+	}
+}
+
+// TestEventsByDay_ParsesRealShape exercises the TheSportsDB
+// eventsday.php payload shape we observed against the live API
+// (NBA on 2026-01-15). The fixture mirrors the documented fields
+// exactly so a payload-format drift trips the test.
+func TestEventsByDay_ParsesRealShape(t *testing.T) {
+	fixture := `{"events":[
+		{
+			"idEvent":"2357930",
+			"idAPIfootball":"470046",
+			"strTimestamp":"2026-01-15T00:00:00",
+			"strEvent":"Indiana Pacers vs Toronto Raptors",
+			"strHomeTeam":"Indiana Pacers",
+			"strAwayTeam":"Toronto Raptors",
+			"intHomeScore":"101",
+			"intAwayScore":"115",
+			"dateEvent":"2026-01-15",
+			"strTime":"00:00:00",
+			"strTimeLocal":"19:00:00",
+			"idHomeTeam":"134873",
+			"idAwayTeam":"134864",
+			"strLeague":"NBA",
+			"strSport":"Basketball",
+			"strStatus":"Not Started",
+			"strPostponed":"no"
+		}
+	]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.RawQuery, "l=4387") {
+			http.Error(w, "wrong league", http.StatusBadRequest)
+			return
+		}
+		if !strings.Contains(r.URL.RawQuery, "d=2026-01-15") {
+			http.Error(w, "wrong date", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, fixture)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	events, err := client.EventsByDay(context.Background(), "4387", "2026-01-15")
+	if err != nil {
+		t.Fatalf("EventsByDay returned error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	got := events[0]
+	if got.IDEvent != "2357930" {
+		t.Errorf("IDEvent = %q, want 2357930", got.IDEvent)
+	}
+	if got.HomeTeam != "Indiana Pacers" {
+		t.Errorf("HomeTeam = %q, want Indiana Pacers", got.HomeTeam)
+	}
+	if got.AwayTeam != "Toronto Raptors" {
+		t.Errorf("AwayTeam = %q, want Toronto Raptors", got.AwayTeam)
+	}
+	if got.HomeScore != 101 {
+		t.Errorf("HomeScore = %d, want 101", got.HomeScore)
+	}
+	if got.AwayScore != 115 {
+		t.Errorf("AwayScore = %d, want 115", got.AwayScore)
+	}
+	if got.League != "NBA" {
+		t.Errorf("League = %q, want NBA", got.League)
+	}
+	if got.Sport != "Basketball" {
+		t.Errorf("Sport = %q, want Basketball", got.Sport)
+	}
+	if got.Timestamp.IsZero() {
+		t.Errorf("Timestamp is zero; expected 2026-01-15T00:00:00")
+	}
+	if got.Postponed {
+		t.Errorf("Postponed = true, want false (not postponed)")
+	}
+}
+
+// TestEventsByDay_EmptyDayReturnsEmptySlice covers the documented
+// "no events today" path: TheSportsDB returns {"events":null}
+// (literal null, not []) for an empty day. The client must treat
+// both shapes as an empty result.
+func TestEventsByDay_EmptyDayReturnsEmptySlice(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"events":null}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	events, err := client.EventsByDay(context.Background(), "4387", "2026-01-15")
+	if err != nil {
+		t.Fatalf("EventsByDay returned error: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("got %d events, want 0", len(events))
+	}
+}
+
+// TestEventsByDay_RateLimited ensures the shared rate limiter
+// spaces subsequent calls. Without it, the multi-sport scrape
+// loop would burst 8 simultaneous TheSportsDB hits and trip
+// the 30 req/min free-tier quota. The callers vary (leagueID,
+// date) per call so the in-memory cache cannot short-circuit
+// any of them — every request goes through the rate limiter.
+func TestEventsByDay_RateLimited(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"events":[]}`)
+	}))
+	defer server.Close()
+
+	client := NewClientForTest(Options{BaseURL: server.URL + "/api/v1/json/3"}, 80*time.Millisecond)
+
+	// Each call uses a distinct (leagueID, date) so the cache
+	// cannot absorb a repeat — every request reaches the rate
+	// limiter. The 80ms interval × 3 calls = ≥160ms expected.
+	calls := []struct {
+		league, date string
+	}{
+		{"4387", "2026-01-15"},
+		{"4387", "2026-01-16"},
+		{"4387", "2026-01-17"},
+	}
+	start := time.Now()
+	for _, call := range calls {
+		if _, err := client.EventsByDay(context.Background(), call.league, call.date); err != nil {
+			t.Fatalf("EventsByDay(%s, %s): %v", call.league, call.date, err)
+		}
+	}
+	elapsed := time.Since(start)
+	if elapsed < 150*time.Millisecond {
+		t.Errorf("3 calls elapsed = %s, want >= 150ms (rate limit must space them)", elapsed)
+	}
+}
+
+// TestEventsByDay_429PausesUntilWindowExpires verifies that a 429
+// response pauses subsequent calls. TheSportsDB's free tier
+// throttles at ~30 req/min; without this backoff the
+// multi-sport scraper would trip it on the first league burst.
+func TestEventsByDay_429PausesUntilWindowExpires(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		http.Error(w, "throttled", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	if _, err := client.EventsByDay(context.Background(), "4387", "2026-01-15"); err == nil {
+		t.Fatal("expected error from 429")
+	}
+	if remaining := client.throttleRemaining(); remaining <= 0 {
+		t.Errorf("expected throttleRemaining > 0 after 429, got %v", remaining)
+	}
+}
+
+// TestEventsByDay_PostponedFlagDocumentsShape documents the
+// "strPostponed":"yes" shape the upstream emits when a match is
+// postponed. The scraper marks the result as cancelled and skips
+// it from the daily upsert; the test pins the field name so a
+// upstream payload rename is caught.
+func TestEventsByDay_PostponedFlagDocumentsShape(t *testing.T) {
+	fixture := `{"events":[{
+		"idEvent":"9999",
+		"strEvent":"PSG vs Marseille",
+		"strHomeTeam":"PSG",
+		"strAwayTeam":"Marseille",
+		"dateEvent":"2026-01-15",
+		"strTime":"20:00:00",
+		"idHomeTeam":"1",
+		"idAwayTeam":"2",
+		"strLeague":"Ligue 1",
+		"strSport":"Soccer",
+		"strStatus":"Postponed",
+		"strPostponed":"yes"
+	}]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, fixture)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	events, err := client.EventsByDay(context.Background(), "4335", "2026-01-15")
+	if err != nil {
+		t.Fatalf("EventsByDay returned error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	if !events[0].Postponed {
+		t.Errorf("Postponed = false, want true (strPostponed=yes)")
+	}
+}
+
+// TestEventsByDay_CachesSuccess verifies successful lookups are
+// cached so the daily cron does not re-hit TheSportsDB for the
+// same (league, date) within cacheTTL.
+func TestEventsByDay_CachesSuccess(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"events":[]}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	for i := 0; i < 5; i++ {
+		if _, err := client.EventsByDay(context.Background(), "4387", "2026-01-15"); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("upstream hits = %d, want 1 (cache should suppress repeats)", got)
 	}
 }

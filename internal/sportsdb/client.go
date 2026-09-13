@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -92,12 +93,15 @@ type Client struct {
 	baseURL string
 	http    *http.Client
 
-	mu           sync.Mutex
-	cache        map[string]cachedEntry
-	rateMu       sync.Mutex
-	lastFetch    time.Time
-	throttleMu   sync.Mutex
+	mu        sync.Mutex
+	cache     map[string]cachedEntry
+	rateMu    sync.Mutex
+	lastFetch time.Time
+	throttleMu sync.Mutex
 	throttleUntil time.Time
+
+	// dayCache holds EventsByDay results keyed by league+date.
+	dayCache eventsByDayCacheMap
 
 	// testRateInterval overrides rateLimitInterval when set by
 	// NewClientForTest. Production code leaves it at zero and the
@@ -122,6 +126,47 @@ type cachedEntry struct {
 	expires  time.Time
 }
 
+// Event is a single match surfaced by EventsByDay. The shape is a
+// straight pass-through of the TheSportsDB eventsday.php payload —
+// the scraper source layer maps this to scraper.Match.
+type Event struct {
+	IDEvent     string
+	IDAPI       string
+	HomeTeam    string
+	AwayTeam    string
+	HomeScore   int
+	AwayScore   int
+	// Timestamp is the wall-clock UTC for the match kick-off,
+	// derived from dateEvent + strTime + strTimestamp (the latter
+	// wins when present so the upstream's authoritative value
+	// survives).
+	Timestamp time.Time
+	// Postponed is true when the upstream emitted
+	// strPostponed:"yes". The scraper treats postponed matches
+	// as cancelled and drops them from the daily upsert.
+	Postponed bool
+	// League and Sport pass through from the upstream payload
+	// ("NBA", "Basketball") so the scraper can detect mapping
+	// errors during field renames.
+	League string
+	Sport  string
+}
+
+// eventsByDayCacheEntry stores the parsed events under the cache
+// key (leagueID, date). The same cache TTL applies — 24h for hits,
+// 15min for misses — so a transient outage doesn't permanently
+// mask a day.
+type eventsByDayCacheEntry struct {
+	events  []Event
+	err     error
+	expires time.Time
+}
+
+type eventsByDayCacheMap struct {
+	mu sync.Mutex
+	m  map[string]eventsByDayCacheEntry
+}
+
 // NewClient returns a Client configured with the supplied Options.
 // Missing fields fall back to package defaults.
 func NewClient(opts Options) *Client {
@@ -138,10 +183,11 @@ func NewClient(opts Options) *Client {
 		httpClient = &http.Client{Timeout: DefaultTimeout}
 	}
 	return &Client{
-		apiKey:  apiKey,
-		baseURL: baseURL,
-		http:    httpClient,
-		cache:   make(map[string]cachedEntry),
+		apiKey:   apiKey,
+		baseURL:  baseURL,
+		http:     httpClient,
+		cache:    make(map[string]cachedEntry),
+		dayCache: eventsByDayCacheMap{m: make(map[string]eventsByDayCacheEntry)},
 	}
 }
 
@@ -331,6 +377,168 @@ func (c *Client) fetchTeamLogo(ctx context.Context, name string) (string, error)
 	return "", fmt.Errorf("sportsdb: %s: matched but no badge/logo URL", name)
 }
 
+// EventsByDay returns the events scheduled for `date` in the
+// TheSportsDB league identified by `leagueID`. The date is passed
+// through verbatim so callers can use any timezone they want —
+// the upstream expects YYYY-MM-DD strings.
+//
+// Results are cached in-memory under (leagueID, date) with the
+// same TTLs as TeamLogoURL (24h for hits, 15min for misses). The
+// shared rate limiter prevents the daily multi-league cron from
+// bursting through the free-tier 30 req/min quota.
+//
+// An empty result ({"events":null}) is a valid empty day, not an
+// error — the scheduler treats it as a no-op.
+func (c *Client) EventsByDay(ctx context.Context, leagueID string, date string) ([]Event, error) {
+	if leagueID == "" {
+		return nil, fmt.Errorf("sportsdb: empty league id")
+	}
+	if date == "" {
+		return nil, fmt.Errorf("sportsdb: empty date")
+	}
+
+	if cached, ok := c.lookupDayCache(leagueID, date); ok {
+		return cached.events, cached.err
+	}
+
+	events, err := c.fetchDayEvents(ctx, leagueID, date)
+	c.storeDayCache(leagueID, date, events, err)
+	return events, err
+}
+
+func (c *Client) lookupDayCache(leagueID, date string) (eventsByDayCacheEntry, bool) {
+	c.dayCache.mu.Lock()
+	defer c.dayCache.mu.Unlock()
+	entry, ok := c.dayCache.m[leagueID+"|"+date]
+	if !ok || time.Now().After(entry.expires) {
+		return eventsByDayCacheEntry{}, false
+	}
+	return entry, true
+}
+
+func (c *Client) storeDayCache(leagueID, date string, events []Event, err error) {
+	ttl := cacheTTL
+	if err != nil {
+		ttl = negativeCacheTTL
+	}
+	c.dayCache.mu.Lock()
+	defer c.dayCache.mu.Unlock()
+	c.dayCache.m[leagueID+"|"+date] = eventsByDayCacheEntry{
+		events:  events,
+		err:     err,
+		expires: time.Now().Add(ttl),
+	}
+}
+
+// dayEvent is the wire shape of a single event in the
+// eventsday.php payload. We only decode the fields we need.
+type dayEvent struct {
+	IDEvent     string `json:"idEvent"`
+	IDAPI       string `json:"idAPIfootball"`
+	HomeTeam    string `json:"strHomeTeam"`
+	AwayTeam    string `json:"strAwayTeam"`
+	HomeScore   string `json:"intHomeScore"`
+	AwayScore   string `json:"intAwayScore"`
+	DateEvent   string `json:"dateEvent"`
+	StrTime     string `json:"strTime"`
+	StrTimeLocal string `json:"strTimeLocal"`
+	StrTimestamp string `json:"strTimestamp"`
+	League      string `json:"strLeague"`
+	Sport       string `json:"strSport"`
+	Postponed   string `json:"strPostponed"`
+}
+
+type dayEventsResponse struct {
+	Events []dayEvent `json:"events"`
+}
+
+func (c *Client) fetchDayEvents(ctx context.Context, leagueID, date string) ([]Event, error) {
+	if err := c.waitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("sportsdb: rate limit wait: %w", err)
+	}
+	u := fmt.Sprintf("%s/%s/eventsday.php?d=%s&l=%s",
+		c.baseURL, c.apiKey, url.QueryEscape(date), url.QueryEscape(leagueID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: build request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: fetch day events: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		c.recordThrottle()
+		return nil, fmt.Errorf("sportsdb: day events %s: unexpected HTTP 429", date)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("sportsdb: day events %s: unexpected HTTP %d", date, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: read body: %w", err)
+	}
+
+	// TheSportsDB returns {"events":null} on empty days, not
+	// {"events":[]}. We unmarshal into a slice and treat nil as
+	// an empty result so callers see a consistent []Event{}.
+	var parsed dayEventsResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("sportsdb: decode day events: %w", err)
+	}
+	out := make([]Event, 0, len(parsed.Events))
+	for _, raw := range parsed.Events {
+		out = append(out, decodeDayEvent(raw))
+	}
+	return out, nil
+}
+
+func decodeDayEvent(raw dayEvent) Event {
+	ts := parseEventTimestamp(raw)
+	home, _ := strconv.Atoi(raw.HomeScore)
+	away, _ := strconv.Atoi(raw.AwayScore)
+	return Event{
+		IDEvent:   raw.IDEvent,
+		IDAPI:     raw.IDAPI,
+		HomeTeam:  raw.HomeTeam,
+		AwayTeam:  raw.AwayTeam,
+		HomeScore: home,
+		AwayScore: away,
+		Timestamp: ts,
+		Postponed: strings.EqualFold(raw.Postponed, "yes"),
+		League:    raw.League,
+		Sport:     raw.Sport,
+	}
+}
+
+// parseEventTimestamp prefers strTimestamp (RFC3339) when the
+// upstream supplies it, falling back to dateEvent + strTime. We
+// always emit UTC so callers don't have to track the league's
+// reporting timezone.
+func parseEventTimestamp(raw dayEvent) time.Time {
+	if t, err := time.Parse(time.RFC3339, raw.StrTimestamp); err == nil {
+		return t.UTC()
+	}
+	if raw.DateEvent != "" && raw.StrTime != "" {
+		t, err := time.ParseInLocation("2006-01-02 15:04:05",
+			raw.DateEvent+" "+raw.StrTime, time.UTC)
+		if err == nil {
+			return t.UTC()
+		}
+	}
+	if raw.DateEvent != "" {
+		t, err := time.ParseInLocation("2006-01-02", raw.DateEvent, time.UTC)
+		if err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
+}
 // recordThrottle pauses the rate limiter for throttleBackoff from
 // now. Subsequent calls to waitForRateLimit will sleep until that
 // point instead of returning immediately. Multiple 429s within the
