@@ -5,6 +5,7 @@ package scraper
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,7 +21,16 @@ func setupScraperTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&events.Event{}, &events.Team{}, &tournaments.Tournament{}, &tournaments.DeviceTournament{}, &tournaments.GlobalTournamentConfig{}); err != nil {
+	// The full AutoMigrateAll lives in internal/platform/database but
+	// importing it here creates an import cycle (catalog -> scraper).
+	// Migrate the subset that UpsertScrapeBatch actually touches.
+	if err := db.AutoMigrate(
+		&events.Event{},
+		&events.Team{},
+		&tournaments.Tournament{},
+		&tournaments.DeviceTournament{},
+		&tournaments.GlobalTournamentConfig{},
+	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 	return db
@@ -239,6 +249,31 @@ func (f *serviceTestFakeSource) SearchLeagues(_ context.Context, _ string) ([]Le
 	return nil, nil
 }
 
+// dayMatchingFakeSource extends serviceTestFakeSource with the
+// optional DayMatcher interface so the scheduler uses the day-dispatch
+// path instead of per-league fetches. Used to verify the dedup
+// behavior in TestService_ScrapeToday_DayMatcherDeduplicates.
+type dayMatchingFakeSource struct {
+	matches []Match
+	err     error
+
+	dayMatchesCalls atomic.Int64
+	lastDate        time.Time
+}
+
+func (f *dayMatchingFakeSource) Name() string { return "fake-daymatcher" }
+func (f *dayMatchingFakeSource) DayMatches(_ context.Context, date time.Time) ([]Match, error) {
+	f.dayMatchesCalls.Add(1)
+	f.lastDate = date
+	return f.matches, f.err
+}
+func (f *dayMatchingFakeSource) ScheduledEvents(_ context.Context, _ LeagueRef, _ time.Time) ([]Match, error) {
+	return f.matches, f.err
+}
+func (f *dayMatchingFakeSource) SearchLeagues(_ context.Context, _ string) ([]LeagueSearchResult, error) {
+	return nil, nil
+}
+
 // serviceTestFakeCatalog is a CatalogSource stub used by the integration
 // test now that the memory-catalog package has been removed. It avoids
 // an import cycle with internal/scraper/catalog (which imports this
@@ -285,5 +320,68 @@ func TestService_ScrapeToday_UpsertsFromSource(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected 1 event, got %d", count)
+	}
+}
+
+// TestService_ScrapeToday_DayMatcherDeduplicates is the regression
+// test for the P2 #1 Codex finding on PR #124: with N active
+// leagues, ScrapeToday must issue exactly 1 HTTP round-trip (via
+// DayMatches) instead of N. Without the dedup, a 41-league catalog
+// fires 41 fetches per cron tick = ~59k fetches/day.
+//
+// The test uses a source that implements DayMatcher; the fake
+// counts DayMatches invocations. The catalog has 3 active leagues;
+// the assertion is that the counter is exactly 1 after ScrapeToday.
+func TestService_ScrapeToday_DayMatcherDeduplicates(t *testing.T) {
+	db := setupScraperTestDB(t)
+	repo := events.NewRepository(db)
+
+	src := &dayMatchingFakeSource{
+		matches: []Match{
+			mkMatch("1", "47"),
+			mkMatch("2", "87"),
+			mkMatch("3", "54"),
+		},
+	}
+	cat := &serviceTestFakeCatalog{leagues: []LeagueRef{
+		{Source: "fake-daymatcher", SourceLeagueId: "47", Name: "PL"},
+		{Source: "fake-daymatcher", SourceLeagueId: "87", Name: "LL"},
+		{Source: "fake-daymatcher", SourceLeagueId: "54", Name: "BL"},
+	}}
+	svc, err := NewService(repo, src, cat, 100, 1, slog.Default())
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	fixedNow := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	svc.ScrapeToday(context.Background(), fixedNow)
+
+	if got := src.dayMatchesCalls.Load(); got != 1 {
+		t.Errorf("DayMatches calls = %d, want 1 (3 active leagues should share 1 HTTP fetch)", got)
+	}
+	if !src.lastDate.Equal(fixedNow) {
+		t.Errorf("DayMatches called with %v, want %v", src.lastDate, fixedNow)
+	}
+
+	// All three matches from the upstream payload land in the DB.
+	var count int64
+	if err := db.Model(&events.Event{}).Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("expected 3 events, got %d", count)
+	}
+}
+
+func mkMatch(id, leagueID string) Match {
+	return Match{
+		Source:         "fake-daymatcher",
+		SourceMatchId:  id,
+		Slug:           "x-" + id,
+		StartTimestamp: time.Now(),
+		Status:         MatchStatus{Type: "scheduled"},
+		HomeTeam:       Team{SourceId: 1, Name: "H"},
+		AwayTeam:       Team{SourceId: 2, Name: "A"},
+		League:         LeagueRef{Source: "fake-daymatcher", SourceLeagueId: leagueID, Name: "L"},
 	}
 }

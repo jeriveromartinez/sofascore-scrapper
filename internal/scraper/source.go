@@ -11,6 +11,20 @@ type Source interface {
 	SearchLeagues(ctx context.Context, query string) ([]LeagueSearchResult, error)
 }
 
+// DayMatcher is the optional interface that sources implement when
+// they can return every match for a date in a single HTTP round-trip.
+//
+// The FotMob /api/data/matches endpoint serves the full per-day
+// payload in one call (grouped per league). Without this interface
+// the scheduler would issue one HTTP request per (league, date) pair
+// — 41 leagues × 1 cron tick per minute × 1440 minutes ≈ 59k
+// requests/day, with the client rate-limit dropping actual
+// throughput to ~5 req/s. The scheduler uses DayMatcher when
+// available and falls back to ScheduledEvents when not.
+type DayMatcher interface {
+	DayMatches(ctx context.Context, date time.Time) ([]Match, error)
+}
+
 type LeagueRef struct {
 	Source         string
 	SourceLeagueId string
