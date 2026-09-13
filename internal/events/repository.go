@@ -46,16 +46,51 @@ func escapeLike(s string) string {
 	return b.String()
 }
 
+// LogoLookup resolves a team name to a remote logo URL. It is the
+// abstraction TheSportsDB satisfies so the downloader can fall back
+// to a search-by-name source when the SofaScore CDN returns 404 for
+// a FotMob-derived team_id.
+type LogoLookup interface {
+	TeamLogoURL(ctx context.Context, name string) (string, error)
+}
+
 type Repository struct {
 	db           *gorm.DB
-	scheduleLogo func(*gorm.DB, int64, string)
+	scheduleLogo func(*gorm.DB, LogoJob)
+	logoLookup   LogoLookup
 }
 
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{
 		db:           db,
-		scheduleLogo: func(*gorm.DB, int64, string) {},
+		scheduleLogo: func(*gorm.DB, LogoJob) {},
 	}
+}
+
+// WithLogoLookup installs a fallback source resolver used by
+// downloadAndUpdateTeamLogo when the primary URL fails. Pass nil to
+// restore the no-fallback behaviour (useful in tests).
+func (r *Repository) WithLogoLookup(lookup LogoLookup) *Repository {
+	r.logoLookup = lookup
+	return r
+}
+
+// WithLogoScheduler installs the scheduler used by ReconcileTeamLogos
+// (and any internal caller) to enqueue per-team download jobs. Pass
+// nil to restore the no-op default.
+//
+// The scheduler is intentionally separate from the handler closure
+// (DownloadAndPersistLogo): NewLogoScheduler takes the handler, this
+// method takes the queue. Together they form a full backfill loop —
+// the scheduler's worker pool drains jobs, and ReconcileTeamLogos
+// keeps enqueuing missing teams on each stack restart.
+func (r *Repository) WithLogoScheduler(scheduler TeamLogoScheduler) *Repository {
+	if scheduler == nil {
+		r.scheduleLogo = func(*gorm.DB, LogoJob) {}
+		return r
+	}
+	r.scheduleLogo = scheduler.Schedule
+	return r
 }
 
 // DB exposes the underlying *gorm.DB so callers that still need raw
@@ -103,18 +138,19 @@ func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("inspect logo for team %d: %w", team.TeamId, err)
 		}
-		r.scheduleLogo(r.db, team.TeamId, TeamLogoSourceURL(team.TeamId))
+		r.scheduleLogo(r.db, LogoJob{
+			TeamID:     team.TeamId,
+			TeamName:   team.Name,
+			PrimaryURL: TeamLogoSourceURL(team.TeamId),
+		})
 	}
 	return nil
 }
 
-type pendingLogo struct {
-	teamID    int64
-	sourceURL string
-}
+type pendingLogo = LogoJob
 
-func prepareTeamLogo(team *Team) pendingLogo {
-	pending := pendingLogo{teamID: team.TeamId, sourceURL: team.LogoUrl}
+func prepareTeamLogo(team *Team) LogoJob {
+	pending := LogoJob{TeamID: team.TeamId, TeamName: team.Name, PrimaryURL: team.LogoUrl}
 	team.LogoUrl = TeamLogoAPIPath(team.TeamId)
 	return pending
 }
@@ -129,8 +165,8 @@ func (r *Repository) upsertTeam(ctx context.Context, team *Team) error {
 	}).Create(team).Error; err != nil {
 		return err
 	}
-	if pending.sourceURL != "" && !isProxiedLogoURL(pending.sourceURL) {
-		r.scheduleLogo(r.db, pending.teamID, pending.sourceURL)
+	if pending.PrimaryURL != "" && !isProxiedLogoURL(pending.PrimaryURL) {
+		r.scheduleLogo(r.db, pending)
 	}
 	return nil
 }
@@ -143,7 +179,7 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 	pendingLogos := make([]pendingLogo, 0, len(batch.Teams))
 	for i := range batch.Teams {
 		pending := prepareTeamLogo(&batch.Teams[i])
-		if pending.sourceURL != "" && !isProxiedLogoURL(pending.sourceURL) {
+		if pending.PrimaryURL != "" && !isProxiedLogoURL(pending.PrimaryURL) {
 			pendingLogos = append(pendingLogos, pending)
 		}
 	}
@@ -200,7 +236,7 @@ func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, b
 	}
 
 	for _, pending := range pendingLogos {
-		r.scheduleLogo(r.db, pending.teamID, pending.sourceURL)
+		r.scheduleLogo(r.db, pending)
 	}
 
 	return nil
@@ -210,19 +246,76 @@ func isProxiedLogoURL(url string) bool {
 	return strings.HasPrefix(url, "/teams/logo/") || strings.HasPrefix(url, "/api/app/v1/teams/logo/")
 }
 
-func downloadAndUpdateTeamLogo(ctx context.Context, db *gorm.DB, teamID int64, sourceURL string) {
-	if _, err := DownloadTeamLogoWithContext(ctx, teamID, sourceURL); err != nil {
-		log.Printf("events: failed to download logo for team %d: %v", teamID, err)
+// DownloadAndPersistLogo is the entry point the LogoScheduler calls
+// for every job. It walks the source chain — primary URL, optional
+// TheSportsDB lookup, and the ID-based SofaScore CDN fallback — and
+// updates Team.logo_url to the proxied API path on the first hit.
+//
+// The chain order matters:
+//  1. Primary URL (scraper-provided, e.g. from FotMob CDN).
+//  2. TheSportsDB by name — only consulted when the primary fails and
+//     a LogoLookup has been installed via WithLogoLookup.
+//  3. SofaScore CDN by team_id — last resort, only works when FotMob
+//     and SofaScore share an ID for the team (true for ~25% of the
+//     teams we currently seed).
+//
+// The lookup step is rate-limited by TheSportsDB's free public key
+// (~30 req/min), so we only consult it after the primary has
+// already failed. This keeps the common path (primary succeeds)
+// cost-free.
+//
+// All errors are logged but never propagated; a single team's
+// download failure must not stop the scheduler.
+//
+// db may be nil (used by tests that exercise the source chain
+// without a backing store). When the download succeeds and db is
+// nil, the LogoUrl update is silently skipped — the file on disk
+// still serves the logo through the API endpoint.
+func (r *Repository) DownloadAndPersistLogo(ctx context.Context, db *gorm.DB, job LogoJob) {
+	if r.tryDownloadAndPersist(ctx, db, job.TeamID, job.PrimaryURL) {
 		return
+	}
+	if r.logoLookup != nil && strings.TrimSpace(job.TeamName) != "" {
+		url, lookupErr := r.logoLookup.TeamLogoURL(ctx, job.TeamName)
+		if lookupErr != nil {
+			log.Printf("events: logo lookup for team %d (%q) failed: %v", job.TeamID, job.TeamName, lookupErr)
+		} else if url != "" && r.tryDownloadAndPersist(ctx, db, job.TeamID, url) {
+			return
+		}
+	}
+	if r.tryDownloadAndPersist(ctx, db, job.TeamID, TeamLogoSourceURL(job.TeamID)) {
+		return
+	}
+	log.Printf("events: no logo source succeeded for team %d (name=%q, primary=%q)", job.TeamID, job.TeamName, job.PrimaryURL)
+}
+
+// tryDownloadAndPersist attempts one source URL: writes the image
+// to disk and updates Team.logo_url on success. Returns true when
+// the file landed on disk — callers use this to decide whether to
+// fall through to the next source. Errors are logged but never
+// returned because each caller wants to continue the chain.
+func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, teamID int64, url string) bool {
+	if url == "" {
+		return false
+	}
+	if _, err := DownloadTeamLogoWithContext(ctx, teamID, url); err != nil {
+		log.Printf("events: failed to download logo for team %d from %s: %v", teamID, url, err)
+		return false
 	}
 	if ctx.Err() != nil {
-		return
+		return true
 	}
-
+	if db == nil {
+		// Test-mode: the file landed on disk so the API endpoint
+		// will still serve it. The LogoUrl column update requires a
+		// real *gorm.DB.
+		return true
+	}
 	apiPath := TeamLogoAPIPath(teamID)
 	if err := db.WithContext(ctx).Model(&Team{}).Where("team_id = ?", teamID).Update("logo_url", apiPath).Error; err != nil {
 		log.Printf("events: failed to update logo URL for team %d: %v", teamID, err)
 	}
+	return true
 }
 
 func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]uint, error) {

@@ -79,6 +79,13 @@ type Config struct {
 	// editorial day (matches are published with the venue's local
 	// evening as "today's slate").
 	FotMobTimezone string
+	// TheSportsDBAPIKey is the API key passed to the TheSportsDB
+	// /api/v1/json/<key>/searchteams.php endpoint used as a
+	// fallback logo source. Default "3" is the free public key
+	// documented at https://www.thesportsdb.com/api.php. Patreon
+	// supporters can pass their personal key for higher rate
+	// limits.
+	TheSportsDBAPIKey string
 }
 
 func Load() (Config, error) {
@@ -103,6 +110,7 @@ func Load() (Config, error) {
 		PushTimerBatchLimit:    getInt("PUSH_TIMER_BATCH_LIMIT", 100),
 		SkipMigrate:            getBool("SKIP_MIGRATE", false),
 		FotMobTimezone:         getEnv("FOTMOB_TIMEZONE", "Europe/Paris"),
+		TheSportsDBAPIKey:      getEnv("THESPORTSDB_API_KEY", "3"),
 		Database: Database{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "3306"),

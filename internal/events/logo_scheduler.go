@@ -9,8 +9,25 @@ import (
 
 const logoWorkerCount = 10
 
+// LogoJob describes one team whose logo must be resolved. TeamName is
+// optional but, when set, lets the downloader query TheSportsDB as a
+// fallback when the primary URL fails (FotMob and SofaScore maintain
+// independent team-ID spaces, so some teams have no asset in the
+// SofaScore CDN).
+type LogoJob struct {
+	TeamID     int64
+	TeamName   string
+	PrimaryURL string
+}
+
+// LogoJobHandler is the per-job callback the Repository installs at
+// scheduler construction time. The scheduler hands the work to a
+// worker pool which calls the handler on a separate goroutine; the
+// handler must be safe to call concurrently.
+type LogoJobHandler func(ctx context.Context, db *gorm.DB, job LogoJob)
+
 type TeamLogoScheduler interface {
-	Schedule(*gorm.DB, int64, string)
+	Schedule(*gorm.DB, LogoJob)
 	Stop()
 	Shutdown(context.Context)
 }
@@ -25,18 +42,24 @@ type LogoScheduler struct {
 	workCtx    context.Context
 	cancelWork context.CancelFunc
 	workers    sync.WaitGroup
+	handler    LogoJobHandler
 }
 
-func NewLogoScheduler() *LogoScheduler {
-	return newLogoScheduler(logoWorkerCount)
+// NewLogoScheduler builds a scheduler that delegates each job to
+// handler. handler is invoked from the worker pool — callers must
+// keep it free of long-blocking work that the scheduler's Stop /
+// Shutdown cannot cancel via context.
+func NewLogoScheduler(handler LogoJobHandler) *LogoScheduler {
+	return newLogoScheduler(logoWorkerCount, handler)
 }
 
-func newLogoScheduler(workerCount int) *LogoScheduler {
+func newLogoScheduler(workerCount int, handler LogoJobHandler) *LogoScheduler {
 	workCtx, cancelWork := context.WithCancel(context.Background())
 	scheduler := &LogoScheduler{
 		pending:    make(map[int64]func(context.Context)),
 		workCtx:    workCtx,
 		cancelWork: cancelWork,
+		handler:    handler,
 	}
 	scheduler.ready = sync.NewCond(&scheduler.mu)
 	scheduler.workers.Add(workerCount)
@@ -63,9 +86,16 @@ func (s *LogoScheduler) enqueue(teamID int64, work func(context.Context)) bool {
 	return true
 }
 
-func (s *LogoScheduler) Schedule(db *gorm.DB, teamID int64, sourceURL string) {
-	s.enqueue(teamID, func(ctx context.Context) {
-		downloadAndUpdateTeamLogo(ctx, db.Session(&gorm.Session{}), teamID, sourceURL)
+func (s *LogoScheduler) Schedule(db *gorm.DB, job LogoJob) {
+	if s.handler == nil {
+		// Defensive default: tests can construct a scheduler without
+		// a handler to exercise queue / dedup behavior. Production
+		// always passes a handler via NewLogoScheduler.
+		s.enqueue(job.TeamID, func(context.Context) {})
+		return
+	}
+	s.enqueue(job.TeamID, func(ctx context.Context) {
+		s.handler(ctx, db.Session(&gorm.Session{}), job)
 	})
 }
 

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
 	"gorm.io/gorm"
 )
@@ -197,7 +198,7 @@ func (s *blockingLogoLifecycle) Stop() {
 	s.stopOnce.Do(func() { close(s.stopped) })
 }
 
-func (s *blockingLogoLifecycle) Schedule(*gorm.DB, int64, string) {}
+func (s *blockingLogoLifecycle) Schedule(*gorm.DB, events.LogoJob) {}
 
 func (s *blockingLogoLifecycle) Shutdown(ctx context.Context) {
 	s.shutdownOnce.Do(func() { close(s.shutdownStarted) })
