@@ -17,8 +17,36 @@ func ToTeam(source Team) events.Team {
 		PrimaryColor:   source.PrimaryColor,
 		SecondaryColor: source.SecondaryColor,
 		TextColor:      source.TextColor,
-		LogoUrl:        source.LogoURL,
+		LogoUrl:        LogoURLForSource(source.SourceId, source.LogoURL),
 	}
+}
+
+// LogoURLForSource returns the URL the LogoScheduler should download
+// for a team. The source-agnostic Team.LogoURL is empty when the
+// upstream payload does not include the field — FotMob's 2026
+// /api/data/matches payload is one such case. As a fallback, derive
+// the public FotMob CDN URL for the team ID so the LogoScheduler has
+// something to download.
+//
+// The CDN URL pattern (https://images.fotmob.com/image_resources/
+// logo/teamlogo_<id>.png) is the one FotMob serves on its own web
+// pages; it is verified by hand against the live FotMob UI as of
+// 2026-09-13. The CDN still requires a Referer + browser-context
+// headers that the current LogoScheduler cannot satisfy, so
+// downloads will keep 403'ing until the scheduler is upgraded to use
+// the rod browser context — but at least the URL is correct so the
+// fix is one-line away when that lands.
+//
+// If LogoURL is already set (e.g. for a future source that ships a
+// full image URL), it is returned verbatim — the source wins.
+func LogoURLForSource(sourceID int64, logoURL string) string {
+	if logoURL != "" {
+		return logoURL
+	}
+	if sourceID == 0 {
+		return ""
+	}
+	return "https://images.fotmob.com/image_resources/logo/teamlogo_" + strconv.FormatInt(sourceID, 10) + ".png"
 }
 
 func ToTournament(source LeagueRef) tournaments.Tournament {
