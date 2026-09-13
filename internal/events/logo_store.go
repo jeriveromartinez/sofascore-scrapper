@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	neturl "net/url"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -139,7 +140,14 @@ func downloadTeamLogoWithContext(ctx context.Context, teamID int64, sourceURL st
 	}
 	req.Header.Set("User-Agent", imageBrowserUserAgent)
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-	req.Header.Set("Referer", "https://www.sofascore.com/")
+	// Use the source URL's origin as Referer so the request matches the
+	// CDN's expectation. FotMob and SofaScore CDNs both reject requests
+	// with the wrong (or empty) Referer. Using the URL origin keeps the
+	// header correct regardless of which upstream CDN the team row came
+	// from. If parsing fails, fall back to the origin path of sourceURL.
+	if u, parseErr := neturl.Parse(sourceURL); parseErr == nil && u.Scheme != "" && u.Host != "" {
+		req.Header.Set("Referer", u.Scheme+"://"+u.Host+"/")
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

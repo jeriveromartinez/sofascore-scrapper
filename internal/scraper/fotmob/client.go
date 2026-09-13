@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -133,6 +134,24 @@ func (c *Client) dayMatches(ctx context.Context, date time.Time) (apiMatchesResp
 	var resp apiMatchesResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return apiMatchesResponse{}, fmt.Errorf("fotmob: parse matches: %w", err)
+	}
+	return resp, nil
+}
+
+// Suggest queries FotMob's public suggest endpoint and returns the raw
+// JSON envelope. The shape is loosely documented: an object whose
+// `suggestions` array carries typed entries (league/team/player). The
+// caller (Source.SearchLeagues) is responsible for filtering by type
+// and mapping to the domain shape.
+func (c *Client) Suggest(ctx context.Context, term string) (apiSuggestResponse, error) {
+	path := fmt.Sprintf("/api/searchapi/suggest?term=%s&lang=en", url.QueryEscape(term))
+	body, err := c.doRequest(ctx, path)
+	if err != nil {
+		return apiSuggestResponse{}, err
+	}
+	var resp apiSuggestResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return apiSuggestResponse{}, fmt.Errorf("fotmob: parse suggest: %w", err)
 	}
 	return resp, nil
 }

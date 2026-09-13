@@ -1,5 +1,6 @@
 import { BaseApiService } from "./BaseApiService";
 import {
+  SetUserRoleRequest,
   StatusMessage,
   User as ProtoUserMessage,
   UserList,
@@ -46,6 +47,15 @@ export class UsersApiService extends BaseApiService {
 
   async updateUser(id: number, payload: UpdateUserPayload): Promise<User> {
     return this.put(`/${id}`, payload, UserWriteRequest, ProtoUserMessage);
+  }
+
+  async setUserRole(id: number, role: string): Promise<User> {
+    return this.put(
+      `/${id}/role`,
+      { role },
+      SetUserRoleRequest,
+      ProtoUserMessage,
+    );
   }
 
   async deleteUser(id: number): Promise<StatusResponse> {
