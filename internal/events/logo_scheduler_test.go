@@ -10,7 +10,7 @@ import (
 )
 
 func TestLogoSchedulerProcessesWorkBeyondWorkerCount(t *testing.T) {
-	scheduler := newLogoScheduler(logoWorkerCount)
+	scheduler := newLogoScheduler(logoWorkerCount, nil)
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	const total = logoWorkerCount + 5
@@ -35,7 +35,7 @@ func TestLogoSchedulerProcessesWorkBeyondWorkerCount(t *testing.T) {
 }
 
 func TestLogoSchedulerLimitsActiveWork(t *testing.T) {
-	scheduler := newLogoScheduler(logoWorkerCount)
+	scheduler := newLogoScheduler(logoWorkerCount, nil)
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	t.Cleanup(func() {
@@ -87,7 +87,7 @@ func TestLogoSchedulerLimitsActiveWork(t *testing.T) {
 }
 
 func TestLogoSchedulerCoalescesDuplicateTeamIDs(t *testing.T) {
-	scheduler := newLogoScheduler(logoWorkerCount)
+	scheduler := newLogoScheduler(logoWorkerCount, nil)
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	t.Cleanup(func() {
@@ -120,7 +120,7 @@ func TestLogoSchedulerCoalescesDuplicateTeamIDs(t *testing.T) {
 }
 
 func TestLogoSchedulerQueuedWorkDoesNotCreateGoroutines(t *testing.T) {
-	scheduler := newLogoScheduler(logoWorkerCount)
+	scheduler := newLogoScheduler(logoWorkerCount, nil)
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	t.Cleanup(func() {
@@ -157,7 +157,7 @@ func TestLogoSchedulerQueuedWorkDoesNotCreateGoroutines(t *testing.T) {
 }
 
 func TestLogoSchedulerShutdownFinishesActiveAndDiscardsQueuedWork(t *testing.T) {
-	scheduler := NewLogoScheduler()
+	scheduler := NewLogoScheduler(nil)
 	release := make(chan struct{})
 	started := make(chan struct{}, logoWorkerCount)
 	completed := make(chan struct{}, logoWorkerCount)
@@ -203,7 +203,7 @@ func TestLogoSchedulerShutdownFinishesActiveAndDiscardsQueuedWork(t *testing.T) 
 }
 
 func TestLogoSchedulerShutdownCancelsActiveWorkAtDeadline(t *testing.T) {
-	scheduler := NewLogoScheduler()
+	scheduler := NewLogoScheduler(nil)
 	started := make(chan struct{})
 	canceled := make(chan struct{})
 	if !scheduler.enqueue(1, func(ctx context.Context) {

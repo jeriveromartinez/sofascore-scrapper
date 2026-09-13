@@ -23,6 +23,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/seeder"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/sportsdb"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	"github.com/prometheus/client_golang/prometheus"
 	goredis "github.com/redis/go-redis/v9"
@@ -39,6 +40,13 @@ type App struct {
 	Redis         *goredis.Client
 	Cfg           config.Config
 	logoScheduler events.TeamLogoScheduler
+	// logoRepo is the *events.Repository wired with the scheduler and
+	// the TheSportsDB lookup. Run() uses it for ReconcileTeamLogos so
+	// the backfill path uses the same fallback chain as the scrape
+	// path. Building a fresh repository per call would skip the
+	// TheSportsDB lookup and silently regress the fix for teams like
+	// Juventus / Atlético Madrid.
+	logoRepo *events.Repository
 	// realtimeHub is the local WebSocket registry. One per backend
 	// instance; the Redis pub/sub subscriber fans out cross-instance.
 	realtimeHub *realtime.Hub
@@ -105,7 +113,16 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	sched := scheduler.New(slog.Default())
-	logoScheduler := events.NewLogoScheduler()
+	sportsdbClient := sportsdb.NewClient(sportsdb.Options{APIKey: cfg.TheSportsDBAPIKey})
+	// Pre-create the repository so the scheduler's per-job handler
+	// closes over the same *gorm.DB and TheSportsDB client. The
+	// repository is later extended with the scheduler below in New.
+	logoRepo := events.NewRepository(db).WithLogoLookup(sportsdbClient)
+	logoScheduler := events.NewLogoScheduler(logoRepo.DownloadAndPersistLogo)
+	// Wire the scheduler back into the repository so ReconcileTeamLogos
+	// (called from Run) enqueues jobs through the same worker pool the
+	// scraper path uses.
+	logoRepo = logoRepo.WithLogoScheduler(logoScheduler)
 
 	pprofSrv := observability.NewPprofServer(cfg.PprofAddr, cfg.PprofEnabled)
 
@@ -116,6 +133,7 @@ func New(cfg config.Config) (*App, error) {
 		SQL:           sqlDB,
 		Redis:         redisClient,
 		logoScheduler: logoScheduler,
+		logoRepo:      logoRepo,
 		Pprof:         pprofSrv,
 		realtimeHub:   realtime.NewHub(),
 		batchSize:     cfg.ScrapeBatchSize,
@@ -159,8 +177,8 @@ func New(cfg config.Config) (*App, error) {
 }
 
 func (a *App) Run(ctx context.Context) error {
-	if a.DB != nil {
-		if err := events.NewRepositoryWithLogoScheduler(a.DB, a.logoScheduler).ReconcileTeamLogos(ctx); err != nil {
+	if a.logoRepo != nil {
+		if err := a.logoRepo.ReconcileTeamLogos(ctx); err != nil {
 			return err
 		}
 	}
