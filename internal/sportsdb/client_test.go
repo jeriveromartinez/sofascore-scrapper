@@ -615,3 +615,194 @@ func TestEventsByDay_CachesSuccess(t *testing.T) {
 		t.Errorf("upstream hits = %d, want 1 (cache should suppress repeats)", got)
 	}
 }
+
+// TestAllLeagues_ParsesRealShape locks in the wire shape of
+// all_leagues.php. The free tier returns ~10 entries per request,
+// so a fixture with the truncated sample is enough.
+func TestAllLeagues_ParsesRealShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"leagues":[
+			{"idLeague":"4328","strLeague":"English Premier League","strSport":"Soccer","strCountry":"England"},
+			{"idLeague":"4387","strLeague":"NBA","strSport":"Basketball","strCountry":"USA"},
+			{"idLeague":"4391","strLeague":"NFL","strSport":"American Football","strCountry":"USA"}
+		]}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	leagues, err := client.AllLeagues(context.Background())
+	if err != nil {
+		t.Fatalf("AllLeagues: %v", err)
+	}
+	if len(leagues) != 3 {
+		t.Fatalf("got %d leagues, want 3", len(leagues))
+	}
+	if leagues[1].ID != "4387" || leagues[1].Name != "NBA" || leagues[1].Sport != "Basketball" {
+		t.Errorf("leagues[1] = %+v, want NBA/Basketball", leagues[1])
+	}
+	if leagues[2].Country != "USA" {
+		t.Errorf("leagues[2].Country = %q, want USA", leagues[2].Country)
+	}
+}
+
+// TestAllLeagues_CachesSuccessfulLookups verifies the in-memory
+// cache suppresses repeats — same as the logo-lookup path so a
+// daily cron does not hammer the upstream for an unchanged list.
+func TestAllLeagues_CachesSuccessfulLookups(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"leagues":[{"idLeague":"4328","strLeague":"EPL","strSport":"Soccer","strCountry":"England"}]}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	for i := 0; i < 3; i++ {
+		if _, err := client.AllLeagues(context.Background()); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("upstream hits = %d, want 1", got)
+	}
+}
+
+// TestAllLeagues_429CachedAsNegativeHit pins the throttle contract:
+// a 429 response is cached briefly (15min) so a tight loop does
+// not spam the upstream while the throttle window is still active.
+func TestAllLeagues_429CachedAsNegativeHit(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	for i := 0; i < 3; i++ {
+		if _, err := client.AllLeagues(context.Background()); err == nil {
+			t.Fatalf("call %d: expected 429 error", i)
+		}
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("upstream hits = %d, want 1 (429 must be cached as negative hit)", got)
+	}
+}
+
+// TestNormalizeSport covers the canonical mapping for every sport
+// the multi-sport scraper seeds today and a fallback for unknown
+// sports so the catalog never sees an upper-case raw string.
+func TestNormalizeSport(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"Soccer", "football"},
+		{"soccer", "football"},
+		{"American Football", "american-football"},
+		{"Ice Hockey", "ice-hockey"},
+		{"Basketball", "basketball"},
+		{"Baseball", "baseball"},
+		{"", ""},
+		{"   ", ""},
+		{"Cricket", "cricket"},
+		{"Motor Sport", "motor-sport"},
+		{"  Rugby Union  ", "rugby-union"},
+	}
+	for _, c := range cases {
+		if got := NormalizeSport(c.in); got != c.want {
+			t.Errorf("NormalizeSport(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestEventsDayAll_ParsesRealShape covers the day-wide path:
+// eventsday.php?d=<date> with no league filter returns events
+// across every sport the upstream publishes for that date.
+// Sample fixture mixes NFL (American Football) and NBA
+// (Basketball) to lock in the multi-sport decoding.
+func TestEventsDayAll_ParsesRealShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.RawQuery, "d=2026-09-13") {
+			http.Error(w, "wrong date", http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(r.URL.RawQuery, "l=") {
+			http.Error(w, "must not include league filter", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"events":[
+			{"idEvent":"2475376","idLeague":"4391","strHomeTeam":"Cincinnati Bengals","strAwayTeam":"Tampa Bay Buccaneers","dateEvent":"2026-09-13","strTimestamp":"2026-09-13T17:00:00","strLeague":"NFL","strSport":"American Football","strCountry":"United States","intHomeScore":"33","intAwayScore":"27","idHomeTeam":"134923","idAwayTeam":"134945","strHomeTeamBadge":"https://x/y.png","strAwayTeamBadge":"https://x/z.png","strPostponed":"no"},
+			{"idEvent":"441613","idLeague":"4387","strHomeTeam":"Los Angeles Lakers","strAwayTeam":"Boston Celtics","dateEvent":"2026-09-13","strTimestamp":"2026-09-13T00:00:00","strLeague":"NBA","strSport":"Basketball","strCountry":"USA","intHomeScore":"0","intAwayScore":"0","idHomeTeam":"133604","idAwayTeam":"133601","strHomeTeamBadge":"https://x/a.png","strAwayTeamBadge":"https://x/b.png","strPostponed":"no"}
+		]}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	events, err := client.EventsDayAll(context.Background(), "2026-09-13")
+	if err != nil {
+		t.Fatalf("EventsDayAll: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2", len(events))
+	}
+	if events[0].IDLeague != "4391" || events[0].League != "NFL" || events[0].Sport != "American Football" {
+		t.Errorf("events[0] league = (%q, %q, %q), want (4391, NFL, American Football)",
+			events[0].IDLeague, events[0].League, events[0].Sport)
+	}
+	if events[1].IDLeague != "4387" || events[1].Sport != "Basketball" {
+		t.Errorf("events[1] league = (%q, %q), want (4387, Basketball)", events[1].IDLeague, events[1].Sport)
+	}
+	if events[0].Country != "United States" {
+		t.Errorf("events[0].Country = %q, want United States", events[0].Country)
+	}
+}
+
+// TestEventsDayAll_CachesSuccess ensures the day-wide fetch is
+// cached for 24h on success — same contract as the per-league
+// path so a daily cron does not re-hit a stable day.
+func TestEventsDayAll_CachesSuccess(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"events":[]}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	for i := 0; i < 3; i++ {
+		if _, err := client.EventsDayAll(context.Background(), "2026-09-13"); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("upstream hits = %d, want 1", got)
+	}
+}
+
+// TestEventsDayAll_EmptyDayReturnsEmptySlice covers the documented
+// shape quirk: TheSportsDB returns {"events":null} on empty days.
+// The client surfaces a non-nil empty slice so callers don't have
+// to nil-check.
+func TestEventsDayAll_EmptyDayReturnsEmptySlice(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"events":null}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{BaseURL: server.URL + "/api/v1/json/3"})
+	events, err := client.EventsDayAll(context.Background(), "2099-01-01")
+	if err != nil {
+		t.Fatalf("EventsDayAll: %v", err)
+	}
+	if events == nil {
+		t.Fatal("EventsDayAll returned nil slice; want empty non-nil")
+	}
+	if len(events) != 0 {
+		t.Errorf("got %d events, want 0", len(events))
+	}
+}
