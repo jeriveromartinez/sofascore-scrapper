@@ -2,7 +2,23 @@
 
 **Audience:** on-call operator. **Audience assumes:** basic Go + docker + SQL knowledge.
 
+## Prerequisites
+
+This runbook assumes PRs #134 and #135 have been merged into the deployed branch. Without those:
+
+- The dispatcher only registers `fotmob` and `sportsdb`; no events are scraped for any `scraper_leagues` row with `source='scores365'`.
+- The admin UI has no `override_source` field; the documented rollback step below will silently fail.
+- The `override_source` PATCH whitelist is missing in the catalog handler.
+
+Verify with:
+```bash
+git log --oneline -1 | grep -E '#13[45]'
+```
+If neither PR appears in the recent commits, do NOT follow this runbook — the feature is not yet deployed.
+
 ## Post-deploy verification (smoke test)
+
+DB_PASSWORD must be exported (see `.env.example` for the default in dev).
 
 Run after `git pull` on the backend host, BEFORE promoting the change to production:
 
@@ -14,18 +30,19 @@ Run after `git pull` on the backend host, BEFORE promoting the change to product
 2. Wait 60s for boot + first discovery + cron tick.
 3. Verify discovery:
    ```bash
-   docker exec docker-mariadb-1 mariadb -uroot -pdevpass1234 sofascore -e \
+   docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -e \
      "SELECT source, sport, COUNT(*) FROM scraper_leagues GROUP BY source, sport ORDER BY source, sport;"
    ```
    Expect: `fotmob` and `scores365` rows; scores365 covers basketball, tennis, hockey, american-football, baseball, volleyball.
 4. Verify events:
    ```bash
-   docker exec docker-mariadb-1 mariadb -uroot -pdevpass1234 sofascore -e \
+   docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -e \
      "SELECT source, sport, COUNT(*) FROM events GROUP BY source, sport ORDER BY source, sport;"
    ```
 5. Hit events API:
    ```bash
-   curl -i http://localhost:8181/api/app/v1/events/page?limit=10
+   # /api/app/v1/current-events is the registered public endpoint; compose.dev.yml maps host 8080 -> container 8180.
+   curl -i http://localhost:8080/api/app/v1/current-events?limit=10
    ```
    Expect HTTP 200, team names populated.
 6. Verify a team logo:
@@ -75,12 +92,12 @@ Discovery runs **once at boot only** (30s timeout per sport, 6 sports total). It
 
 1. Check `curl -i https://webws.365scores.com/data/games?lang=en` from the backend host. 200 = upstream OK; 503/429 = rate-limited or upstream degraded; 404 = endpoint removed (escalate).
 2. `docker logs docker-backend-1 --since 5m | grep -i scores365`. Look for `fetch error`, `decode error`, or `429`.
-3. If 429: the in-memory cache holds the last good feed for 60s, so a single tick survives short bursts. The HTTP client also retries with exponential backoff (1s, 2s, 4s, 8s, 16s) before giving up. Sustained 429s indicate a real rate-limit; escalate before considering a code change.
+3. If 429: The HTTP client retries with exponential backoff (1s, 2s, 4s, 8s, 16s) before giving up. Short 429 bursts within a 60s window are absorbed by the in-memory cache; longer bursts exhaust the retries and the tick fails. Sustained 429s indicate a real rate-limit; escalate before considering a code change.
 4. If decode error: the upstream changed the wire format. Capture the response with `curl 'https://webws.365scores.com/data/games?lang=en' | head -200`, file a bug, and revert to the last working commit.
 
 ### "Discovery didn't add new leagues"
 
-1. `docker exec docker-mariadb-1 mariadb -uroot -pdevpass1234 sofascore -e "SELECT source, sport, COUNT(*) FROM scraper_leagues WHERE source='scores365' GROUP BY sport;"`
+1. `docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -e "SELECT source, sport, COUNT(*) FROM scraper_leagues WHERE source='scores365' GROUP BY sport;"`
 2. If a sport has fewer rows than the previous release, the sport sitemap may have been moved or renamed.
 3. `curl -I https://www.365scores.com/sitemaps/en_basketball.xml` — 200 means reachable. (Substitute the sport slug: basketball, tennis, hockey, american-football, baseball, volleyball.)
 4. There is no admin endpoint to re-run discovery; restart the backend container (`docker compose restart backend` for compose; `sudo systemctl restart iptv.service` for `.deb`).
@@ -99,10 +116,12 @@ The next cron tick will route that league through FotMob instead. Note: FotMob d
 
 ## Limitations (and the workaround we accepted)
 
-The `/data/games` endpoint only returns the **current UTC day**. Past and future days are not retrievable through this endpoint. This means:
+The `/data/games` endpoint only returns the **current UTC day** — past and future days are NOT retrievable through this endpoint. As a result:
 
-- Yesterday's matches: present until ~midnight UTC, then gone.
-- Tomorrow's matches: appear at midnight UTC on the day-of. The `0 6,18 * * *` lookahead cron ticks at 06:00 and 18:00 UTC and pulls day N+1, so a tomorrow's match usually lands in `events` around those times.
+- **Yesterday's matches**: present until ~midnight UTC, then gone.
+- **Tomorrow's matches**: appear at midnight UTC on the day-of (the cron will pick them up as "today" then).
+- **The `ScrapeNext7Days` lookahead cron is effectively a no-op for 365scores** — it requests day N+1 but the upstream returns day N regardless. The cron still runs (every minute via `scrapeTodaySpec` and 06:00/18:00 UTC via `scrapeFutureSpec`), but only today's matches land in `events`.
+- If a date-capable endpoint becomes available, the runbook should be updated; today, document this limitation and rely on the per-minute today cron for full coverage.
 
 If we ever need a fuller history, the fallback plan is to scrape `https://www.365scores.com/<sport>/<country>/<league>/calendar` (HTML parser). That is OUT OF SCOPE for this PR — file an issue if a need arises.
 
