@@ -2,6 +2,12 @@
   <div class="scraper-leagues-page">
     <h1>Scraper Leagues</h1>
 
+    <div class="banner banner-info" data-testid="scores365-banner" role="status">
+      <strong>365scores</strong> is the default source for all newly discovered leagues.
+      To keep scraping a league via FotMob instead, set
+      <code>override_source=fotmob</code> in the edit form below.
+    </div>
+
     <div class="filters">
       <input v-model="searchQuery" placeholder="Search leagues" @input="onSearch" />
       <button class="add-new" @click="openCreateModal">Add new</button>
@@ -12,6 +18,7 @@
         <tr>
           <th>Name</th>
           <th>Source</th>
+          <th>Source override</th>
           <th>Source League ID</th>
           <th>Country</th>
           <th>Sport</th>
@@ -23,6 +30,7 @@
         <tr v-for="item in store.items" :key="item.id">
           <td>{{ item.name }}</td>
           <td>{{ item.source }}</td>
+          <td>{{ item.override_source ?? '—' }}</td>
           <td>{{ item.source_league_id }}</td>
           <td>{{ item.country }}</td>
           <td>{{ item.sport }}</td>
@@ -108,3 +116,17 @@ async function onConfirmDelete() {
   }
 }
 </script>
+
+<style scoped>
+.banner {
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  border-left: 4px solid;
+}
+.banner-info {
+  background: #e7f3ff;
+  border-color: #1976d2;
+  color: #0d47a1;
+}
+</style>
