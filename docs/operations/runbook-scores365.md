@@ -47,8 +47,8 @@ Run after `git pull` on the backend host, BEFORE promoting the change to product
    Expect HTTP 200, team names populated.
 6. Verify a team logo:
    ```bash
-   TEAM_ID=$(docker exec docker-mariadb-1 mariadb -uroot -pdevpass1234 sofascore -Nse "SELECT team_id FROM teams ORDER BY team_id DESC LIMIT 1;")
-   curl -i "http://localhost:8181/api/app/v1/teams/logo/$TEAM_ID" -o /tmp/logo.png
+   TEAM_ID=$(docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -Nse "SELECT team_id FROM teams ORDER BY team_id DESC LIMIT 1;")
+   curl -i "http://localhost:8080/api/app/v1/teams/logo/$TEAM_ID" -o /tmp/logo.png
    file /tmp/logo.png   # expect: PNG image data
    ```
 
