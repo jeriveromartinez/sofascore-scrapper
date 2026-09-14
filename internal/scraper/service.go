@@ -235,9 +235,11 @@ func (s *Service) dispatchSource(
 // league ID seen in the day payload that is not yet in the
 // catalog is upserted via ensureLeague (enabled=true), so the
 // admin sees it on the next dashboard load and can choose to
-// disable it. The auto-create path is guarded by an interface
-// assertion so the FotMob fast-path keeps its stricter
-// behaviour.
+// disable it. The auto-create path is guarded by both an
+// interface assertion and a per-source gate (`src.Name()`
+// must be a source whose upstream publishes events for every
+// league — currently just scores365) so the FotMob fast-path
+// keeps its stricter behaviour.
 func (s *Service) dispatchDayMatch(
 	ctx context.Context,
 	dm DayMatcher,
@@ -274,11 +276,15 @@ func (s *Service) dispatchDayMatch(
 
 	// Step 2: league IDs present in the day payload that are
 	// not yet in the catalog. Only run when the catalog supports
-	// dynamic auto-create (the interface assertion below). The
-	// FotMob path returns nil here so its narrow catalog stays
-	// narrow; the sportsdb path picks up every league the
-	// upstream publishes events for.
-	if el, ok := s.catalog.(EnsureLeague); ok {
+	// dynamic auto-create (the interface assertion below) AND
+	// the source is one whose upstream publishes events for
+	// every league (currently scores365). The FotMob path is
+	// gated off so its curated narrow catalog stays narrow.
+	//
+	// Auto-create only for sources whose upstream publishes events
+	// for every league (currently just scores365). The FotMob path
+	// is curated and must not silently grow the catalog.
+	if el, ok := s.catalog.(EnsureLeague); ok && src.Name() == "scores365" {
 		for _, ms := range byLeague {
 			if len(ms) == 0 {
 				continue
