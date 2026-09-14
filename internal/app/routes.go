@@ -21,6 +21,7 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/fotmob"
 	sportsdbsource "github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/sportsdb"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scores365"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/sportsdb"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
@@ -221,6 +222,7 @@ func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *even
 	fotmobSrc := fotmob.NewSource(fotmobClient, logger)
 	sportsdbClient := sportsdb.NewClient(sportsdb.Options{APIKey: theSportsDBAPIKey})
 	sportsdbSrc := sportsdbsource.NewSource(sportsdbClient)
+	scores365Client := scores365.NewClient(scores365.Options{})
 	dispatcher := scraper.NewSourceDispatcher(fotmobSrc, sportsdbSrc)
 	catalogRepo := catalog.NewRepository(db)
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
@@ -239,7 +241,7 @@ func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *even
 	// weekly cron in internal/scheduler runs the same job for
 	// long-lived deployments to pick up new leagues.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	if _, err := catalog.Discovery(ctx, catalogRepo, sportsdbClient, logger); err != nil {
+	if _, err := catalog.Discovery(ctx, catalogRepo, scores365Client, logger); err != nil {
 		logger.Warn("catalog: boot discovery failed (will retry on next cron tick)",
 			slog.String("error", err.Error()))
 	}

@@ -1,6 +1,6 @@
 // Package catalog houses the bulk-discovery glue that keeps the
-// admin scraper catalog in sync with the upstream
-// (TheSportsDB) league registry.
+// admin scraper catalog in sync with the upstream (365scores)
+// league registry.
 //
 // Background: PR #131/132 wired the scraper to ingest events
 // for four pre-seeded leagues (NBA/NFL/MLB/NHL). PR #133 added
@@ -12,7 +12,7 @@
 // drops matches whose idLeague is not in `scraper_leagues`.
 //
 // This package fixes that with a single-shot discovery job
-// that pulls the upstream league registry, normalises the
+// that pulls the upstream 365scores sitemaps, normalises the
 // sport names, and upserts every row into `scraper_leagues`
 // with enabled=true. Operators can flip a row off later via
 // the existing admin UI.
@@ -22,19 +22,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/sportsdb"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scores365"
 )
 
 // DiscoveryResult is the per-run summary logged so operators
 // can see what was added on each invocation.
 type DiscoveryResult struct {
-	Upserted   int // newly inserted rows
-	Unchanged  int // rows that already existed (idempotent path)
-	Skipped    int // rows the upstream published but with no id
-	TotalSeen  int // total rows the upstream returned
-	Source     string
+	Upserted  int // newly inserted rows
+	Unchanged int // rows that already existed (idempotent path)
+	Skipped   int // rows the upstream published but with no id
+	TotalSeen int // total rows the upstream returned
+	Source    string
 }
 
 func (r DiscoveryResult) LogValue() slog.Value {
@@ -47,18 +48,25 @@ func (r DiscoveryResult) LogValue() slog.Value {
 	)
 }
 
-// Discovery sweeps the upstream league registry and upserts
+// sportSlugsForDiscovery is the list of 365scores sport slugs we probe.
+// Order matches the boot-time fan-out. Football (slug=football) is omitted
+// because FotMob remains the primary source for football.
+var sportSlugsForDiscovery = []string{
+	"basketball",
+	"tennis",
+	"hockey",
+	"american-football",
+	"baseball",
+	"volleyball",
+}
+
+// Discovery sweeps the upstream 365scores sitemaps and upserts
 // every row into `scraper_leagues`. Idempotent: re-running on
-// the same registry is a no-op (the unique key on
+// the same sitemap set is a no-op (the unique key on
 // (source, source_league_id) blocks duplicates and EnsureLeague
 // skips already-present rows).
-//
-// Currently this only wires the sportsdb path — the FotMob
-// catalog is curated by hand via the admin form. If a future
-// source adds its own registry endpoint, plumb a `client` of
-// the same shape and call the same EnsureLeague path.
-func Discovery(ctx context.Context, repo *Repository, client *sportsdb.Client, logger *slog.Logger) (DiscoveryResult, error) {
-	result := DiscoveryResult{Source: "sportsdb"}
+func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, logger *slog.Logger) (DiscoveryResult, error) {
+	result := DiscoveryResult{Source: "scores365"}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -73,65 +81,53 @@ func Discovery(ctx context.Context, repo *Repository, client *sportsdb.Client, l
 		logger.WarnContext(ctx, "catalog: discovery skipped: repo has no DB handle")
 		return result, nil
 	}
-	leagues, err := client.AllLeagues(ctx)
-	if err != nil {
-		return result, fmt.Errorf("catalog: discovery fetch leagues: %w", err)
-	}
-	result.TotalSeen = len(leagues)
-	for _, l := range leagues {
-		if l.ID == "" {
-			result.Skipped++
-			continue
-		}
-		before, err := countLeagues(ctx, repo, l.ID)
+	for _, sport := range sportSlugsForDiscovery {
+		sportCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		leagues, err := client.FetchSitemap(sportCtx, "en", sport)
+		cancel()
 		if err != nil {
-			return result, fmt.Errorf("catalog: discovery count %s: %w", l.ID, err)
-		}
-		err = repo.EnsureLeague(ctx, l.ID, scraper.LeagueRef{
-			Source:         "sportsdb",
-			SourceLeagueId: l.ID,
-			Name:           l.Name,
-			Sport:          sportsdb.NormalizeSport(l.Sport),
-			Country:        l.Country,
-		})
-		if err != nil {
-			result.Skipped++
-			logger.WarnContext(ctx, "catalog: discovery skip league",
-				slog.String("source_league_id", l.ID),
-				slog.String("name", l.Name),
+			logger.WarnContext(ctx, "catalog: discovery failed for sport",
+				slog.String("sport", sport),
 				slog.String("error", err.Error()))
 			continue
 		}
-		after, err := countLeagues(ctx, repo, l.ID)
-		if err != nil {
-			return result, fmt.Errorf("catalog: discovery recount %s: %w", l.ID, err)
-		}
-		if after > before {
-			result.Upserted++
-		} else {
-			result.Unchanged++
+		for _, l := range leagues {
+			result.TotalSeen++
+			before, err := repo.ExistsBySourceLeagueID(ctx, l.Source, l.SourceLeagueId)
+			if err != nil {
+				return result, fmt.Errorf("catalog: discovery exists check %s/%s: %w", l.Source, l.SourceLeagueId, err)
+			}
+			err = repo.EnsureLeague(ctx, l.SourceLeagueId, toLeagueRef(l))
+			if err != nil {
+				result.Skipped++
+				logger.WarnContext(ctx, "catalog: discovery skip league",
+					slog.String("source_league_id", l.SourceLeagueId),
+					slog.String("name", l.Name),
+					slog.String("error", err.Error()))
+				continue
+			}
+			after, err := repo.ExistsBySourceLeagueID(ctx, l.Source, l.SourceLeagueId)
+			if err != nil {
+				return result, fmt.Errorf("catalog: discovery recheck: %w", err)
+			}
+			if after > before {
+				result.Upserted++
+			} else {
+				result.Unchanged++
+			}
 		}
 	}
-	logger.InfoContext(ctx, "catalog: discovery done",
-		slog.String("source", result.Source),
-		slog.Int("upserted", result.Upserted),
-		slog.Int("unchanged", result.Unchanged),
-		slog.Int("skipped", result.Skipped),
-		slog.Int("total_seen", result.TotalSeen),
-	)
+	logger.InfoContext(ctx, "catalog: discovery done", slog.Any("discovery", result))
 	return result, nil
 }
 
-// countLeagues returns 1 if a row already exists for the given
-// (source, source_league_id), else 0. Used by Discovery to tell
-// "upserted" from "unchanged" without holding a transaction.
-func countLeagues(ctx context.Context, repo *Repository, sourceLeagueID string) (int, error) {
-	var row ScraperLeague
-	err := repo.db.WithContext(ctx).
-		Where("source = ? AND source_league_id = ?", "sportsdb", sourceLeagueID).
-		First(&row).Error
-	if err == nil {
-		return 1, nil
+func toLeagueRef(l scores365.League) scraper.LeagueRef {
+	return scraper.LeagueRef{
+		Source:         l.Source,
+		SourceLeagueId: l.SourceLeagueId,
+		Name:           l.Name,
+		Sport:          l.Sport,
+		Country:        l.Country,
 	}
-	return 0, nil
 }
+

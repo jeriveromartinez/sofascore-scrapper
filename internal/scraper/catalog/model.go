@@ -11,6 +11,7 @@ type ScraperLeague struct {
 	Country        string `gorm:"column:country;size:8;not null;default:''" json:"country"`
 	Sport          string `gorm:"column:sport;size:32;not null;default:'football'" json:"sport"`
 	Enabled        bool   `gorm:"column:enabled;not null;index:idx_scraper_leagues_enabled" json:"enabled"`
+	OverrideSource *string `gorm:"column:override_source;size:32" json:"override_source,omitempty"`
 }
 
 func (ScraperLeague) TableName() string { return "scraper_leagues" }
