@@ -105,9 +105,14 @@ func (r *Repository) SoftDelete(ctx context.Context, id uint) error {
 	return nil
 }
 
+// ActiveLeagues is the multi-source dispatcher default: every enabled
+// league goes to its natural source unless override_source is set.
 func (r *Repository) ActiveLeagues(ctx context.Context) ([]scraper.LeagueRef, error) {
 	var rows []ScraperLeague
-	if err := r.db.WithContext(ctx).Where("enabled = ?", true).Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Where("enabled = ?", true).
+		Where("override_source IS NULL OR override_source = source").
+		Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]scraper.LeagueRef, 0, len(rows))
@@ -118,6 +123,33 @@ func (r *Repository) ActiveLeagues(ctx context.Context) ([]scraper.LeagueRef, er
 			Name:           r.Name,
 			Country:        r.Country,
 			Sport:          r.Sport,
+		})
+	}
+	return out, nil
+}
+
+// ActiveLeaguesBySource returns enabled leagues whose effective
+// source matches the requested name. The effective source is
+// COALESCE(override_source, source): a row with
+// source=scores365, override_source=fotmob belongs to the fotmob
+// dispatcher, NOT the scores365 one. Used by the dispatcher to
+// route per-league.
+func (r *Repository) ActiveLeaguesBySource(ctx context.Context, source string) ([]scraper.LeagueRef, error) {
+	var rows []ScraperLeague
+	q := r.db.WithContext(ctx).
+		Where("enabled = ?", true).
+		Where("(source = ? AND override_source IS NULL) OR override_source = ?", source, source)
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]scraper.LeagueRef, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, scraper.LeagueRef{
+			Source:         r.Source,
+			SourceLeagueId: r.SourceLeagueId,
+			Name:           r.Name,
+			Sport:          r.Sport,
+			Country:        r.Country,
 		})
 	}
 	return out, nil
@@ -175,6 +207,22 @@ func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, le
 		return err
 	}
 	return nil
+}
+
+// ExistsBySourceLeagueID returns 1 if a row with the given (source,
+// source_league_id) exists in scraper_leagues (excluding soft-deleted),
+// else 0. Errors propagate.
+func (r *Repository) ExistsBySourceLeagueID(ctx context.Context, source, sourceLeagueID string) (int, error) {
+	var n int64
+	err := r.db.WithContext(ctx).
+		Model(&ScraperLeague{}).
+		Where("source = ? AND source_league_id = ?", source, sourceLeagueID).
+		Where("deleted_at IS NULL").
+		Count(&n).Error
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
 }
 
 // SearchLocalByName is a free-text match against the Name

@@ -257,21 +257,30 @@ var (
 )
 
 func parseSitemap(body []byte, sportSlug string) ([]League, error) {
+	type sitemapURL struct {
+		Locs []string `xml:"loc"`
+	}
 	type sitemapDoc struct {
-		XMLName xml.Name `xml:"urlset"`
-		Locs    []string `xml:"loc"`
+		XMLName xml.Name     `xml:"urlset"`
+		URLs    []sitemapURL `xml:"url"`
+		Locs    []string     `xml:"loc"` // fallback for non-conformant flat sitemaps
 	}
 	var doc sitemapDoc
 	if err := xml.Unmarshal(body, &doc); err != nil {
 		return nil, fmt.Errorf("scores365: decode sitemap xml: %w", err)
 	}
-	out := make([]League, 0, len(doc.Locs))
-	for _, loc := range doc.Locs {
+	out := make([]League, 0)
+	seen := make(map[string]bool) // dedupe by SourceLeagueId
+	add := func(loc string) {
 		if m := sitemapLeaguePattern.FindStringSubmatch(loc); m != nil {
 			urlSport, slug, compId := m[1], m[2], m[3]
 			if urlSport != sportSlug {
-				continue
+				return
 			}
+			if seen[compId] {
+				return
+			}
+			seen[compId] = true
 			out = append(out, League{
 				Source:         "scores365",
 				SourceLeagueId: compId,
@@ -280,22 +289,34 @@ func parseSitemap(body []byte, sportSlug string) ([]League, error) {
 				Country:        "",
 				NameForURL:     slug,
 			})
-			continue
+			return
 		}
 		if m := sitemapCountryPattern.FindStringSubmatch(loc); m != nil {
 			urlSport, country, slug, compId := m[1], m[2], m[3], m[4]
 			if urlSport != sportSlug {
-				continue
+				return
 			}
+			if seen[compId] {
+				return
+			}
+			seen[compId] = true
 			out = append(out, League{
 				Source:         "scores365",
 				SourceLeagueId: compId,
 				Name:           humanizeSlug(country) + " " + humanizeSlug(slug),
 				Sport:          sportSlug,
-				Country:        humanizeSlug(country),
+				Country:        country, // raw URL slug, bounded to 8 chars on real 365scores sitemaps (usa, spain, uk, ...)
 				NameForURL:     country + "/" + slug,
 			})
 		}
+	}
+	for _, u := range doc.URLs {
+		for _, loc := range u.Locs {
+			add(loc)
+		}
+	}
+	for _, loc := range doc.Locs {
+		add(loc)
 	}
 	return out, nil
 }

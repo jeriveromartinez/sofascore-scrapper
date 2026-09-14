@@ -140,6 +140,63 @@ func TestParseSitemap_HumanizesSlug(t *testing.T) {
 	}
 }
 
+func TestClient_FetchSitemap_WrappedShape(t *testing.T) {
+	body := `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://www.365scores.com/basketball/usa/nba-47</loc></url>
+<url><loc>https://www.365scores.com/basketball/spain/acb-50</loc></url>
+<url><loc>https://www.365scores.com/tennis/league/wimbledon---men-215</loc></url>
+</urlset>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{SitemapURL: srv.URL + "/sitemaps"})
+	got := make([]League, 0, 3)
+	for _, sport := range []string{"basketball", "tennis"} {
+		leagues, err := c.FetchSitemap(context.Background(), "en", sport)
+		if err != nil {
+			t.Fatalf("FetchSitemap(%s): %v", sport, err)
+		}
+		got = append(got, leagues...)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d leagues, want 3 (nba + acb + wimbledon)", len(got))
+	}
+	if got[0].Country != "usa" {
+		t.Errorf("got[0].Country = %q, want %q (raw slug)", got[0].Country, "usa")
+	}
+	if got[1].Country != "spain" {
+		t.Errorf("got[1].Country = %q, want %q (raw slug)", got[1].Country, "spain")
+	}
+}
+
+func TestClient_FetchSitemap_CountryRawSlug(t *testing.T) {
+	body := `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://www.365scores.com/basketball/usa/nba-47</loc></url>
+</urlset>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{SitemapURL: srv.URL + "/sitemaps"})
+	got, err := c.FetchSitemap(context.Background(), "en", "basketball")
+	if err != nil {
+		t.Fatalf("FetchSitemap: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d leagues, want 1", len(got))
+	}
+	if got[0].Country != "usa" {
+		t.Errorf("got[0].Country = %q, want %q (raw slug, not humanized)", got[0].Country, "usa")
+	}
+}
+
 // silence linter when strconv is unused on some build tags
 var _ = strconv.Itoa
 var _ = strings.TrimSpace
