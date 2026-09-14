@@ -122,6 +122,8 @@ type Options struct {
 
 type cachedEntry struct {
 	badgeURL string
+	leagues  []League
+	events   []Event
 	err      error
 	expires  time.Time
 }
@@ -132,6 +134,7 @@ type cachedEntry struct {
 type Event struct {
 	IDEvent   string
 	IDAPI     string
+	IDLeague  string
 	HomeTeam  string
 	AwayTeam  string
 	HomeScore int
@@ -161,8 +164,9 @@ type Event struct {
 	// League and Sport pass through from the upstream payload
 	// ("NBA", "Basketball") so the scraper can detect mapping
 	// errors during field renames.
-	League string
-	Sport  string
+	League  string
+	Sport   string
+	Country string
 }
 
 // eventsByDayCacheEntry stores the parsed events under the cache
@@ -180,7 +184,150 @@ type eventsByDayCacheMap struct {
 	m  map[string]eventsByDayCacheEntry
 }
 
-// NewClient returns a Client configured with the supplied Options.
+// League is the shape of a single entry from TheSportsDB's
+// all_leagues.php endpoint. We use it for catalog discovery: the
+// scraper pulls every league the upstream publishes so the admin
+// catalog reflects the full set without manual curation.
+//
+// Sport is TheSportsDB's verbose display form ("American Football",
+// "Ice Hockey"). The scraper maps these to canonical lowercase
+// sport strings via NormalizeSport before persisting to
+// scraper_leagues.sport.
+//
+// Country is empty when the upstream omits it (some cup
+// competitions and international tournaments). We persist the
+// empty string rather than a placeholder.
+type League struct {
+	ID      string
+	Name    string
+	Sport   string
+	Country string
+}
+
+// allLeaguesResponse wraps the upstream all_leagues.php envelope.
+type allLeaguesResponse struct {
+	Leagues []apiLeague `json:"leagues"`
+}
+
+// apiLeague is the upstream wire shape. We only decode the four
+// fields we need; everything else (strBadge, strDescriptionEN, etc.)
+// is dropped at unmarshal time to keep the cache footprint small.
+type apiLeague struct {
+	IDLeague   string `json:"idLeague"`
+	StrLeague  string `json:"strLeague"`
+	StrSport   string `json:"strSport"`
+	StrCountry string `json:"strCountry"`
+}
+
+// AllLeagues every league TheSportsDB publishes, deduplicated by
+// idLeague.
+//
+// The free tier of the upstream returns at most ~10 entries on
+// this endpoint per request — the published limit on the docs
+// page is "10 free" — so the result set is truncated by the
+// upstream. Callers must treat the slice as "top of the catalog"
+// rather than "the whole catalog". The full population happens
+// via eventsday.php sweep (see scraper.DayMatches: every event
+// carries its idLeague, so a single day-wide fetch enumerates
+// every league with matches on that date).
+//
+// Cached for cacheTTL (24h) — the list rarely changes day-to-day.
+// Negative hits (transient upstream errors) are cached for
+// negativeCacheTTL so a 429 today doesn't permanently mask the
+// catalog after the throttle window lifts.
+func (c *Client) AllLeagues(ctx context.Context) ([]League, error) {
+	cacheKey := "all:leagues"
+	if entry, ok := c.lookupCache(cacheKey); ok {
+		if entry.err != nil {
+			return nil, entry.err
+		}
+		return entry.leagues, nil
+	}
+	leagues, err := c.fetchAllLeagues(ctx)
+	ttl := cacheTTL
+	if err != nil {
+		ttl = negativeCacheTTL
+	}
+	c.storeLeagues(cacheKey, leagues, err, ttl)
+	if err != nil {
+		return nil, err
+	}
+	return leagues, nil
+}
+
+// fetchAllLeagues hits all_leagues.php once and parses the result.
+// Rate-limited through the shared client limiter.
+func (c *Client) fetchAllLeagues(ctx context.Context) ([]League, error) {
+	if err := c.waitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("sportsdb: rate limit wait: %w", err)
+	}
+	u := fmt.Sprintf("%s/%s/all_leagues.php", c.baseURL, c.apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: build all_leagues request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: all_leagues request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		c.recordThrottle()
+		return nil, fmt.Errorf("sportsdb: all_leagues returned 429")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("sportsdb: all_leagues returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: read all_leagues body: %w", err)
+	}
+	var parsed allLeaguesResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("sportsdb: decode all_leagues: %w", err)
+	}
+	out := make([]League, 0, len(parsed.Leagues))
+	for _, raw := range parsed.Leagues {
+		if raw.IDLeague == "" {
+			continue
+		}
+		out = append(out, League{
+			ID:      raw.IDLeague,
+			Name:    raw.StrLeague,
+			Sport:   raw.StrSport,
+			Country: raw.StrCountry,
+		})
+	}
+	return out, nil
+}
+
+// NormalizeSport maps TheSportsDB's verbose display sport name
+// ("American Football", "Ice Hockey", "Soccer") to the canonical
+// lowercase form the rest of the system uses ("american-football",
+// "ice-hockey", "football"). When the upstream introduces a sport
+// the table does not yet know about, we return a heuristic
+// lowercased, dashed form so the catalog stays stable until an
+// admin renames it.
+//
+// The mapping is intentionally a function (not a constant map) so
+// future sports can extend it without breaking callers.
+func NormalizeSport(display string) string {
+	switch strings.ToLower(strings.TrimSpace(display)) {
+	case "":
+		return ""
+	case "soccer":
+		return "football"
+	case "american football":
+		return "american-football"
+	case "ice hockey":
+		return "ice-hockey"
+	}
+	// Fallback: lowercase, spaces → dashes.
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(display)), " ", "-")
+}// NewClient returns a Client configured with the supplied Options.
 // Missing fields fall back to package defaults.
 func NewClient(opts Options) *Client {
 	apiKey := opts.APIKey
@@ -289,6 +436,21 @@ func (c *Client) storeCache(key, badgeURL string, err error) {
 		badgeURL: badgeURL,
 		err:      err,
 		expires:  time.Now().Add(ttl),
+	}
+}
+
+// storeLeagues writes a leagues-shaped cache entry. Called from
+// AllLeagues where the cached value is the full list rather than
+// a single badge URL. The err argument is recorded alongside the
+// leagues so a cached 429 from a previous call short-circuits the
+// next caller instead of going back to the upstream.
+func (c *Client) storeLeagues(key string, leagues []League, err error, ttl time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[key] = cachedEntry{
+		leagues: leagues,
+		err:     err,
+		expires: time.Now().Add(ttl),
 	}
 }
 
@@ -419,6 +581,92 @@ func (c *Client) EventsByDay(ctx context.Context, leagueID string, date string) 
 	return events, err
 }
 
+// EventsDayAll fetches every event TheSportsDB publishes for the
+// given date — across every sport, every league, every match.
+// Internally this is the same eventsday.php endpoint as
+// EventsByDay, but without the `l=<leagueID>` filter the
+// upstream returns the day's full slate in a single round-trip.
+//
+// The free-tier rate limit on this endpoint is 3 req/min; with
+// the per-call 5s gap the shared client limiter produces one
+// fetch per minute, well inside the budget.
+//
+// Returns an empty slice when the day has no fixtures
+// ({"events":null} on the wire). Errors are cached briefly so
+// a tight retry loop does not hammer a throttled upstream.
+func (c *Client) EventsDayAll(ctx context.Context, date string) ([]Event, error) {
+	if date == "" {
+		return nil, fmt.Errorf("sportsdb: empty date")
+	}
+	cacheKey := "all:" + date
+	if entry, ok := c.lookupCache(cacheKey); ok {
+		return entry.events, entry.err
+	}
+	events, err := c.fetchDayEventsAll(ctx, date)
+	ttl := cacheTTL
+	if err != nil {
+		ttl = negativeCacheTTL
+	}
+	c.storeAllDayCache(cacheKey, events, err, ttl)
+	return events, err
+}
+
+// fetchDayEventsAll hits eventsday.php?d=<date> (no league
+// filter) and parses the full-day payload. Rate-limited through
+// the shared client limiter.
+func (c *Client) fetchDayEventsAll(ctx context.Context, date string) ([]Event, error) {
+	if err := c.waitForRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("sportsdb: rate limit wait: %w", err)
+	}
+	u := fmt.Sprintf("%s/%s/eventsday.php?d=%s",
+		c.baseURL, c.apiKey, url.QueryEscape(date))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: build eventsday request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: eventsday request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		c.recordThrottle()
+		return nil, fmt.Errorf("sportsdb: eventsday returned 429")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("sportsdb: eventsday returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("sportsdb: read eventsday body: %w", err)
+	}
+	var parsed dayEventsResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("sportsdb: decode eventsday: %w", err)
+	}
+	out := make([]Event, 0, len(parsed.Events))
+	for _, raw := range parsed.Events {
+		out = append(out, decodeDayEvent(raw))
+	}
+	return out, nil
+}
+
+// storeAllDayCache writes an eventsday-shaped cache entry under
+// the day-wide key. Reuses the existing cachedEntry struct so
+// the cache layer needs no new types.
+func (c *Client) storeAllDayCache(key string, events []Event, err error, ttl time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[key] = cachedEntry{
+		events:  events,
+		err:     err,
+		expires: time.Now().Add(ttl),
+	}
+}
+
 func (c *Client) lookupDayCache(leagueID, date string) (eventsByDayCacheEntry, bool) {
 	c.dayCache.mu.Lock()
 	defer c.dayCache.mu.Unlock()
@@ -446,23 +694,25 @@ func (c *Client) storeDayCache(leagueID, date string, events []Event, err error)
 // dayEvent is the wire shape of a single event in the
 // eventsday.php payload. We only decode the fields we need.
 type dayEvent struct {
-	IDEvent        string `json:"idEvent"`
-	IDAPI          string `json:"idAPIfootball"`
-	HomeTeam       string `json:"strHomeTeam"`
-	AwayTeam       string `json:"strAwayTeam"`
-	HomeScore      string `json:"intHomeScore"`
-	AwayScore      string `json:"intAwayScore"`
-	DateEvent      string `json:"dateEvent"`
-	StrTime        string `json:"strTime"`
-	StrTimeLocal   string `json:"strTimeLocal"`
-	StrTimestamp   string `json:"strTimestamp"`
-	League         string `json:"strLeague"`
-	Sport          string `json:"strSport"`
-	Postponed      string `json:"strPostponed"`
-	IDHomeTeam     string `json:"idHomeTeam"`
-	IDAwayTeam     string `json:"idAwayTeam"`
-	HomeTeamBadge  string `json:"strHomeTeamBadge"`
-	AwayTeamBadge  string `json:"strAwayTeamBadge"`
+	IDEvent       string `json:"idEvent"`
+	IDAPI         string `json:"idAPIfootball"`
+	IDLeague      string `json:"idLeague"`
+	HomeTeam      string `json:"strHomeTeam"`
+	AwayTeam      string `json:"strAwayTeam"`
+	HomeScore     string `json:"intHomeScore"`
+	AwayScore     string `json:"intAwayScore"`
+	DateEvent     string `json:"dateEvent"`
+	StrTime       string `json:"strTime"`
+	StrTimeLocal  string `json:"strTimeLocal"`
+	StrTimestamp  string `json:"strTimestamp"`
+	League        string `json:"strLeague"`
+	Sport         string `json:"strSport"`
+	Country       string `json:"strCountry"`
+	Postponed     string `json:"strPostponed"`
+	IDHomeTeam    string `json:"idHomeTeam"`
+	IDAwayTeam    string `json:"idAwayTeam"`
+	HomeTeamBadge string `json:"strHomeTeamBadge"`
+	AwayTeamBadge string `json:"strAwayTeamBadge"`
 }
 
 type dayEventsResponse struct {
@@ -522,6 +772,7 @@ func decodeDayEvent(raw dayEvent) Event {
 	return Event{
 		IDEvent:        raw.IDEvent,
 		IDAPI:          raw.IDAPI,
+		IDLeague:       raw.IDLeague,
 		HomeTeam:       raw.HomeTeam,
 		AwayTeam:       raw.AwayTeam,
 		HomeScore:      home,
@@ -534,6 +785,7 @@ func decodeDayEvent(raw dayEvent) Event {
 		Postponed:      strings.EqualFold(raw.Postponed, "yes"),
 		League:         raw.League,
 		Sport:          raw.Sport,
+		Country:        raw.Country,
 	}
 }
 

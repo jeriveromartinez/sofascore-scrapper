@@ -385,3 +385,85 @@ func mkMatch(id, leagueID string) Match {
 		League:         LeagueRef{Source: "fake-daymatcher", SourceLeagueId: leagueID, Name: "L"},
 	}
 }
+
+// ensureFakeCatalog is a CatalogSource that also implements
+// EnsureLeague. It records every EnsureLeague call so the test
+// can assert which league IDs the dispatcher picked up.
+type ensureFakeCatalog struct {
+	leagues []LeagueRef
+	ensure  []string
+}
+
+func (c *ensureFakeCatalog) ActiveLeagues(_ context.Context) ([]LeagueRef, error) {
+	out := make([]LeagueRef, len(c.leagues))
+	copy(out, c.leagues)
+	return out, nil
+}
+
+func (c *ensureFakeCatalog) EnsureLeague(_ context.Context, sourceLeagueID string, league LeagueRef) error {
+	for _, l := range c.ensure {
+		if l == sourceLeagueID {
+			return nil
+		}
+	}
+	c.ensure = append(c.ensure, sourceLeagueID)
+	return nil
+}
+
+// TestService_ScrapeToday_AutoCreatesUnknownLeagues covers the
+// contract the discovery job relies on: the bulk-fetch
+// dispatcher auto-creates any league ID it sees in the upstream
+// payload that isn't in the catalog, so events stop being
+// dropped once the upstream starts publishing a new league.
+//
+// Without EnsureLeague the dispatch loop would silently skip
+// every match in leagues 87 and 54 (they're not in the active
+// catalog), and the catalog table would never grow beyond the
+// four seeded sportsdb leagues.
+func TestService_ScrapeToday_AutoCreatesUnknownLeagues(t *testing.T) {
+	db := setupScraperTestDB(t)
+	repo := events.NewRepository(db)
+
+	src := &dayMatchingFakeSource{
+		matches: []Match{
+			mkMatch("1", "47"), // known (active)
+			mkMatch("2", "87"), // unknown
+			mkMatch("3", "54"), // unknown
+		},
+	}
+	cat := &ensureFakeCatalog{
+		leagues: []LeagueRef{
+			{Source: "fake-daymatcher", SourceLeagueId: "47", Name: "PL"},
+		},
+	}
+	svc, err := NewService(repo, src, cat, 100, 1, slog.Default())
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	fixedNow := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	svc.ScrapeToday(context.Background(), fixedNow)
+
+	// EnsureLeague must have been called for both unknown IDs
+	// exactly once.
+	want := map[string]bool{"87": false, "54": false}
+	for _, id := range cat.ensure {
+		if _, ok := want[id]; ok {
+			want[id] = true
+		}
+	}
+	for id, seen := range want {
+		if !seen {
+			t.Errorf("EnsureLeague not called for %s", id)
+		}
+	}
+
+	// All three matches persisted (known + auto-created buckets).
+	var count int64
+	if err := db.Model(&events.Event{}).Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("expected 3 events, got %d", count)
+	}
+}

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
@@ -218,7 +219,8 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string, theSportsDBAPIKey string) (*scraper.Service, *reporting.AggregationRepository) {
 	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{Timezone: timezone})
 	fotmobSrc := fotmob.NewSource(fotmobClient, logger)
-	sportsdbSrc := sportsdbsource.NewSource(sportsdb.NewClient(sportsdb.Options{APIKey: theSportsDBAPIKey}))
+	sportsdbClient := sportsdb.NewClient(sportsdb.Options{APIKey: theSportsDBAPIKey})
+	sportsdbSrc := sportsdbsource.NewSource(sportsdbClient)
 	dispatcher := scraper.NewSourceDispatcher(fotmobSrc, sportsdbSrc)
 	catalogRepo := catalog.NewRepository(db)
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
@@ -230,6 +232,18 @@ func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *even
 		_, err := epoch.Increment(ctx)
 		return err
 	})
+	// Run the discovery job once at boot so a fresh database
+	// starts with every league the upstream publishes
+	// auto-imported. The job is idempotent and fast
+	// (<1s on a cold cache, no-op on subsequent boots). The
+	// weekly cron in internal/scheduler runs the same job for
+	// long-lived deployments to pick up new leagues.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if _, err := catalog.Discovery(ctx, catalogRepo, sportsdbClient, logger); err != nil {
+		logger.Warn("catalog: boot discovery failed (will retry on next cron tick)",
+			slog.String("error", err.Error()))
+	}
+	cancel()
 	aggRepo := reporting.NewAggregationRepository(db)
 	return scrapeSvc, aggRepo
 }
