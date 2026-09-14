@@ -5,6 +5,7 @@ package scraper
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -252,8 +253,12 @@ func (f *serviceTestFakeSource) SearchLeagues(_ context.Context, _ string) ([]Le
 // dayMatchingFakeSource extends serviceTestFakeSource with the
 // optional DayMatcher interface so the scheduler uses the day-dispatch
 // path instead of per-league fetches. Used to verify the dedup
-// behavior in TestService_ScrapeToday_DayMatcherDeduplicates.
+// behavior in TestService_ScrapeToday_DayMatcherDeduplicates and the
+// auto-create path in TestService_ScrapeToday_AutoCreatesUnknownLeagues
+// (which requires Name() == "scores365" to trigger the EnsureLeague
+// guard inside dispatchDayMatch).
 type dayMatchingFakeSource struct {
+	name    string
 	matches []Match
 	err     error
 
@@ -261,7 +266,7 @@ type dayMatchingFakeSource struct {
 	lastDate        time.Time
 }
 
-func (f *dayMatchingFakeSource) Name() string { return "fake-daymatcher" }
+func (f *dayMatchingFakeSource) Name() string { return f.name }
 func (f *dayMatchingFakeSource) DayMatches(_ context.Context, date time.Time) ([]Match, error) {
 	f.dayMatchesCalls.Add(1)
 	f.lastDate = date
@@ -288,6 +293,20 @@ func (c *serviceTestFakeCatalog) ActiveLeagues(_ context.Context) ([]LeagueRef, 
 	return out, nil
 }
 
+// ActiveLeaguesBySource returns the subset of leagues whose Source
+// matches. The fixture only stores the natural Source — override_source
+// routing is exercised by routingFakeCatalog in
+// TestService_ScrapeToday_RoutesByOverrideSource below.
+func (c *serviceTestFakeCatalog) ActiveLeaguesBySource(_ context.Context, source string) ([]LeagueRef, error) {
+	out := make([]LeagueRef, 0, len(c.leagues))
+	for _, l := range c.leagues {
+		if l.Source == source {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
 func TestService_ScrapeToday_UpsertsFromSource(t *testing.T) {
 	db := setupScraperTestDB(t)
 	repo := events.NewRepository(db)
@@ -307,7 +326,7 @@ func TestService_ScrapeToday_UpsertsFromSource(t *testing.T) {
 		},
 	}
 	cat := &serviceTestFakeCatalog{leagues: []LeagueRef{{Source: "fake", SourceLeagueId: "47", Name: "L"}}}
-	svc, err := NewService(repo, src, cat, 100, 4, slog.Default())
+	svc, err := NewService(repo, NewSourceDispatcher(src), cat, 100, 4, slog.Default())
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -337,6 +356,7 @@ func TestService_ScrapeToday_DayMatcherDeduplicates(t *testing.T) {
 	repo := events.NewRepository(db)
 
 	src := &dayMatchingFakeSource{
+		name: "scores365",
 		matches: []Match{
 			mkMatch("1", "47"),
 			mkMatch("2", "87"),
@@ -344,11 +364,11 @@ func TestService_ScrapeToday_DayMatcherDeduplicates(t *testing.T) {
 		},
 	}
 	cat := &serviceTestFakeCatalog{leagues: []LeagueRef{
-		{Source: "fake-daymatcher", SourceLeagueId: "47", Name: "PL"},
-		{Source: "fake-daymatcher", SourceLeagueId: "87", Name: "LL"},
-		{Source: "fake-daymatcher", SourceLeagueId: "54", Name: "BL"},
+		{Source: "scores365", SourceLeagueId: "47", Name: "PL"},
+		{Source: "scores365", SourceLeagueId: "87", Name: "LL"},
+		{Source: "scores365", SourceLeagueId: "54", Name: "BL"},
 	}}
-	svc, err := NewService(repo, src, cat, 100, 1, slog.Default())
+	svc, err := NewService(repo, NewSourceDispatcher(src), cat, 100, 1, slog.Default())
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -375,14 +395,14 @@ func TestService_ScrapeToday_DayMatcherDeduplicates(t *testing.T) {
 
 func mkMatch(id, leagueID string) Match {
 	return Match{
-		Source:         "fake-daymatcher",
+		Source:         "scores365",
 		SourceMatchId:  id,
 		Slug:           "x-" + id,
 		StartTimestamp: time.Now(),
 		Status:         MatchStatus{Type: "scheduled"},
 		HomeTeam:       Team{SourceId: 1, Name: "H"},
 		AwayTeam:       Team{SourceId: 2, Name: "A"},
-		League:         LeagueRef{Source: "fake-daymatcher", SourceLeagueId: leagueID, Name: "L"},
+		League:         LeagueRef{Source: "scores365", SourceLeagueId: leagueID, Name: "L"},
 	}
 }
 
@@ -397,6 +417,19 @@ type ensureFakeCatalog struct {
 func (c *ensureFakeCatalog) ActiveLeagues(_ context.Context) ([]LeagueRef, error) {
 	out := make([]LeagueRef, len(c.leagues))
 	copy(out, c.leagues)
+	return out, nil
+}
+
+// ActiveLeaguesBySource mirrors serviceTestFakeCatalog: filter by
+// the natural Source. The EnsureLeague auto-create path is
+// exercised separately (TestService_ScrapeToday_AutoCreatesUnknownLeagues).
+func (c *ensureFakeCatalog) ActiveLeaguesBySource(_ context.Context, source string) ([]LeagueRef, error) {
+	out := make([]LeagueRef, 0, len(c.leagues))
+	for _, l := range c.leagues {
+		if l.Source == source {
+			out = append(out, l)
+		}
+	}
 	return out, nil
 }
 
@@ -425,6 +458,7 @@ func TestService_ScrapeToday_AutoCreatesUnknownLeagues(t *testing.T) {
 	repo := events.NewRepository(db)
 
 	src := &dayMatchingFakeSource{
+		name: "scores365",
 		matches: []Match{
 			mkMatch("1", "47"), // known (active)
 			mkMatch("2", "87"), // unknown
@@ -433,10 +467,10 @@ func TestService_ScrapeToday_AutoCreatesUnknownLeagues(t *testing.T) {
 	}
 	cat := &ensureFakeCatalog{
 		leagues: []LeagueRef{
-			{Source: "fake-daymatcher", SourceLeagueId: "47", Name: "PL"},
+			{Source: "scores365", SourceLeagueId: "47", Name: "PL"},
 		},
 	}
-	svc, err := NewService(repo, src, cat, 100, 1, slog.Default())
+	svc, err := NewService(repo, NewSourceDispatcher(src), cat, 100, 1, slog.Default())
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -465,5 +499,145 @@ func TestService_ScrapeToday_AutoCreatesUnknownLeagues(t *testing.T) {
 	}
 	if count != 3 {
 		t.Errorf("expected 3 events, got %d", count)
+	}
+}
+
+// routingFakeRow stores both the natural Source and an optional
+// override. The effective source for routing is
+// OverrideSource if set, else Source.
+type routingFakeRow struct {
+	LeagueRef
+	OverrideSource string
+}
+
+type routingFakeCatalog struct {
+	rows []routingFakeRow
+}
+
+func (c *routingFakeCatalog) ActiveLeagues(_ context.Context) ([]LeagueRef, error) {
+	out := make([]LeagueRef, 0, len(c.rows))
+	for _, r := range c.rows {
+		if r.OverrideSource != "" {
+			// Pinned rows do not appear under their natural
+			// source in the legacy bulk view, mirroring the
+			// ActiveLeagues query in the DB repo.
+			continue
+		}
+		out = append(out, r.LeagueRef)
+	}
+	return out, nil
+}
+
+func (c *routingFakeCatalog) ActiveLeaguesBySource(_ context.Context, source string) ([]LeagueRef, error) {
+	out := make([]LeagueRef, 0, len(c.rows))
+	for _, r := range c.rows {
+		effective := r.Source
+		if r.OverrideSource != "" {
+			effective = r.OverrideSource
+		}
+		if effective == source {
+			out = append(out, r.LeagueRef)
+		}
+	}
+	return out, nil
+}
+
+// routingFakeSource records every league it is asked to scrape.
+// It does NOT implement DayMatcher so the dispatcher uses the
+// per-league path; this matches how the production scores365 and
+// fotmob sources are wired (one HTTP call per league under the
+// hood) and exercises the g.Go fan-out that the new
+// per-source routing takes.
+type routingFakeSource struct {
+	name     string
+	mu       sync.Mutex
+	received []LeagueRef
+}
+
+func (f *routingFakeSource) Name() string { return f.name }
+func (f *routingFakeSource) ScheduledEvents(_ context.Context, l LeagueRef, _ time.Time) ([]Match, error) {
+	f.mu.Lock()
+	f.received = append(f.received, l)
+	f.mu.Unlock()
+	return nil, nil
+}
+func (f *routingFakeSource) SearchLeagues(_ context.Context, _ string) ([]LeagueSearchResult, error) {
+	return nil, nil
+}
+
+func (f *routingFakeSource) receivedIDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, 0, len(f.received))
+	for _, l := range f.received {
+		out = append(out, l.SourceLeagueId)
+	}
+	return out
+}
+
+// TestService_ScrapeToday_RoutesByOverrideSource is the regression
+// test for the P0 routing fix on PR #135: ScrapeToday must call
+// ActiveLeaguesBySource per registered source so an operator-set
+// override_source (which moves a league to a different dispatcher)
+// is honoured instead of being mis-bucketed under its natural
+// Source post-hoc.
+//
+// The catalog has three rows:
+//   - {source: fotmob,    override: nil}            -> fotmob bucket
+//   - {source: scores365, override: "fotmob"}       -> fotmob bucket (pinned AWAY)
+//   - {source: fotmob,    override: "scores365"}    -> scores365 bucket (pinned TO)
+//
+// Before the fix, the third row went to the fotmob bucket (because
+// groupBySource keyed by Source), so the scores365 bucket saw only
+// its natural row and the fotmob bucket saw two of three rows.
+// After the fix, the override-aware routing puts the pinned-TO
+// row into the scores365 bucket.
+func TestService_ScrapeToday_RoutesByOverrideSource(t *testing.T) {
+	db := setupScraperTestDB(t)
+	repo := events.NewRepository(db)
+
+	fm := &routingFakeSource{name: "fotmob"}
+	s365 := &routingFakeSource{name: "scores365"}
+	dispatcher := NewSourceDispatcher(fm, s365)
+
+	cat := &routingFakeCatalog{rows: []routingFakeRow{
+		{LeagueRef: LeagueRef{Source: "fotmob", SourceLeagueId: "natural", Name: "NaturalFM"}},
+		{LeagueRef: LeagueRef{Source: "scores365", SourceLeagueId: "pinned-away", Name: "PinnedAway"}, OverrideSource: "fotmob"},
+		{LeagueRef: LeagueRef{Source: "fotmob", SourceLeagueId: "pinned-to", Name: "PinnedIn"}, OverrideSource: "scores365"},
+	}}
+
+	svc, err := NewService(repo, dispatcher, cat, 100, 1, slog.Default())
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	fixedNow := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	svc.ScrapeToday(context.Background(), fixedNow)
+
+	fmIDs := fm.receivedIDs()
+	s365IDs := s365.receivedIDs()
+
+	// fotmob bucket: natural + pinned-away (2 total).
+	if len(fmIDs) != 2 {
+		t.Fatalf("fotmob bucket: want 2 leagues, got %d (%v)", len(fmIDs), fmIDs)
+	}
+	gotFM := map[string]bool{}
+	for _, id := range fmIDs {
+		gotFM[id] = true
+	}
+	if !gotFM["natural"] || !gotFM["pinned-away"] {
+		t.Errorf("fotmob bucket: want {natural, pinned-away}, got %v", fmIDs)
+	}
+	if gotFM["pinned-to"] {
+		t.Errorf("fotmob bucket leaked pinned-to row: %v", fmIDs)
+	}
+
+	// scores365 bucket: pinned-to only (1 total). Before the fix
+	// the pinned-to row went to the fotmob bucket by accident.
+	if len(s365IDs) != 1 {
+		t.Fatalf("scores365 bucket: want 1 league, got %d (%v)", len(s365IDs), s365IDs)
+	}
+	if s365IDs[0] != "pinned-to" {
+		t.Errorf("scores365 bucket: want only pinned-to, got %v", s365IDs)
 	}
 }
