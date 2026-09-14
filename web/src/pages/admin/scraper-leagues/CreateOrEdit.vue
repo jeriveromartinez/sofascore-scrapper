@@ -21,6 +21,16 @@
       <label>Sport</label>
       <input v-model="form.sport" />
 
+      <label for="override-source">Source override</label>
+      <select id="override-source" v-model="form.override_source">
+        <option :value="null">— use natural source —</option>
+        <option value="scores365">scores365</option>
+        <option value="fotmob">fotmob</option>
+      </select>
+      <small class="hint">
+        Default: null (use natural source). Set to "fotmob" to route this league to FotMob instead.
+      </small>
+
       <label>
         <input type="checkbox" v-model="form.enabled" />
         Enabled
@@ -58,6 +68,7 @@ const form = reactive({
   country: '',
   sport: 'football',
   enabled: true,
+  override_source: null as string | null,
 })
 
 let searchTimer: number | null = null
@@ -101,6 +112,7 @@ async function onSave() {
       country: form.country,
       sport: form.sport,
       enabled: form.enabled,
+      override_source: form.override_source,
     })
   } else {
     await store.create({ ...form })

@@ -20,10 +20,9 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/fotmob"
-	sportsdbsource "github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/sportsdb"
+	scores365source "github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/scores365"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scores365"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/sportsdb"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	goredis "github.com/redis/go-redis/v9"
@@ -217,13 +216,12 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string, theSportsDBAPIKey string) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string) (*scraper.Service, *reporting.AggregationRepository) {
 	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{Timezone: timezone})
 	fotmobSrc := fotmob.NewSource(fotmobClient, logger)
-	sportsdbClient := sportsdb.NewClient(sportsdb.Options{APIKey: theSportsDBAPIKey})
-	sportsdbSrc := sportsdbsource.NewSource(sportsdbClient)
 	scores365Client := scores365.NewClient(scores365.Options{})
-	dispatcher := scraper.NewSourceDispatcher(fotmobSrc, sportsdbSrc)
+	scores365Src := scores365source.NewSource(scores365Client)
+	dispatcher := scraper.NewSourceDispatcher(fotmobSrc, scores365Src)
 	catalogRepo := catalog.NewRepository(db)
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)
 	scrapeSvc, err := scraper.NewService(eventsRepo, dispatcher, catalogRepo, batchSize, concurrency, logger)

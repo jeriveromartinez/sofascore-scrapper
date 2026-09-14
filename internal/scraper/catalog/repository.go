@@ -162,23 +162,31 @@ func (r *Repository) ActiveLeaguesBySource(ctx context.Context, source string) (
 // results, which can be stale. The match is case-insensitive and
 // requires the term to appear anywhere in the name.
 // EnsureLeague upserts a league row for the given
-// (source, source_league_id) pair. Idempotent: if the row
-// already exists it is left untouched, so operator-set
-// enabled flags and curated name overrides are preserved.
+// (source, source_league_id) pair. Returns (true, nil) when a
+// new row was inserted and (false, nil) when a row already
+// existed (regardless of its enabled flag — the operator may
+// have disabled it on a previous tick).
+//
+// The bool return exists so the dispatch loop can avoid
+// re-upserting matches for leagues the operator has disabled:
+// if the row was already there, we do not push fresh events
+// into it. Without this guard a disabled scores365 league
+// would silently start collecting matches again on every
+// dispatch tick, defeating the operator's opt-out.
 //
 // Used by the scraper dispatch loop when a bulk-fetch source
-// (TheSportsDB) returns matches for a league that is not yet
-// in the catalog. Without this the bulk path would silently
-// drop every new league TheSportsDB picks up; with this the
-// admin sees the new leagues on the next dashboard load and
-// can disable unwanted ones.
-func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, league scraper.LeagueRef) error {
+// (currently scores365) returns matches for a league that is
+// not yet in the catalog. Without this the bulk path would
+// silently drop every new league the upstream picks up; with
+// this the admin sees the new leagues on the next dashboard
+// load and can disable unwanted ones.
+func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, league scraper.LeagueRef) (bool, error) {
 	if sourceLeagueID == "" {
-		return errors.New("catalog: EnsureLeague requires source_league_id")
+		return false, errors.New("catalog: EnsureLeague requires source_league_id")
 	}
 	source := league.Source
 	if source == "" {
-		return errors.New("catalog: EnsureLeague requires league.Source")
+		return false, errors.New("catalog: EnsureLeague requires league.Source")
 	}
 	// Cheap pre-check so we don't fire a SELECT FOR UPDATE on
 	// every dispatch tick.
@@ -187,10 +195,13 @@ func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, le
 		Where("source = ? AND source_league_id = ?", source, sourceLeagueID).
 		First(&existing).Error
 	if err == nil {
-		return nil
+		// Row exists, possibly disabled by the operator. We
+		// report !created so the dispatch loop skips the
+		// upsert step for this league in this branch.
+		return false, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
+		return false, err
 	}
 	row := &ScraperLeague{
 		Source:         source,
@@ -202,11 +213,13 @@ func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, le
 	}
 	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
 		if isUniqueViolation(err) {
-			return nil // raced with another worker; treat as success
+			// Raced with another worker; treat as success but
+			// not as a fresh insert.
+			return false, nil
 		}
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
 // ExistsBySourceLeagueID returns 1 if a row with the given (source,

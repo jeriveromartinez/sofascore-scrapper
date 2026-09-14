@@ -47,9 +47,10 @@ func escapeLike(s string) string {
 }
 
 // LogoLookup resolves a team name to a remote logo URL. It is the
-// abstraction TheSportsDB satisfies so the downloader can fall back
-// to a search-by-name source when the SofaScore CDN returns 404 for
-// a FotMob-derived team_id.
+// abstraction any search-by-name logo source satisfies so the
+// downloader can fall back to it when the SofaScore CDN returns 404
+// for a FotMob-derived team_id. No implementation is currently
+// wired in production; the interface is kept for future sources.
 type LogoLookup interface {
 	TeamLogoURL(ctx context.Context, name string) (string, error)
 }
@@ -248,21 +249,20 @@ func isProxiedLogoURL(url string) bool {
 
 // DownloadAndPersistLogo is the entry point the LogoScheduler calls
 // for every job. It walks the source chain — primary URL, optional
-// TheSportsDB lookup, and the ID-based SofaScore CDN fallback — and
+// LogoLookup, and the ID-based SofaScore CDN fallback — and
 // updates Team.logo_url to the proxied API path on the first hit.
 //
 // The chain order matters:
 //  1. Primary URL (scraper-provided, e.g. from FotMob CDN).
-//  2. TheSportsDB by name — only consulted when the primary fails and
+//  2. LogoLookup by name — only consulted when the primary fails and
 //     a LogoLookup has been installed via WithLogoLookup.
 //  3. SofaScore CDN by team_id — last resort, only works when FotMob
 //     and SofaScore share an ID for the team (true for ~25% of the
 //     teams we currently seed).
 //
-// The lookup step is rate-limited by TheSportsDB's free public key
-// (~30 req/min), so we only consult it after the primary has
-// already failed. This keeps the common path (primary succeeds)
-// cost-free.
+// The lookup step is rate-limited by the upstream source, so we only
+// consult it after the primary has already failed. This keeps the
+// common path (primary succeeds) cost-free.
 //
 // All errors are logged but never propagated; a single team's
 // download failure must not stop the scheduler.

@@ -32,7 +32,7 @@ func TestService_ScrapeToday_HookReceivesLiveContext(t *testing.T) {
 	cat := &serviceTestFakeCatalog{leagues: []LeagueRef{
 		{Source: "fake", SourceLeagueId: "47", Name: "L"},
 	}}
-	svc, err := NewService(repo, src, cat, 100, 4, slog.Default())
+	svc, err := NewService(repo, NewSourceDispatcher(src), cat, 100, 4, slog.Default())
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestService_ScrapeToday_HookSurvivesAlreadyCanceledParent(t *testing.T) {
 	cat := &serviceTestFakeCatalog{leagues: []LeagueRef{
 		{Source: "fake", SourceLeagueId: "47", Name: "L"},
 	}}
-	svc, err := NewService(repo, src, cat, 100, 4, slog.Default())
+	svc, err := NewService(repo, NewSourceDispatcher(src), cat, 100, 4, slog.Default())
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

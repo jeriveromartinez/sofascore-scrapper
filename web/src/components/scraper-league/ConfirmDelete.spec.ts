@@ -11,6 +11,7 @@ const item: ScraperLeague = {
   country: 'GB',
   sport: 'football',
   enabled: true,
+  override_source: null,
   created_at: '',
   updated_at: '',
 }

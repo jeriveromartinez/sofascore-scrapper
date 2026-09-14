@@ -31,13 +31,20 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 // separate struct (rather than binding directly into ScraperLeague) because
 // the model uses camelCase Go field names without json tags, while the API
 // contract exposes snake_case (e.g. source_league_id).
+//
+// OverrideSource is a *string so we can distinguish "omit" (route to
+// the natural source) from "explicitly set" (route to the override
+// target even if it is the same string). Pinned-away rows let
+// operators route a FotMob league to the scores365 source and vice
+// versa — see ScraperLeague.OverrideSource.
 type createLeagueRequest struct {
-	Source         string `json:"source"`
-	SourceLeagueId string `json:"source_league_id"`
-	Name           string `json:"name"`
-	Country        string `json:"country"`
-	Sport          string `json:"sport"`
-	Enabled        *bool  `json:"enabled,omitempty"`
+	Source         string  `json:"source"`
+	SourceLeagueId string  `json:"source_league_id"`
+	Name           string  `json:"name"`
+	Country        string  `json:"country"`
+	Sport          string  `json:"sport"`
+	Enabled        *bool   `json:"enabled,omitempty"`
+	OverrideSource *string `json:"override_source,omitempty"`
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -62,6 +69,7 @@ func (h *Handler) Create(c *gin.Context) {
 		Country:        req.Country,
 		Sport:          req.Sport,
 		Enabled:        enabled,
+		OverrideSource: req.OverrideSource,
 	}
 	if err := h.svc.Create(c.Request.Context(), &sl); err != nil {
 		if errors.Is(err, ErrDuplicate) {
@@ -103,8 +111,12 @@ func (h *Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body"})
 		return
 	}
-	// Filter allowed fields
-	allowed := map[string]bool{"name": true, "country": true, "sport": true, "enabled": true}
+	// Filter allowed fields.
+	// Fix 6 (P2): override_source was silently dropped because the
+	// whitelist was missing it. Add it here so PATCH actually
+	// persists the override; the catalog column already supports
+	// it (ScraperLeague.OverrideSource).
+	allowed := map[string]bool{"name": true, "country": true, "sport": true, "enabled": true, "override_source": true}
 	safe := map[string]any{}
 	for k, v := range fields {
 		if allowed[k] {

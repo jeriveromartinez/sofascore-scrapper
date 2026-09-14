@@ -21,8 +21,17 @@ const (
 // internal/scraper/catalog; we keep an interface here so this package
 // does not import catalog (which would create a cycle, since catalog
 // itself imports this package for the LeagueRef type).
+//
+// ActiveLeaguesBySource is the per-source routing primitive: it
+// returns the enabled leagues whose effective source (i.e.
+// COALESCE(override_source, source)) equals the requested name.
+// The Service uses it to bucket leagues per registered source
+// without grouping by Source post-hoc, which would otherwise
+// mis-route rows where the operator has pinned a league to a
+// different dispatcher via override_source.
 type CatalogSource interface {
 	ActiveLeagues(ctx context.Context) ([]LeagueRef, error)
+	ActiveLeaguesBySource(ctx context.Context, source string) ([]LeagueRef, error)
 }
 
 // EnsureLeague is the optional surface a CatalogSource can
@@ -32,12 +41,19 @@ type CatalogSource interface {
 // catalog implementation is responsible for the upsert (and
 // for keeping operator-set enabled flags on existing rows).
 //
+// The bool return distinguishes "newly inserted" from
+// "already existed" so the dispatch loop can avoid upserting
+// matches for leagues the operator has disabled on a previous
+// tick (Fix 4). created=true means a fresh row was inserted;
+// created=false means the row already existed (and may be
+// disabled).
+//
 // Catalog backends that want the catalog frozen at boot (e.g.
 // the FotMob seed) can simply not implement this interface —
 // the dispatch loop type-asserts and skips the auto-create
 // step when the assertion fails.
 type EnsureLeague interface {
-	EnsureLeague(ctx context.Context, sourceLeagueID string, league LeagueRef) error
+	EnsureLeague(ctx context.Context, sourceLeagueID string, league LeagueRef) (bool, error)
 }
 
 // SourceDispatcher routes a league to the source that owns it.
@@ -118,97 +134,101 @@ func (s *Service) SetOnScrapeComplete(fn func(context.Context) error) {
 	s.onScrapeComplete = fn
 }
 
-// ScrapeToday groups the active leagues by source and dispatches
-// each group in parallel. Sources that implement DayMatcher use
-// the bulk-fetch fast path; others iterate their leagues one at a
-// time. Either way, the per-league upsert is shared.
+// ScrapeToday iterates each registered source and dispatches its
+// effective leagues in parallel. Per-source routing uses
+// ActiveLeaguesBySource so an operator-set override_source
+// (which moves a league to a different dispatcher) is honoured
+// without a post-hoc re-group that would otherwise mis-bucket
+// pinned rows under their natural Source field.
+//
+// Sources that implement DayMatcher use the bulk-fetch fast
+// path; others iterate their leagues one at a time. Either way,
+// the per-league upsert is shared.
 func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
-	leagues, err := s.catalog.ActiveLeagues(ctx)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "scraper: catalog error", slog.String("error", err.Error()))
-		return
-	}
-	if len(leagues) == 0 {
-		s.logger.WarnContext(ctx, "scraper: no active leagues in catalog")
-		return
-	}
 	parentCtx := ctx
-	s.dispatchAll(ctx, date, leagues, parentCtx)
-}
-
-// ScrapeNext7Days is the lookahead variant. Each day is fetched
-// independently so a single per-day failure does not poison the
-// rest of the lookahead window.
-func (s *Service) ScrapeNext7Days(ctx context.Context) {
-	leagues, err := s.catalog.ActiveLeagues(ctx)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "scraper: catalog error", slog.String("error", err.Error()))
-		return
-	}
-	if len(leagues) == 0 {
-		return
-	}
-
-	now := time.Now()
-	for i := 1; i <= 7; i++ {
-		date := now.Add(time.Duration(i) * 24 * time.Hour)
-		s.dispatchAll(ctx, date, leagues, ctx)
-	}
-}
-
-// dispatchAll groups leagues by source.Source and runs each
-// group's dispatch in parallel. The completion hook fires once
-// per call after every group has finished.
-func (s *Service) dispatchAll(ctx context.Context, date time.Time, leagues []LeagueRef, parentCtx context.Context) {
-	grouped := s.groupBySource(leagues)
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.concur)
-	for srcName, srcLeagues := range grouped {
+	anyLeagues := false
+	for _, srcName := range s.dispatcher.Names() {
 		srcName := srcName
-		srcLeagues := srcLeagues
+		leagues, err := s.catalog.ActiveLeaguesBySource(ctx, srcName)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "scraper: catalog error",
+				slog.String("source", srcName),
+				slog.String("error", err.Error()))
+			continue
+		}
+		if len(leagues) == 0 {
+			continue
+		}
+		anyLeagues = true
+		src, ok := s.dispatcher.Lookup(srcName)
+		if !ok {
+			// Defensive: Names() returns keys already in the
+			// dispatcher's map, so Lookup must succeed. If a
+			// race ever lets it fail we just skip that source.
+			continue
+		}
 		g.Go(func() error {
-			src, ok := s.dispatcher.Lookup(srcName)
-			if !ok {
-				s.logger.WarnContext(ctx, "scraper: no source registered for catalog row",
-					slog.String("source", srcName),
-					slog.Int("league_count", len(srcLeagues)))
-				return nil
-			}
-			return s.dispatchSource(ctx, src, srcLeagues, date, parentCtx)
+			return s.dispatchSource(ctx, src, leagues, date, parentCtx)
 		})
 	}
 	if err := g.Wait(); err != nil {
 		s.logger.ErrorContext(ctx, "scrape today errors", slog.String("error", err.Error()))
+	}
+	if !anyLeagues {
+		s.logger.WarnContext(ctx, "scraper: no active leagues in catalog")
 	}
 	if s.onScrapeComplete != nil {
 		_ = s.onScrapeComplete(parentCtx)
 	}
 }
 
-// groupBySource buckets leagues by their Source field while
-// filtering out any league whose Source is not registered. We log
-// a warning per unknown source so misconfigured catalog rows are
-// visible without crashing the cron.
-func (s *Service) groupBySource(leagues []LeagueRef) map[string][]LeagueRef {
-	out := make(map[string][]LeagueRef)
-	for _, l := range leagues {
-		if _, ok := s.dispatcher.Lookup(l.Source); !ok {
-			s.logger.Warn("scraper: league references unknown source, skipping",
-				slog.String("source", l.Source),
-				slog.String("source_league_id", l.SourceLeagueId),
-				slog.String("league_name", l.Name))
-			continue
+// ScrapeNext7Days is the lookahead variant. Each day is fetched
+// independently so a single per-day failure does not poison the
+// rest of the lookahead window. The per-source loop mirrors
+// ScrapeToday so override_source routing applies to the
+// lookahead window as well.
+func (s *Service) ScrapeNext7Days(ctx context.Context) {
+	now := time.Now()
+	for i := 1; i <= 7; i++ {
+		date := now.Add(time.Duration(i) * 24 * time.Hour)
+		parentCtx := ctx
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(s.concur)
+		for _, srcName := range s.dispatcher.Names() {
+			srcName := srcName
+			leagues, err := s.catalog.ActiveLeaguesBySource(ctx, srcName)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "scraper: catalog error",
+					slog.String("source", srcName),
+					slog.String("error", err.Error()))
+				continue
+			}
+			if len(leagues) == 0 {
+				continue
+			}
+			src, ok := s.dispatcher.Lookup(srcName)
+			if !ok {
+				continue
+			}
+			g.Go(func() error {
+				return s.dispatchSource(ctx, src, leagues, date, parentCtx)
+			})
 		}
-		out[l.Source] = append(out[l.Source], l)
+		g.Wait()
+		if s.onScrapeComplete != nil {
+			_ = s.onScrapeComplete(parentCtx)
+		}
 	}
-	return out
 }
 
 // dispatchSource drives one source's leagues for a single day.
-// When the source implements DayMatcher (the FotMob fast path),
-// one HTTP call covers all leagues in srcLeagues. Otherwise the
-// source is iterated league-by-league (the TheSportsDB path,
-// which makes one HTTP call per league under the hood).
+// When the source implements DayMatcher (the FotMob and
+// scores365 bulk-fetch fast path), one HTTP call covers all
+// leagues in srcLeagues. Otherwise the source is iterated
+// league-by-league (the per-league path, which makes one HTTP
+// call per league under the hood).
 func (s *Service) dispatchSource(
 	ctx context.Context,
 	src Source,
@@ -231,13 +251,15 @@ func (s *Service) dispatchSource(
 // loop iterates srcLeagues and drops unknown-league matches.
 //
 // For sources whose catalog is the full universe of upstream
-// leagues (TheSportsDB), the catalog can grow on the fly: any
-// league ID seen in the day payload that is not yet in the
-// catalog is upserted via ensureLeague (enabled=true), so the
-// admin sees it on the next dashboard load and can choose to
-// disable it. The auto-create path is guarded by an interface
-// assertion so the FotMob fast-path keeps its stricter
-// behaviour.
+// leagues (currently scores365), the catalog can grow on the
+// fly: any league ID seen in the day payload that is not yet
+// in the catalog is upserted via ensureLeague (enabled=true),
+// so the admin sees it on the next dashboard load and can
+// choose to disable it. The auto-create path is guarded by
+// both an interface assertion and a per-source gate
+// (`src.Name()` must be a source whose upstream publishes
+// events for every league — currently just scores365) so the
+// FotMob fast-path keeps its stricter behaviour.
 func (s *Service) dispatchDayMatch(
 	ctx context.Context,
 	dm DayMatcher,
@@ -274,16 +296,28 @@ func (s *Service) dispatchDayMatch(
 
 	// Step 2: league IDs present in the day payload that are
 	// not yet in the catalog. Only run when the catalog supports
-	// dynamic auto-create (the interface assertion below). The
-	// FotMob path returns nil here so its narrow catalog stays
-	// narrow; the sportsdb path picks up every league the
-	// upstream publishes events for.
-	if el, ok := s.catalog.(EnsureLeague); ok {
+	// dynamic auto-create (the interface assertion below) AND
+	// the source is one whose upstream publishes events for
+	// every league (currently scores365). The FotMob path is
+	// gated off so its curated narrow catalog stays narrow.
+	//
+	// Auto-create only for sources whose upstream publishes events
+	// for every league (currently just scores365). The FotMob path
+	// is curated and must not silently grow the catalog.
+	if el, ok := s.catalog.(EnsureLeague); ok && src.Name() == "scores365" {
 		for _, ms := range byLeague {
 			if len(ms) == 0 {
 				continue
 			}
 			first := ms[0]
+			// Fix 3 (P1): football is FotMob's primary source. The
+			// discovery job deliberately omits the football sitemap
+			// for that reason; auto-enrol must mirror the same
+			// boundary so a stray football league in the daily
+			// feed does not sneak into the catalog.
+			if first.League.Sport == "football" {
+				continue
+			}
 			id := first.League.SourceLeagueId
 			// Skip leagues already handled by step 1.
 			if _, known := byLeagueToRef(srcLeagues, id); known {
@@ -291,11 +325,20 @@ func (s *Service) dispatchDayMatch(
 			}
 			league := first.League // canonical sport already from NormalizeSport
 			g.Go(func() error {
-				if err := el.EnsureLeague(ctx, id, league); err != nil {
+				created, err := el.EnsureLeague(ctx, id, league)
+				if err != nil {
 					s.logger.WarnContext(ctx, "scrape: ensure league failed",
 						slog.String("source", src.Name()),
 						slog.String("source_league_id", id),
 						slog.String("error", err.Error()))
+					return nil
+				}
+				// Fix 4 (P1): only push matches when the row was
+				// newly inserted. A pre-existing row means the
+				// operator may have disabled it on a previous tick;
+				// upserting matches for it would silently re-enable
+				// the league, defeating the opt-out.
+				if !created {
 					return nil
 				}
 				return s.upsertLeagueMatches(ctx, league, date, byLeague[id])
@@ -309,9 +352,6 @@ func (s *Service) dispatchDayMatch(
 			slog.String("date", date.Format("2006-01-02")),
 			slog.String("error", err.Error()))
 		return err
-	}
-	if s.onScrapeComplete != nil {
-		_ = s.onScrapeComplete(parentCtx)
 	}
 	return nil
 }
@@ -360,9 +400,6 @@ func (s *Service) dispatchPerLeague(
 			slog.String("date", date.Format("2006-01-02")),
 			slog.String("error", err.Error()))
 		return err
-	}
-	if s.onScrapeComplete != nil {
-		_ = s.onScrapeComplete(parentCtx)
 	}
 	return nil
 }

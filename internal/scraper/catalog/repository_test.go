@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 	"gorm.io/gorm"
 )
 
@@ -189,6 +190,75 @@ func mustCreate(t *testing.T, repo *Repository, sl *ScraperLeague) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// TestRepository_EnsureLeague_FirstCallReturnsCreated covers Fix 4.
+// EnsureLeague now returns (created bool, err error): created=true
+// when a row was inserted, created=false when the row already
+// existed. The dispatch loop relies on this to skip upserts for
+// leagues the operator has disabled on a previous tick.
+func TestRepository_EnsureLeague_FirstCallReturnsCreated(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewRepository(db)
+	created, err := repo.EnsureLeague(context.Background(), "scores365", scraper.LeagueRef{
+		Source: "scores365", Name: "MLB", Sport: "baseball", Country: "USA",
+	})
+	if err != nil {
+		t.Fatalf("EnsureLeague: %v", err)
+	}
+	if !created {
+		t.Errorf("first EnsureLeague must return created=true, got false")
+	}
+}
+
+func TestRepository_EnsureLeague_SecondCallReturnsNotCreated(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewRepository(db)
+	ref := scraper.LeagueRef{Source: "scores365", Name: "MLB", Sport: "baseball", Country: "USA"}
+	if _, err := repo.EnsureLeague(context.Background(), "scores365", ref); err != nil {
+		t.Fatalf("first EnsureLeague: %v", err)
+	}
+	created, err := repo.EnsureLeague(context.Background(), "scores365", ref)
+	if err != nil {
+		t.Fatalf("second EnsureLeague: %v", err)
+	}
+	if created {
+		t.Errorf("second EnsureLeague must return created=false, got true")
+	}
+}
+
+// TestRepository_EnsureLeague_PreservesDisabledRow is the
+// regression for Fix 4. When an operator disables a scores365
+// league via the admin UI, EnsureLeague on a subsequent dispatch
+// tick must report created=false so the loop knows to skip the
+// upsert (otherwise the disabled league would silently start
+// receiving matches again, defeating the opt-out).
+func TestRepository_EnsureLeague_PreservesDisabledRow(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewRepository(db)
+	ref := scraper.LeagueRef{Source: "scores365", Name: "MLB", Sport: "baseball", Country: "USA"}
+	if _, err := repo.EnsureLeague(context.Background(), "scores365", ref); err != nil {
+		t.Fatalf("EnsureLeague: %v", err)
+	}
+	// Operator disables the row.
+	if err := db.Model(&ScraperLeague{}).Where("source = ? AND source_league_id = ?", "scores365", "scores365").Update("enabled", false).Error; err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	created, err := repo.EnsureLeague(context.Background(), "scores365", ref)
+	if err != nil {
+		t.Fatalf("EnsureLeague: %v", err)
+	}
+	if created {
+		t.Errorf("EnsureLeague must return created=false for a pre-existing (disabled) row")
+	}
+	// Row stays disabled.
+	var row ScraperLeague
+	if err := db.Where("source = ? AND source_league_id = ?", "scores365", "scores365").First(&row).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if row.Enabled {
+		t.Errorf("EnsureLeague must NOT flip an existing disabled row back to enabled")
+	}
+}
 
 func TestRepository_SearchLocalByName_IgnoresSoftDeleted(t *testing.T) {
 	db := newTestDB(t)

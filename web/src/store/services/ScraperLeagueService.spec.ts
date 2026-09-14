@@ -130,6 +130,7 @@ describe('ScraperLeagueService', () => {
       country: 'GB',
       sport: 'football',
       enabled: true,
+      override_source: null,
       created_at: '2026-09-10T10:00:00Z',
       updated_at: '2026-09-10T11:00:00Z',
     })

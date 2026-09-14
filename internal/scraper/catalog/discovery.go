@@ -2,14 +2,11 @@
 // admin scraper catalog in sync with the upstream (365scores)
 // league registry.
 //
-// Background: PR #131/132 wired the scraper to ingest events
-// for four pre-seeded leagues (NBA/NFL/MLB/NHL). PR #133 added
-// the bulk-fetch path (eventsday.php without an `l=` filter)
-// so every event TheSportsDB publishes for the day is now
-// scraped in one HTTP call. That is great for coverage but
-// useless unless the catalog actually knows about every
-// league the upstream surfaces — otherwise the dispatch loop
-// drops matches whose idLeague is not in `scraper_leagues`.
+// Background: the scraper dispatches every FotMob league per
+// call and every scores365 league via the bulk-fetch day path
+// (DayMatches). Both paths require the catalog to know the
+// league up front — the bulk path drops any match whose
+// idLeague is not in `scraper_leagues`.
 //
 // This package fixes that with a single-shot discovery job
 // that pulls the upstream 365scores sitemaps, normalises the
@@ -22,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
@@ -97,7 +95,7 @@ func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, 
 			if err != nil {
 				return result, fmt.Errorf("catalog: discovery exists check %s/%s: %w", l.Source, l.SourceLeagueId, err)
 			}
-			err = repo.EnsureLeague(ctx, l.SourceLeagueId, toLeagueRef(l))
+			created, err := repo.EnsureLeague(ctx, l.SourceLeagueId, toLeagueRef(l))
 			if err != nil {
 				result.Skipped++
 				logger.WarnContext(ctx, "catalog: discovery skip league",
@@ -110,7 +108,9 @@ func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, 
 			if err != nil {
 				return result, fmt.Errorf("catalog: discovery recheck: %w", err)
 			}
-			if after > before {
+			if created {
+				result.Upserted++
+			} else if after > before {
 				result.Upserted++
 			} else {
 				result.Unchanged++
@@ -121,10 +121,25 @@ func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, 
 	return result, nil
 }
 
+// toLeagueRef is the bridge between the upstream sitemap rows and
+// the catalog schema. The upstream comp ID (e.g. "47") is the
+// 365scores raw competition ID; we prefix it with LeagueIDPrefix
+// so it lands in the same ID space as the tournaments rows seeded
+// by eventToMatch (e.g. "6000000047"). Without this prefix FotMob
+// league ID 47 (Premier League) and 365scores comp ID 47 (NBA
+// sitemap fixture) would collide on the tournaments primary key.
+//
+// The catalog league row is keyed by (source, source_league_id)
+// so the prefix only affects the tournaments join, not the
+// scraper_leagues row itself.
 func toLeagueRef(l scores365.League) scraper.LeagueRef {
+	id := l.SourceLeagueId
+	if raw, err := strconv.ParseInt(id, 10, 64); err == nil {
+		id = strconv.FormatInt(scores365.LeagueIDPrefix+raw, 10)
+	}
 	return scraper.LeagueRef{
 		Source:         l.Source,
-		SourceLeagueId: l.SourceLeagueId,
+		SourceLeagueId: id,
 		Name:           l.Name,
 		Sport:          l.Sport,
 		Country:        l.Country,

@@ -50,7 +50,7 @@ func newTestRepoWithLookup(lookup LogoLookup) *Repository {
 }
 
 // primaryFailingServer always returns 404 so the chain falls through
-// to TheSportsDB and then the SofaScore CDN. The test asserts that
+// to the LogoLookup and then the SofaScore CDN. The test asserts that
 // the second source is consulted, then the third.
 func primaryFailingServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -114,7 +114,7 @@ func TestDownloadAndPersistLogo_FallsBackToLookup(t *testing.T) {
 }
 
 // TestDownloadAndPersistLogo_FallsBackToSofaScoreWhenLookupEmpty
-// covers the chain when TheSportsDB returns no match — the
+// covers the chain when the LogoLookup returns no match — the
 // ID-based SofaScore CDN URL must be tried last.
 func TestDownloadAndPersistLogo_FallsBackToSofaScoreWhenLookupEmpty(t *testing.T) {
 	withImageStorageDir(t)
@@ -260,8 +260,8 @@ func TestDownloadAndPersistLogo_EmptyLookupNameSkipped(t *testing.T) {
 
 // TestDownloadAndPersistLogo_PrimarySuccessDoesNotConsultLookup
 // documents that successful primary downloads never trigger the
-// fallback — important because the lookup is rate-limited (free
-// TheSportsDB key is ~30 req/min) and primary fetches are not.
+// fallback — important because the lookup is rate-limited and
+// primary fetches are not.
 func TestDownloadAndPersistLogo_PrimarySuccessDoesNotConsultLookup(t *testing.T) {
 	withImageStorageDir(t)
 
@@ -295,8 +295,7 @@ func TestDownloadAndPersistLogo_PrimarySuccessDoesNotConsultLookup(t *testing.T)
 // TestDownloadAndPersistLogo_LookupErrorTreatedAsChainFailure
 // documents that a transient lookup error (not just "no match") is
 // logged and the chain continues to the next source. Without this,
-// a brief TheSportsDB outage would block every team whose primary
-// URL 404s.
+// a brief lookup outage would block every team whose primary URL 404s.
 func TestDownloadAndPersistLogo_LookupErrorTreatedAsChainFailure(t *testing.T) {
 	withImageStorageDir(t)
 

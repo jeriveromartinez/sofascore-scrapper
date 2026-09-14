@@ -34,6 +34,20 @@ const (
 	Referer   = "https://www.365scores.com/"
 )
 
+// LeagueIDPrefix namespaces 365scores competition IDs into the
+// shared `tournaments` table. 365scores uses small numeric comp IDs
+// (e.g. 47 for the NBA sitemap fixture) that collide with FotMob
+// league IDs (e.g. 47 for the English Premier League). Prefixing
+// every row with 6_000_000_000 puts the 365scores range well above
+// the natural FotMob range; persistence via ToTournament then uses
+// the prefixed ID as the row primary key, so the two sources can
+// never overwrite each other.
+//
+// The same prefix is applied on the catalog discovery path so
+// scraper_leagues rows seeded from the sitemap and tournaments
+// rows seeded from the daily feed land on the same ID space.
+const LeagueIDPrefix int64 = 6_000_000_000
+
 type Options struct {
 	BaseURL    string // "https://webws.365scores.com"
 	SitemapURL string // "https://www.365scores.com/sitemaps"

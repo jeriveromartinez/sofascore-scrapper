@@ -27,6 +27,7 @@ export interface ScraperLeague {
   country: string
   sport: string
   enabled: boolean
+  override_source: string | null
   created_at: string
   updated_at: string
 }
@@ -71,6 +72,7 @@ export function normalizeScraperLeague(raw: unknown): ScraperLeague {
     country: (r.Country ?? r.country) as string,
     sport: (r.Sport ?? r.sport) as string,
     enabled: (r.Enabled ?? r.enabled) as boolean,
+    override_source: (r.OverrideSource ?? r.override_source ?? null) as string | null,
     created_at: (r.CreatedAt ?? r.created_at) as string,
     updated_at: (r.UpdatedAt ?? r.updated_at) as string,
   }
