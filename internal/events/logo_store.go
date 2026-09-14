@@ -61,8 +61,27 @@ func TeamLogoAPIPath(teamID int64) string {
 	return fmt.Sprintf("/teams/logo/%d", teamID)
 }
 
+// TeamLogoSourceURL returns the URL the LogoScheduler should use as a
+// last-resort fallback when neither the source-provided PrimaryURL
+// nor the LogoLookup resolve the team's logo. It mirrors the URL
+// pattern built in scraper.LogoURLForSource: the public SofaScore CDN
+// keyed by team ID.
+//
+// Source IDs in the shared `teams` table are prefixed per source to
+// avoid collisions (7_000_000_000 for scores365, 2_000_000_000 for the
+// removed TheSportsDB). SofaScore's CDN is keyed by the upstream's
+// natural ID, so the prefix must be stripped before building the URL.
+// Without this stripping every scores365 fallback download returns 404
+// (the CDN sees a 7_000_000_000+ ID that doesn't exist in its index).
 func TeamLogoSourceURL(teamID int64) string {
-	return fmt.Sprintf("https://img.sofascore.com/api/v1/team/%d/image", teamID)
+	natural := teamID
+	switch {
+	case natural >= 7_000_000_000:
+		natural -= 7_000_000_000
+	case natural >= 2_000_000_000:
+		natural -= 2_000_000_000
+	}
+	return fmt.Sprintf("https://img.sofascore.com/api/v1/team/%d/image", natural)
 }
 
 func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
