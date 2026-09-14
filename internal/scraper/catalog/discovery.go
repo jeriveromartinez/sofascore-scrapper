@@ -95,7 +95,7 @@ func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, 
 			if err != nil {
 				return result, fmt.Errorf("catalog: discovery exists check %s/%s: %w", l.Source, l.SourceLeagueId, err)
 			}
-			err = repo.EnsureLeague(ctx, l.SourceLeagueId, toLeagueRef(l))
+			created, err := repo.EnsureLeague(ctx, l.SourceLeagueId, toLeagueRef(l))
 			if err != nil {
 				result.Skipped++
 				logger.WarnContext(ctx, "catalog: discovery skip league",
@@ -108,7 +108,9 @@ func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, 
 			if err != nil {
 				return result, fmt.Errorf("catalog: discovery recheck: %w", err)
 			}
-			if after > before {
+			if created {
+				result.Upserted++
+			} else if after > before {
 				result.Upserted++
 			} else {
 				result.Unchanged++

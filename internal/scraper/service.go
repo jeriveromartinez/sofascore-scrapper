@@ -32,12 +32,19 @@ type CatalogSource interface {
 // catalog implementation is responsible for the upsert (and
 // for keeping operator-set enabled flags on existing rows).
 //
+// The bool return distinguishes "newly inserted" from
+// "already existed" so the dispatch loop can avoid upserting
+// matches for leagues the operator has disabled on a previous
+// tick (Fix 4). created=true means a fresh row was inserted;
+// created=false means the row already existed (and may be
+// disabled).
+//
 // Catalog backends that want the catalog frozen at boot (e.g.
 // the FotMob seed) can simply not implement this interface —
 // the dispatch loop type-asserts and skips the auto-create
 // step when the assertion fails.
 type EnsureLeague interface {
-	EnsureLeague(ctx context.Context, sourceLeagueID string, league LeagueRef) error
+	EnsureLeague(ctx context.Context, sourceLeagueID string, league LeagueRef) (bool, error)
 }
 
 // SourceDispatcher routes a league to the source that owns it.
@@ -291,6 +298,14 @@ func (s *Service) dispatchDayMatch(
 				continue
 			}
 			first := ms[0]
+			// Fix 3 (P1): football is FotMob's primary source. The
+			// discovery job deliberately omits the football sitemap
+			// for that reason; auto-enrol must mirror the same
+			// boundary so a stray football league in the daily
+			// feed does not sneak into the catalog.
+			if first.League.Sport == "football" {
+				continue
+			}
 			id := first.League.SourceLeagueId
 			// Skip leagues already handled by step 1.
 			if _, known := byLeagueToRef(srcLeagues, id); known {
@@ -298,11 +313,20 @@ func (s *Service) dispatchDayMatch(
 			}
 			league := first.League // canonical sport already from NormalizeSport
 			g.Go(func() error {
-				if err := el.EnsureLeague(ctx, id, league); err != nil {
+				created, err := el.EnsureLeague(ctx, id, league)
+				if err != nil {
 					s.logger.WarnContext(ctx, "scrape: ensure league failed",
 						slog.String("source", src.Name()),
 						slog.String("source_league_id", id),
 						slog.String("error", err.Error()))
+					return nil
+				}
+				// Fix 4 (P1): only push matches when the row was
+				// newly inserted. A pre-existing row means the
+				// operator may have disabled it on a previous tick;
+				// upserting matches for it would silently re-enable
+				// the league, defeating the opt-out.
+				if !created {
 					return nil
 				}
 				return s.upsertLeagueMatches(ctx, league, date, byLeague[id])

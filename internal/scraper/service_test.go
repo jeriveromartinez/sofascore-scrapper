@@ -400,14 +400,14 @@ func (c *ensureFakeCatalog) ActiveLeagues(_ context.Context) ([]LeagueRef, error
 	return out, nil
 }
 
-func (c *ensureFakeCatalog) EnsureLeague(_ context.Context, sourceLeagueID string, league LeagueRef) error {
+func (c *ensureFakeCatalog) EnsureLeague(_ context.Context, sourceLeagueID string, league LeagueRef) (bool, error) {
 	for _, l := range c.ensure {
 		if l == sourceLeagueID {
-			return nil
+			return false, nil
 		}
 	}
 	c.ensure = append(c.ensure, sourceLeagueID)
-	return nil
+	return true, nil
 }
 
 // TestService_ScrapeToday_AutoCreatesUnknownLeagues covers the
