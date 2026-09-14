@@ -19,6 +19,15 @@ import (
 // collision is impossible.
 const TeamIDPrefix int64 = 7_000_000_000
 
+// LeagueIDPrefix is re-exported from the upstream scores365 package
+// so the discovery code can apply the same namespace prefix when
+// seeding scraper_leagues from the sitemap feed (see
+// internal/scraper/catalog/discovery.go::toLeagueRef). Keeping the
+// constant owned by the upstream package avoids a directional
+// dependency from the catalog package back into this source
+// implementation (which would create an import cycle).
+const LeagueIDPrefix = scores365.LeagueIDPrefix
+
 // Source implements scraper.Source on top of 365scores' /data/games
 // day-wide endpoint. It also satisfies scraper.DayMatcher so the
 // dispatcher can route per-sport and auto-create leagues.
@@ -37,7 +46,20 @@ func (s *Source) Name() string { return "scores365" }
 // DayMatches returns every match 365scores publishes for the given
 // UTC day. The HTTP layer already caches for 60s, so calling
 // DayMatches multiple times within the same scrape loop is cheap.
+//
+// Limitation: the upstream /data/games endpoint only returns the
+// current UTC day. ScrapeNext7Days iterates the next seven days
+// against this source, so six of the seven iterations would hit
+// the network just to discover "no data for that date". We
+// short-circuit on a non-today UTC date and return an empty slice
+// immediately, so only the today-UTC call costs a request. The
+// trade-off is documented and intentional: when 365scores starts
+// publishing per-day feeds this guard can be removed.
 func (s *Source) DayMatches(ctx context.Context, date time.Time) ([]scraper.Match, error) {
+	today := time.Now().UTC().Format("2006-01-02")
+	if date.UTC().Format("2006-01-02") != today {
+		return []scraper.Match{}, nil
+	}
 	feed, err := s.client.FetchGames(ctx, date)
 	if err != nil {
 		return nil, fmt.Errorf("scores365: DayMatches fetch %s: %w", date.Format("2006-01-02"), err)
@@ -103,7 +125,7 @@ func (s *Source) eventToMatch(raw scores365.Game, competitions []scores365.Compe
 	leagueName, leagueCountry := lookupLeague(raw.Comp, competitions, countries)
 	return scraper.Match{
 		Source:         s.Name(),
-		SourceMatchId:  strconv.Itoa(raw.ID),
+		SourceMatchId:  "scores365-" + strconv.Itoa(raw.ID),
 		StartTimestamp: startTS,
 		HomeScore:      score.home,
 		AwayScore:      score.away,
@@ -112,7 +134,7 @@ func (s *Source) eventToMatch(raw scores365.Game, competitions []scores365.Compe
 		AwayTeam:       s.teamFromEvent(away),
 		League: scraper.LeagueRef{
 			Source:         s.Name(),
-			SourceLeagueId: strconv.Itoa(raw.Comp),
+			SourceLeagueId: strconv.FormatInt(LeagueIDPrefix+int64(raw.Comp), 10),
 			Name:           leagueName,
 			Sport:          sportSlugFromSID(raw.SID),
 			Country:        leagueCountry,

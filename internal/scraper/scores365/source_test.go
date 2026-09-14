@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func TestSource_DayMatches_AllSports(t *testing.T) {
 	c, srv := newFakeClient(t)
 	defer srv.Close()
 	s := NewSource(c)
-	date := time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)
+	date := time.Now().UTC()
 	got, err := s.DayMatches(context.Background(), date)
 	if err != nil {
 		t.Fatalf("DayMatches: %v", err)
@@ -57,8 +58,17 @@ func TestSource_DayMatches_AllSports(t *testing.T) {
 		if m.Source != "scores365" {
 			t.Errorf("match source = %q, want scores365", m.Source)
 		}
-		if m.SourceMatchId != "4620228" && m.SourceMatchId != "4620229" {
-			t.Errorf("unexpected match id %s", m.SourceMatchId)
+		// Fix 2: SourceMatchId must be prefixed with "scores365-" so the
+		// events.external_match_id global unique index never collides with
+		// a FotMob row (FotMob IDs are raw decimals, e.g. "4193492").
+		if m.SourceMatchId != "scores365-4620228" && m.SourceMatchId != "scores365-4620229" {
+			t.Errorf("unexpected match id %s (want scores365- prefixed)", m.SourceMatchId)
+		}
+		// Fix 1: league comp IDs are namespaced through LeagueIDPrefix
+		// (Comp 438 -> 6000000438) so the 365scores range cannot collide
+		// with FotMob league IDs on the tournaments table.
+		if m.League.SourceLeagueId != "6000000438" {
+			t.Errorf("unexpected league id %s (want 6000000438)", m.League.SourceLeagueId)
 		}
 		if m.HomeTeam.SourceId != TeamIDPrefix+7421 && m.HomeTeam.SourceId != TeamIDPrefix+7422 {
 			t.Errorf("unexpected team id %d", m.HomeTeam.SourceId)
@@ -84,6 +94,36 @@ func TestSource_DayMatches_SkipsMissingComps(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("got %d matches, want 0 (only one team in Comps)", len(got))
+	}
+}
+
+// TestSource_DayMatches_ShortCircuitsNonToday is the regression
+// test for Fix 5. ScrapeNext7Days calls DayMatches once per date;
+// /data/games only returns the current UTC day, so the other six
+// iterations must short-circuit to an empty slice without touching
+// the network. The fake server records every request and fails
+// the test if the guard lets one through for a non-today date.
+func TestSource_DayMatches_ShortCircuitsNonToday(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"Games":[]}`))
+	}))
+	defer srv.Close()
+	c := scores365.NewClient(scores365.Options{BaseURL: srv.URL})
+	s := NewSource(c)
+
+	tomorrow := time.Now().UTC().AddDate(0, 0, 1)
+	got, err := s.DayMatches(context.Background(), tomorrow)
+	if err != nil {
+		t.Fatalf("DayMatches: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("non-today date should return empty slice, got %d", len(got))
+	}
+	if atomic.LoadInt32(&hits) != 0 {
+		t.Errorf("non-today DayMatches must not hit the network, got %d requests", hits)
 	}
 }
 
@@ -271,14 +311,14 @@ func TestSource_ScheduledEvents_FiltersByLeague(t *testing.T) {
 	c, srv := newFakeClient(t)
 	defer srv.Close()
 	s := NewSource(c)
-	date := time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)
+	date := time.Now().UTC()
 	got, err := s.ScheduledEvents(context.Background(),
-		scraper.LeagueRef{Source: "scores365", SourceLeagueId: "438"}, date)
+		scraper.LeagueRef{Source: "scores365", SourceLeagueId: "6000000438"}, date)
 	if err != nil {
 		t.Fatalf("ScheduledEvents: %v", err)
 	}
 	if len(got) != 2 {
-		t.Errorf("got %d, want 2 (both matches are Comp 438)", len(got))
+		t.Errorf("got %d, want 2 (both matches are Comp 438 -> prefixed 6000000438)", len(got))
 	}
 }
 
@@ -316,7 +356,7 @@ func TestSource_DayMatches_PopulatesLeagueNameAndCountry(t *testing.T) {
 	c, srv := newFakeClientWithFeed(t, feedWithLeagueMeta)
 	defer srv.Close()
 	s := NewSource(c)
-	date := time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)
+	date := time.Now().UTC()
 	got, err := s.DayMatches(context.Background(), date)
 	if err != nil {
 		t.Fatalf("DayMatches: %v", err)
@@ -337,7 +377,7 @@ func TestSource_DayMatches_FallsBackOnMissingCompetition(t *testing.T) {
 	c, srv := newFakeClient(t)
 	defer srv.Close()
 	s := NewSource(c)
-	date := time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)
+	date := time.Now().UTC()
 	got, err := s.DayMatches(context.Background(), date)
 	if err != nil {
 		t.Fatalf("DayMatches: %v", err)

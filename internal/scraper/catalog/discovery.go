@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
@@ -118,10 +119,25 @@ func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, 
 	return result, nil
 }
 
+// toLeagueRef is the bridge between the upstream sitemap rows and
+// the catalog schema. The upstream comp ID (e.g. "47") is the
+// 365scores raw competition ID; we prefix it with LeagueIDPrefix
+// so it lands in the same ID space as the tournaments rows seeded
+// by eventToMatch (e.g. "6000000047"). Without this prefix FotMob
+// league ID 47 (Premier League) and 365scores comp ID 47 (NBA
+// sitemap fixture) would collide on the tournaments primary key.
+//
+// The catalog league row is keyed by (source, source_league_id)
+// so the prefix only affects the tournaments join, not the
+// scraper_leagues row itself.
 func toLeagueRef(l scores365.League) scraper.LeagueRef {
+	id := l.SourceLeagueId
+	if raw, err := strconv.ParseInt(id, 10, 64); err == nil {
+		id = strconv.FormatInt(scores365.LeagueIDPrefix+raw, 10)
+	}
 	return scraper.LeagueRef{
 		Source:         l.Source,
-		SourceLeagueId: l.SourceLeagueId,
+		SourceLeagueId: id,
 		Name:           l.Name,
 		Sport:          l.Sport,
 		Country:        l.Country,
