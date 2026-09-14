@@ -41,6 +41,13 @@ func ToTeam(source Team) events.Team {
 // library TLS fingerprint and only checks Referer, which is what the
 // LogoScheduler already sends.
 //
+// Source IDs in the shared `teams` table are prefixed per source to
+// avoid collisions: 7_000_000_000 for scores365 (see
+// internal/scraper/scores365/source.go::TeamIDPrefix), 2_000_000_000
+// for the now-removed TheSportsDB. SofaScore's CDN is keyed by the
+// upstream's natural ID, so we strip the prefix before building the
+// URL.
+//
 // If LogoURL is already set (e.g. for a future source that ships a
 // full image URL), it is returned verbatim — the source wins.
 func LogoURLForSource(sourceID int64, logoURL string) string {
@@ -50,7 +57,14 @@ func LogoURLForSource(sourceID int64, logoURL string) string {
 	if sourceID == 0 {
 		return ""
 	}
-	return "https://img.sofascore.com/api/v1/team/" + strconv.FormatInt(sourceID, 10) + "/image"
+	natural := sourceID
+	switch {
+	case natural >= 7_000_000_000:
+		natural -= 7_000_000_000
+	case natural >= 2_000_000_000:
+		natural -= 2_000_000_000
+	}
+	return "https://img.sofascore.com/api/v1/team/" + strconv.FormatInt(natural, 10) + "/image"
 }
 
 func ToTournament(source LeagueRef) tournaments.Tournament {

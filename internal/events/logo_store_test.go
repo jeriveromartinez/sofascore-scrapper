@@ -283,3 +283,31 @@ func TestDownloadTeamLogoMalformedURLSkipsReferer(t *testing.T) {
 		t.Fatal("expected error from malformed source URL")
 	}
 }
+
+// TestTeamLogoSourceURLStripsPrefix asserts that the URL the
+// LogoScheduler falls back to for an unknown IDs strips per-source
+// prefixes before building the SofaScore CDN URL. Source IDs in the
+// shared `teams` table are prefixed to avoid collisions (7B for
+// scores365, 2B for the removed TheSportsDB), but SofaScore's CDN is
+// keyed by the upstream's natural ID. With the fix applied,
+// `TeamLogoSourceURL(7000001234)` returns the same URL as
+// `TeamLogoSourceURL(1234)`.
+func TestTeamLogoSourceURLStripsPrefix(t *testing.T) {
+	cases := []struct {
+		name   string
+		teamID int64
+		want   string
+	}{
+		{"fotmob_natural_id", 9825, "https://img.sofascore.com/api/v1/team/9825/image"},
+		{"scores365_prefixed_id", 7_000_000_000 + 123, "https://img.sofascore.com/api/v1/team/123/image"},
+		{"sportsdb_legacy_prefixed_id", 2_000_000_000 + 789, "https://img.sofascore.com/api/v1/team/789/image"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := TeamLogoSourceURL(tc.teamID)
+			if got != tc.want {
+				t.Errorf("TeamLogoSourceURL(%d) = %q, want %q", tc.teamID, got, tc.want)
+			}
+		})
+	}
+}
