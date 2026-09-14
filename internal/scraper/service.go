@@ -205,10 +205,11 @@ func (s *Service) groupBySource(leagues []LeagueRef) map[string][]LeagueRef {
 }
 
 // dispatchSource drives one source's leagues for a single day.
-// When the source implements DayMatcher (the FotMob fast path),
-// one HTTP call covers all leagues in srcLeagues. Otherwise the
-// source is iterated league-by-league (the TheSportsDB path,
-// which makes one HTTP call per league under the hood).
+// When the source implements DayMatcher (the FotMob and
+// scores365 bulk-fetch fast path), one HTTP call covers all
+// leagues in srcLeagues. Otherwise the source is iterated
+// league-by-league (the per-league path, which makes one HTTP
+// call per league under the hood).
 func (s *Service) dispatchSource(
 	ctx context.Context,
 	src Source,
@@ -231,15 +232,15 @@ func (s *Service) dispatchSource(
 // loop iterates srcLeagues and drops unknown-league matches.
 //
 // For sources whose catalog is the full universe of upstream
-// leagues (TheSportsDB), the catalog can grow on the fly: any
-// league ID seen in the day payload that is not yet in the
-// catalog is upserted via ensureLeague (enabled=true), so the
-// admin sees it on the next dashboard load and can choose to
-// disable it. The auto-create path is guarded by both an
-// interface assertion and a per-source gate (`src.Name()`
-// must be a source whose upstream publishes events for every
-// league — currently just scores365) so the FotMob fast-path
-// keeps its stricter behaviour.
+// leagues (currently scores365), the catalog can grow on the
+// fly: any league ID seen in the day payload that is not yet
+// in the catalog is upserted via ensureLeague (enabled=true),
+// so the admin sees it on the next dashboard load and can
+// choose to disable it. The auto-create path is guarded by
+// both an interface assertion and a per-source gate
+// (`src.Name()` must be a source whose upstream publishes
+// events for every league — currently just scores365) so the
+// FotMob fast-path keeps its stricter behaviour.
 func (s *Service) dispatchDayMatch(
 	ctx context.Context,
 	dm DayMatcher,

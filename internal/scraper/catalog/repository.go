@@ -167,11 +167,11 @@ func (r *Repository) ActiveLeaguesBySource(ctx context.Context, source string) (
 // enabled flags and curated name overrides are preserved.
 //
 // Used by the scraper dispatch loop when a bulk-fetch source
-// (TheSportsDB) returns matches for a league that is not yet
-// in the catalog. Without this the bulk path would silently
-// drop every new league TheSportsDB picks up; with this the
-// admin sees the new leagues on the next dashboard load and
-// can disable unwanted ones.
+// (currently scores365) returns matches for a league that is
+// not yet in the catalog. Without this the bulk path would
+// silently drop every new league the upstream picks up; with
+// this the admin sees the new leagues on the next dashboard
+// load and can disable unwanted ones.
 func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, league scraper.LeagueRef) error {
 	if sourceLeagueID == "" {
 		return errors.New("catalog: EnsureLeague requires source_league_id")

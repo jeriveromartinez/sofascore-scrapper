@@ -52,7 +52,6 @@ func SeedDefaults(db *gorm.DB, logger *slog.Logger) error {
 		logger = slog.Default()
 	}
 	all := append([]catalog.ScraperLeague{}, initialLeagues...)
-	all = append(all, initialNonFootballLeagues...)
 
 	return db.Transaction(func(tx *gorm.DB) error {
 		inserted := 0
@@ -171,27 +170,4 @@ var initialLeagues = []catalog.ScraperLeague{
 	{Source: "fotmob", SourceLeagueId: "9676", Name: "Frauen-Bundesliga", Country: "DE", Sport: "football", Enabled: true},
 	{Source: "fotmob", SourceLeagueId: "938777", Name: "Liga F", Country: "ES", Sport: "football", Enabled: true},
 	{Source: "fotmob", SourceLeagueId: "920228", Name: "NWSL", Country: "US", Sport: "football", Enabled: true},
-}
-
-// initialNonFootballLeagues is the curated seed of non-football
-// leagues scraped via TheSportsDB eventsday.php endpoint. FotMob
-// only exposes football, so basketball / american-football /
-// baseball / ice-hockey are routed to TheSportsDB. Each
-// source_league_id was verified against the live
-// `https://www.thesportsdb.com/api/v1/json/3/lookupleague.php?id=…`
-// endpoint on 2026-09-13.
-//
-// `sport` is stored in the canonical lowercase form used by the
-// API layer (`basketball`, `american-football`, `baseball`,
-// `ice-hockey`). The TheSportsDB payload uses
-// `Basketball`/`American Football`/etc. — the sportsdb source
-// (internal/scraper/sportsdb/source.go) keeps the canonical
-// lowercase from the league ref rather than echoing the upstream
-// string, so the API filter does not break on a future upstream
-// rename.
-var initialNonFootballLeagues = []catalog.ScraperLeague{
-	{Source: "sportsdb", SourceLeagueId: "4387", Name: "NBA", Country: "US", Sport: "basketball", Enabled: true},
-	{Source: "sportsdb", SourceLeagueId: "4391", Name: "NFL", Country: "US", Sport: "american-football", Enabled: true},
-	{Source: "sportsdb", SourceLeagueId: "4424", Name: "MLB", Country: "US", Sport: "baseball", Enabled: true},
-	{Source: "sportsdb", SourceLeagueId: "4380", Name: "NHL", Country: "US", Sport: "ice-hockey", Enabled: true},
 }

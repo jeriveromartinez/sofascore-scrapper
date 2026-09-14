@@ -20,10 +20,9 @@ import (
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/fotmob"
-	scoresdbsource "github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/scores365"
+	scores365source "github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/scores365"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/scores365"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/sportsdb"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
 	goredis "github.com/redis/go-redis/v9"
@@ -217,18 +216,11 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string, theSportsDBAPIKey string) (*scraper.Service, *reporting.AggregationRepository) {
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string) (*scraper.Service, *reporting.AggregationRepository) {
 	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{Timezone: timezone})
 	fotmobSrc := fotmob.NewSource(fotmobClient, logger)
-	sportsdbClient := sportsdb.NewClient(sportsdb.Options{APIKey: theSportsDBAPIKey})
-	// TheSportsDB client is kept here for Task 6 to wire into the
-	// logo lookup pipeline that already lives in app.go (see
-	// WithLogoLookup). Until then, the client is intentionally
-	// unused in this function; the variable is retained so Task 6
-	// can plumb it without re-touching the dispatcher wiring.
-	_ = sportsdbClient
 	scores365Client := scores365.NewClient(scores365.Options{})
-	scores365Src := scoresdbsource.NewSource(scores365Client)
+	scores365Src := scores365source.NewSource(scores365Client)
 	dispatcher := scraper.NewSourceDispatcher(fotmobSrc, scores365Src)
 	catalogRepo := catalog.NewRepository(db)
 	eventsRepo := events.NewRepositoryWithLogoScheduler(db, logoScheduler)

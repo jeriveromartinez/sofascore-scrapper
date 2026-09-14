@@ -2,14 +2,11 @@
 // admin scraper catalog in sync with the upstream (365scores)
 // league registry.
 //
-// Background: PR #131/132 wired the scraper to ingest events
-// for four pre-seeded leagues (NBA/NFL/MLB/NHL). PR #133 added
-// the bulk-fetch path (eventsday.php without an `l=` filter)
-// so every event TheSportsDB publishes for the day is now
-// scraped in one HTTP call. That is great for coverage but
-// useless unless the catalog actually knows about every
-// league the upstream surfaces — otherwise the dispatch loop
-// drops matches whose idLeague is not in `scraper_leagues`.
+// Background: the scraper dispatches every FotMob league per
+// call and every scores365 league via the bulk-fetch day path
+// (DayMatches). Both paths require the catalog to know the
+// league up front — the bulk path drops any match whose
+// idLeague is not in `scraper_leagues`.
 //
 // This package fixes that with a single-shot discovery job
 // that pulls the upstream 365scores sitemaps, normalises the
