@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
 	"gorm.io/gorm"
 )
 
@@ -208,7 +208,7 @@ func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, le
 		SourceLeagueId: sourceLeagueID,
 		Name:           league.Name,
 		Sport:          league.Sport,
-		Country:        league.Country,
+		Country:        truncateCountry(league.Country),
 		Enabled:        true,
 	}
 	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
@@ -283,4 +283,23 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// countryColumnSize mirrors ScraperLeague.Country's `size:8` column.
+const countryColumnSize = 8
+
+// truncateCountry bounds a country label to what the column can hold.
+// Sources disagree on what they publish here: FotMob sends a short
+// code ("ENG"), while the 365scores competitions API only exposes a
+// full country name ("Argentina"). Writing the longer value straight
+// through makes MariaDB reject the INSERT in strict mode, which would
+// abort a whole discovery sweep over one row, so the value is clipped
+// instead. The full, untruncated name still reaches tournaments.Region
+// (a longtext column) via scraper.ToTournament.
+func truncateCountry(country string) string {
+	country = strings.TrimSpace(country)
+	if len([]rune(country)) <= countryColumnSize {
+		return country
+	}
+	return string([]rune(country)[:countryColumnSize])
 }
