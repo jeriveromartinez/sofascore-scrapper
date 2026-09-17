@@ -57,6 +57,54 @@ func (r *Repository) Create(email, password string) (*User, error) {
 	return user, result.Error
 }
 
+// CreateAndMaybeBootstrapAdmin inserts the user and, when the users
+// table is empty, also promotes the new row to admin in the same
+// transaction. This is the entry point the auth registration handler
+// uses for the "first account becomes admin" rule: it must be atomic
+// so two concurrent registrations on a fresh install cannot both see
+// count==1 and both promote themselves (or, on a slow DB, race past
+// the count check and leave the operator without admin).
+//
+// The promotion is a conditional UPDATE inside the same tx:
+//
+//	UPDATE users SET role = 'admin' WHERE id = ? AND
+//	  NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin')
+//
+// which makes the bootstrap idempotent and serializable even when
+// the wrapping handler is hit concurrently from multiple instances.
+// RowsAffected==1 means the new account was promoted; 0 means
+// someone else already grabbed the bootstrap slot and the caller
+// should leave role at the default.
+func (r *Repository) CreateAndMaybeBootstrapAdmin(email, password string) (*User, bool, error) {
+	hash, err := hashPassword(password)
+	if err != nil {
+		return nil, false, err
+	}
+	user := &User{Email: email, Password: string(hash)}
+	promoted := false
+	err = r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+		res := tx.Exec(
+			"UPDATE users SET role = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE role = ?)",
+			RoleAdmin, user.ID, RoleAdmin,
+		)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 1 {
+			promoted = true
+			user.Role = RoleAdmin
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return user, promoted, nil
+}
+
 // UpdatePassword overwrites the stored bcrypt hash for a user. It is
 // the storage-layer entry point used by the auth package's lazy-rehash
 // on login (when the existing hash is below the current cost).
