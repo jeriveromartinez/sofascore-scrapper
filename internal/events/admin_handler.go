@@ -1,6 +1,7 @@
 package events
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -172,6 +173,15 @@ func parseEventStatus(raw string) (string, bool) {
 	return raw, true
 }
 
+// maxAdminEventsPage caps the offset pagination depth on the
+// legacy /events handler. With LIMIT 10 a page 5000 request walks
+// 50k rows before returning; capping at 5000 (the same threshold
+// the public handler uses for page+limit products) keeps deep
+// scans from degrading the DB under accidental UI walks. Callers
+// needing deeper history should use the keyset /events/page
+// endpoint instead.
+const maxAdminEventsPage = 500
+
 func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 	date := c.Query("date")
 	sport := c.Query("sport")
@@ -197,6 +207,12 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 			parsedLimit = 100
 		}
 		limit = parsedLimit
+	}
+
+	if page > maxAdminEventsPage {
+		server.RespondError(c, http.StatusBadRequest,
+			fmt.Sprintf("page must be <= %d; use /events/page (cursor) for deeper history", maxAdminEventsPage))
+		return
 	}
 
 	query := h.repo.DB().WithContext(c.Request.Context()).Model(&Event{})
