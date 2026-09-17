@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Repository struct {
@@ -194,25 +195,43 @@ var ErrLastAdmin = errors.New("cannot demote the last administrator")
 // accepted. Demoting an admin re-counts inside the transaction so
 // two concurrent demotions cannot both observe "more than one
 // admin" and drop the count to zero, locking the operator out of
-// the admin API. The count is taken after the row lock is held so
-// a concurrent SetRole sees the prior demotion before its own check.
-func (r *Repository) SetRole(id uint, role string) (*User, error) {
+// the admin API.
+//
+// The lock dance matters: the target row is locked with FOR UPDATE,
+// then the count of OTHER admins is also locked with FOR UPDATE so
+// the snapshot reflects any concurrent committed demotion. Without
+// the locks, MariaDB's default REPEATABLE READ isolation would let
+// two concurrent transactions both see admins=2, both pass the
+// "<= 1" guard, and both demote — leaving zero admins. With the
+// locks, the second transaction blocks on the first's row lock and
+// re-reads the now-current value of admins when it proceeds.
+func (r *Repository) SetRole(ctx context.Context, id uint, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
 		return nil, ErrInvalidRole
 	}
 
 	var user User
-	err := r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&user, id).Error; err != nil {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, id).Error; err != nil {
 			return err
 		}
 
+		// No-op: same role. Returning early avoids a no-op UPDATE
+		// that would still need to be wrapped in the transaction
+		// for the audit trail.
+		if user.Role == role {
+			return nil
+		}
+
 		if user.IsAdmin() && role == RoleUser {
-			var admins int64
-			if err := tx.Model(&User{}).Where("role = ?", RoleAdmin).Count(&admins).Error; err != nil {
+			var otherAdmins int64
+			if err := tx.Model(&User{}).
+				Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("role = ? AND id <> ?", RoleAdmin, id).
+				Count(&otherAdmins).Error; err != nil {
 				return err
 			}
-			if admins <= 1 {
+			if otherAdmins == 0 {
 				return ErrLastAdmin
 			}
 		}

@@ -187,7 +187,7 @@ func (h *Handler) handleSetRole(c *gin.Context) {
 	// cannot both pass the "more than one admin" check and lock
 	// the operator out of the admin API. The handler just maps the
 	// sentinel to HTTP 409.
-	user, err := h.repo.SetRole(id, req.Role)
+	user, err := h.repo.SetRole(c.Request.Context(), id, req.Role)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidRole):

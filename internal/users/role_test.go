@@ -2,6 +2,7 @@ package users
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -35,11 +36,11 @@ func TestSetRoleValidatesAndUpdates(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if _, err := repo.SetRole(u.ID, "superuser"); !errors.Is(err, ErrInvalidRole) {
+	if _, err := repo.SetRole(context.Background(), u.ID, "superuser"); !errors.Is(err, ErrInvalidRole) {
 		t.Fatalf("expected ErrInvalidRole, got %v", err)
 	}
 
-	updated, err := repo.SetRole(u.ID, RoleAdmin)
+	updated, err := repo.SetRole(context.Background(), u.ID, RoleAdmin)
 	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
@@ -98,5 +99,59 @@ func TestSetRoleEndpointCannotDemoteLastAdmin(t *testing.T) {
 	}
 	if w := setRoleRequest(t, router, admin.ID, RoleUser); w.Code != http.StatusOK {
 		t.Fatalf("demote-with-spare status=%d, want %d (body=%q)", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+// TestSetRoleConcurrentDemotionsRejectBothLastAdmins proves the
+// SetRole FOR UPDATE lock actually closes the last-admin race.
+// Two admins are seeded; two goroutines demote them concurrently.
+// Without the lock, both could observe admins=2 under REPEATABLE
+// READ and both succeed, leaving zero admins. With the lock, exactly
+// one wins and the other observes the now-demoted state and is
+// rejected with ErrLastAdmin.
+func TestSetRoleConcurrentDemotionsRejectBothLastAdmins(t *testing.T) {
+	db := newUsersTestDB(t)
+	repo := NewRepository(db)
+	first := User{Email: "race-1@test.local", Password: "x", Role: RoleAdmin}
+	second := User{Email: "race-2@test.local", Password: "x", Role: RoleAdmin}
+	if err := db.Create(&first).Error; err != nil {
+		t.Fatalf("seed first: %v", err)
+	}
+	if err := db.Create(&second).Error; err != nil {
+		t.Fatalf("seed second: %v", err)
+	}
+
+	results := make(chan error, 2)
+	go func() { _, err := repo.SetRole(context.Background(), first.ID, RoleUser); results <- err }()
+	go func() { _, err := repo.SetRole(context.Background(), second.ID, RoleUser); results <- err }()
+
+	got := 0
+	var lastErr error
+	for i := 0; i < 2; i++ {
+		err := <-results
+		got++
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, ErrLastAdmin) {
+			t.Fatalf("demote %d: want ErrLastAdmin, got %v", got, err)
+		}
+		lastErr = err
+	}
+
+	// Exactly one of the two should be rejected (the one that loses
+	// the lock race). With a sqlite test driver the racing order is
+	// not deterministic, so we just verify at least one got
+	// ErrLastAdmin — i.e. we never demoted both.
+	if lastErr == nil {
+		t.Fatalf("both concurrent demotions succeeded; last-admin race is not closed")
+	}
+
+	var admins int64
+	if err := db.Model(&User{}).Where("role = ?", RoleAdmin).Count(&admins).Error; err != nil {
+		t.Fatalf("count admins: %v", err)
+	}
+	if admins != 1 {
+		t.Fatalf("after concurrent demotions: want 1 admin remaining, got %d", admins)
 	}
 }
