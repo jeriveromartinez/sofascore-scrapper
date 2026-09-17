@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -109,8 +110,14 @@ func TestSetRoleEndpointCannotDemoteLastAdmin(t *testing.T) {
 // READ and both succeed, leaving zero admins. With the lock, exactly
 // one wins and the other observes the now-demoted state and is
 // rejected with ErrLastAdmin.
+//
+// The test uses a per-test on-disk SQLite file rather than ":memory:"
+// because ":memory:" databases are per-connection — gorm's pool
+// gives each goroutine a fresh connection, and the second connection
+// would not see the first's schema. A temp file is shared across
+// all connections to the same path.
 func TestSetRoleConcurrentDemotionsRejectBothLastAdmins(t *testing.T) {
-	db := newUsersTestDB(t)
+	db := newUsersTestDBShared(t)
 	repo := NewRepository(db)
 	first := User{Email: "race-1@test.local", Password: "x", Role: RoleAdmin}
 	second := User{Email: "race-2@test.local", Password: "x", Role: RoleAdmin}
@@ -154,4 +161,27 @@ func TestSetRoleConcurrentDemotionsRejectBothLastAdmins(t *testing.T) {
 	if admins != 1 {
 		t.Fatalf("after concurrent demotions: want 1 admin remaining, got %d", admins)
 	}
+}
+
+func newUsersTestDBShared(t *testing.T) *gorm.DB {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "race.db")
+	db, err := gorm.Open(sqlite.Open(path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open race database: %v", err)
+	}
+	if err := db.AutoMigrate(&User{}); err != nil {
+		t.Fatalf("migrate race database: %v", err)
+	}
+	// Close the connection pool when the test finishes so the
+	// TempDir cleanup can unlink the on-disk SQLite files; without
+	// this, Windows fails TempDir RemoveAll with "file in use".
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err != nil {
+			return
+		}
+		_ = sqlDB.Close()
+	})
+	return db
 }

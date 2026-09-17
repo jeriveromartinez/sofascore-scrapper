@@ -140,15 +140,15 @@ func (h *Handler) handleUpdateDomain(c *gin.Context) {
 	}
 
 	var req pb.DomainRequest
-	if err := server.ParseProtoBody(c, &req); err != nil || req.Domain == "" || req.UserId == 0 {
-		server.RespondError(c, http.StatusBadRequest, "domain and user_id are required")
+	if err := server.ParseProtoBody(c, &req); err != nil || req.Domain == "" {
+		server.RespondError(c, http.StatusBadRequest, "domain is required")
 		return
 	}
 
-	domain, err := h.repo.Update(id, req.Domain, uint(req.UserId))
+	domain, err := h.repo.Update(c.Request.Context(), id, req.Domain)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			server.RespondError(c, http.StatusNotFound, "domain or user not found")
+			server.RespondError(c, http.StatusNotFound, "domain not found")
 			return
 		}
 		server.RespondError(c, http.StatusConflict, "could not update domain")
