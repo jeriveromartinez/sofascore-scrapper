@@ -12,7 +12,7 @@ Day-to-day procedures for the on-call operator. Pair this with
 | `iptv_db_connections_exhausted` | Check `DB_MAX_OPEN_CONNS`; check for stuck transactions via `SHOW PROCESSLIST` |
 | `iptv_redis_outage` | See [Redis Outage Behavior](#redis-outage-behavior) |
 | `iptv_apk_storage_full` | `du -sh /opt/iptv/apk_storage/*`; prune old upload chunks |
-| `iptv_scrape_403` | SofaScore is blocking this IP. Cosmetic; scraper retries on next tick. |
+| `iptv_scrape_403` | An upstream (365scores or FotMob) is blocking this IP. Cosmetic; scraper retries on next tick. |
 | `iptv_scraper_silent` | Logs show no `scraper: … errors` and `teams`/`events` tables are growing. If the table is stuck at zero rows, see [Scraper catalog](#scraper-catalog) — the FotMob endpoint URL changed in 2026; old builds hit `/api/leagues` (404). Rebuild from a branch with the b8d3291 fix (or later) and confirm `curl https://www.fotmob.com/api/data/matches?date=YYYYMMDD&timezone=Europe/Paris` returns 200. |
 
 ## Redis outage behavior
@@ -104,7 +104,7 @@ On a fresh database (where `users` is empty), the server auto-seeds a default ad
 To pre-apply schema and exit (no server), run:
 
 ```bash
-./sofascore-scrapper migrate
+./scores365-scrapper migrate
 ```
 
 This runs `AutoMigrateAll` and the seeder, then exits 0.
@@ -112,7 +112,7 @@ This runs `AutoMigrateAll` and the seeder, then exits 0.
 To skip migration and seeding entirely (when managing schema externally):
 
 ```bash
-SKIP_MIGRATE=true ./sofascore-scrapper
+SKIP_MIGRATE=true ./scores365-scrapper
 ```
 
 ## Bootstrap via invitation
@@ -121,7 +121,7 @@ If you prefer that the first operator register through the normal
 invitation flow rather than logging in as `admin@local`, run:
 
 ```bash
-./sofascore-scrapper bootstrap-invitation
+./scores365-scrapper bootstrap-invitation
 ```
 
 The command prints the invitation token (also visible in the logs)
@@ -149,9 +149,9 @@ call.
 
 ### Adding a league
 
-Two paths. The admin UI at `/#/scraper-leagues` has an "Add new" button
-that hits `POST /api/web/v1/scraper-leagues`. If you don't know the
-`source_league_id`, search first:
+The catalog is managed through the API only — there is no admin UI
+page for it. Create a league with `POST /api/web/v1/scraper-leagues`.
+If you don't know the `source_league_id`, search first:
 
 ```bash
 curl -sH "Authorization: Bearer $ADMIN_TOKEN" \

@@ -103,7 +103,7 @@ func TestLoadAllDefaults(t *testing.T) {
 	if cfg.Database.User != "root" {
 		t.Fatalf("User=%q", cfg.Database.User)
 	}
-	if cfg.Database.Name != "sofascore" {
+	if cfg.Database.Name != "scores365" {
 		t.Fatalf("Name=%q", cfg.Database.Name)
 	}
 }

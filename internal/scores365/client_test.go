@@ -4,21 +4,48 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
+// allscoresBody is a trimmed copy of a real
+// /web/games/allscores/ response: one live baseball game plus the
+// competition and country dictionaries needed to resolve it.
+const allscoresBody = `{
+  "lastUpdateId": 5758996845,
+  "ttl": 5,
+  "sports": [{"id":7,"name":"Béisbol","nameForURL":"baseball","imageVersion":1}],
+  "countries": [{"id":323,"name":"EE.UU.","nameForURL":"usa","imageVersion":1}],
+  "competitions": [{"id":438,"countryId":323,"sportId":7,"name":"MLB","nameForURL":"mlb","imageVersion":2}],
+  "games": [{
+    "id": 4620228,
+    "sportId": 7,
+    "competitionId": 438,
+    "competitionDisplayName": "MLB",
+    "startTime": "2026-09-13T23:20:00-06:00",
+    "statusGroup": 3,
+    "statusText": "6ta Entrada",
+    "shortStatusText": "6",
+    "gameTime": 6.0,
+    "homeCompetitor": {"id":7421,"countryId":323,"sportId":7,"name":"San Francisco Giants","score":4.0,"color":"#FD5A1E","imageVersion":4},
+    "awayCompetitor": {"id":7420,"countryId":323,"sportId":7,"name":"San Diego Padres","score":6.0,"color":"#2F241D","imageVersion":1}
+  }]
+}`
+
 func TestClient_FetchGames_ParsesRealShape(t *testing.T) {
-	body := `{"LastUpdateID":12345,"CurrentDate":"14-09-2026","CurrentTimeUTC":"09/14/2026 02:00:00","TTL":10,"Games":[{"ID":4620228,"Comp":438,"SID":7,"Stage":2,"STID":82,"GT":80,"Completion":88.89,"STime":"13-09-2026 23:20","ETime":"14-09-2026 02:35","Scrs":[4,6],"Comps":[{"ID":7421,"Name":"San Francisco Giants","SName":"Giants","CID":323,"Color":"#FD5A1E"},{"ID":7420,"Name":"San Diego Padres","SName":"Padres","CID":323,"Color":"#2F241D"}],"Winner":-1,"IsFinished":false}]}`
+	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Referer") == "" {
 			t.Errorf("missing Referer header")
 		}
+		if r.URL.Path != "/web/games/allscores/" {
+			t.Errorf("path = %q, want /web/games/allscores/", r.URL.Path)
+		}
+		gotQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(body))
+		_, _ = w.Write([]byte(allscoresBody))
 	}))
 	defer srv.Close()
 
@@ -27,15 +54,36 @@ func TestClient_FetchGames_ParsesRealShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchGames: %v", err)
 	}
+
+	// The API takes a single day as a startDate/endDate pair in
+	// DD/MM/YYYY; a real multi-day range comes back empty.
+	for _, want := range []string{"startDate=14%2F09%2F2026", "endDate=14%2F09%2F2026", "appTypeId=5", "langId=29"} {
+		if !strings.Contains(gotQuery, want) {
+			t.Errorf("query %q missing %q", gotQuery, want)
+		}
+	}
+
 	if len(feed.Games) != 1 {
 		t.Fatalf("got %d games, want 1", len(feed.Games))
 	}
 	g := feed.Games[0]
-	if g.ID != 4620228 || g.Comp != 438 || g.SID != 7 {
+	if g.ID != 4620228 || g.CompetitionID != 438 || g.SportID != 7 {
 		t.Errorf("game fields wrong: %+v", g)
 	}
-	if g.Comps[0].ID != 7421 || g.Comps[0].Name != "San Francisco Giants" {
-		t.Errorf("home team wrong: %+v", g.Comps[0])
+	if g.StatusGroup != StatusGroupLive {
+		t.Errorf("statusGroup = %d, want %d", g.StatusGroup, StatusGroupLive)
+	}
+	if g.HomeCompetitor.ID != 7421 || g.HomeCompetitor.Name != "San Francisco Giants" {
+		t.Errorf("home competitor wrong: %+v", g.HomeCompetitor)
+	}
+	if g.HomeCompetitor.Score != 4 || g.AwayCompetitor.Score != 6 {
+		t.Errorf("scores wrong: %v-%v", g.HomeCompetitor.Score, g.AwayCompetitor.Score)
+	}
+	if len(feed.Competitions) != 1 || feed.Competitions[0].Name != "MLB" {
+		t.Errorf("competitions wrong: %+v", feed.Competitions)
+	}
+	if len(feed.Countries) != 1 || feed.Countries[0].ID != 323 {
+		t.Errorf("countries wrong: %+v", feed.Countries)
 	}
 }
 
@@ -48,7 +96,7 @@ func TestClient_FetchGames_RetryOn429(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"Games":[]}`))
+		_, _ = w.Write([]byte(`{"games":[]}`))
 	}))
 	defer srv.Close()
 
@@ -66,7 +114,7 @@ func TestClient_CacheTTL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"Games":[]}`))
+		_, _ = w.Write([]byte(`{"games":[]}`))
 	}))
 	defer srv.Close()
 
@@ -82,121 +130,151 @@ func TestClient_CacheTTL(t *testing.T) {
 	}
 }
 
-func TestClient_FetchSitemap_ParsesURLs(t *testing.T) {
-	body := `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<loc>https://www.365scores.com/tennis/league/wimbledon---men-215</loc>
-<loc>https://www.365scores.com/tennis/league/us-open---men-230</loc>
-<loc>https://www.365scores.com/tennis/league/not-a-league-url</loc>
-</urlset>`
+// The cache is keyed by request URL, so two different days must not
+// share an entry — the bug that would silently make every day of
+// ScrapeNext7Days return today's fixtures.
+func TestClient_CacheIsPerDay(t *testing.T) {
+	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write([]byte(body))
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"games":[]}`))
 	}))
 	defer srv.Close()
 
-	c := NewClient(Options{SitemapURL: srv.URL + "/sitemaps"})
-	got, err := c.FetchSitemap(context.Background(), "en", "tennis")
-	if err != nil {
-		t.Fatalf("FetchSitemap: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("got %d leagues, want 2 (filtered out not-a-league-url)", len(got))
-	}
-	if got[0].SourceLeagueId != "215" || got[1].SourceLeagueId != "230" {
-		t.Errorf("compIds wrong: %+v", got)
-	}
-	if got[0].Name != "Wimbledon Men" || got[1].Name != "Us Open Men" {
-		t.Errorf("names wrong: %+v", got)
-	}
-	if got[0].NameForURL != "wimbledon---men" {
-		t.Errorf("NameForURL wrong: %+v", got[0])
-	}
-}
-
-func TestClient_FetchSitemap_NotFoundReturnsEmpty(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-	c := NewClient(Options{SitemapURL: srv.URL + "/sitemaps"})
-	got, err := c.FetchSitemap(context.Background(), "en", "curling")
-	if err != nil {
-		t.Fatalf("FetchSitemap: %v", err)
-	}
-	if got != nil {
-		t.Errorf("got %v, want nil for 404", got)
-	}
-}
-
-func TestParseSitemap_HumanizesSlug(t *testing.T) {
-	body := []byte(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><loc>https://www.365scores.com/basketball/usa/nba-47</loc></urlset>`)
-	leagues, err := parseSitemap(body, "basketball")
-	if err != nil {
-		t.Fatalf("parseSitemap: %v", err)
-	}
-	if len(leagues) != 1 || leagues[0].Name != "Usa Nba" || leagues[0].SourceLeagueId != "47" {
-		t.Errorf("got %+v", leagues)
-	}
-}
-
-func TestClient_FetchSitemap_WrappedShape(t *testing.T) {
-	body := `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://www.365scores.com/basketball/usa/nba-47</loc></url>
-<url><loc>https://www.365scores.com/basketball/spain/acb-50</loc></url>
-<url><loc>https://www.365scores.com/tennis/league/wimbledon---men-215</loc></url>
-</urlset>`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write([]byte(body))
-	}))
-	defer srv.Close()
-
-	c := NewClient(Options{SitemapURL: srv.URL + "/sitemaps"})
-	got := make([]League, 0, 3)
-	for _, sport := range []string{"basketball", "tennis"} {
-		leagues, err := c.FetchSitemap(context.Background(), "en", sport)
-		if err != nil {
-			t.Fatalf("FetchSitemap(%s): %v", sport, err)
+	c := NewClient(Options{BaseURL: srv.URL})
+	base := time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 3; i++ {
+		if _, err := c.FetchGames(context.Background(), base.AddDate(0, 0, i)); err != nil {
+			t.Fatalf("FetchGames: %v", err)
 		}
-		got = append(got, leagues...)
 	}
-	if len(got) != 3 {
-		t.Fatalf("got %d leagues, want 3 (nba + acb + wimbledon)", len(got))
-	}
-	if got[0].Country != "usa" {
-		t.Errorf("got[0].Country = %q, want %q (raw slug)", got[0].Country, "usa")
-	}
-	if got[1].Country != "spain" {
-		t.Errorf("got[1].Country = %q, want %q (raw slug)", got[1].Country, "spain")
+	if got := atomic.LoadInt32(&hits); got != 3 {
+		t.Errorf("hits = %d, want 3 (one request per distinct day)", got)
 	}
 }
 
-func TestClient_FetchSitemap_CountryRawSlug(t *testing.T) {
-	body := `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://www.365scores.com/basketball/usa/nba-47</loc></url>
-</urlset>`
+func TestClient_FetchCompetitions_SendsSportsFilter(t *testing.T) {
+	body := `{"countries":[{"id":18,"name":"EE.UU.","nameForURL":"usa"}],
+	          "competitions":[{"id":352,"countryId":18,"sportId":6,"name":"NFL","nameForURL":"nfl","imageVersion":2}]}`
+	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
+		if r.URL.Path != "/web/competitions/" {
+			t.Errorf("path = %q, want /web/competitions/", r.URL.Path)
+		}
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(body))
 	}))
 	defer srv.Close()
 
-	c := NewClient(Options{SitemapURL: srv.URL + "/sitemaps"})
-	got, err := c.FetchSitemap(context.Background(), "en", "basketball")
+	c := NewClient(Options{BaseURL: srv.URL})
+	feed, err := c.FetchCompetitions(context.Background(), []int{2, 6, 7})
 	if err != nil {
-		t.Fatalf("FetchSitemap: %v", err)
+		t.Fatalf("FetchCompetitions: %v", err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("got %d leagues, want 1", len(got))
+	// Without ?sports= the endpoint only returns a short "popular"
+	// list, so the filter reaching the wire is load-bearing.
+	if !strings.Contains(gotQuery, "sports=2%2C6%2C7") {
+		t.Errorf("query %q missing sports filter", gotQuery)
 	}
-	if got[0].Country != "usa" {
-		t.Errorf("got[0].Country = %q, want %q (raw slug, not humanized)", got[0].Country, "usa")
+	if len(feed.Competitions) != 1 || feed.Competitions[0].ID != 352 {
+		t.Fatalf("competitions wrong: %+v", feed.Competitions)
+	}
+	if feed.Competitions[0].SportID != 6 || feed.Competitions[0].CountryID != 18 {
+		t.Errorf("competition fields wrong: %+v", feed.Competitions[0])
 	}
 }
 
-// silence linter when strconv is unused on some build tags
-var _ = strconv.Itoa
-var _ = strings.TrimSpace
+func TestClient_FetchCompetitions_FallsBackToConfiguredSports(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"competitions":[]}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{BaseURL: srv.URL, SportIDs: []int{3, 4}})
+	if _, err := c.FetchCompetitions(context.Background(), nil); err != nil {
+		t.Fatalf("FetchCompetitions: %v", err)
+	}
+	if !strings.Contains(gotQuery, "sports=3%2C4") {
+		t.Errorf("query %q missing configured sports filter", gotQuery)
+	}
+}
+
+func TestClient_FetchSports(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/web/sports/" {
+			t.Errorf("path = %q, want /web/sports/", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sports":[{"id":1,"name":"Fútbol","nameForURL":"football"},{"id":2,"name":"Básquetbol","nameForURL":"basketball"}]}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{BaseURL: srv.URL})
+	sports, err := c.FetchSports(context.Background())
+	if err != nil {
+		t.Fatalf("FetchSports: %v", err)
+	}
+	if len(sports) != 2 || sports[0].NameForURL != "football" || sports[1].ID != 2 {
+		t.Errorf("sports wrong: %+v", sports)
+	}
+}
+
+func TestClient_Options_Defaults(t *testing.T) {
+	c := NewClient(Options{})
+	if c.baseURL != DefaultBaseURL {
+		t.Errorf("baseURL = %q, want %q", c.baseURL, DefaultBaseURL)
+	}
+	if c.langID != DefaultLangID {
+		t.Errorf("langID = %d, want %d (es-mx)", c.langID, DefaultLangID)
+	}
+	if c.TimezoneName() != DefaultTimezoneName {
+		t.Errorf("timezoneName = %q, want %q", c.TimezoneName(), DefaultTimezoneName)
+	}
+	if c.userCountryID != DefaultUserCountryID {
+		t.Errorf("userCountryID = %d, want %d", c.userCountryID, DefaultUserCountryID)
+	}
+}
+
+func TestImageURLs(t *testing.T) {
+	c := NewClient(Options{})
+
+	got := c.CompetitorImageURL(13693, 4)
+	want := "https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,d_Competitors:default1.png/v4/Competitors/13693"
+	if got != want {
+		t.Errorf("CompetitorImageURL:\n got %q\nwant %q", got, want)
+	}
+
+	// An absent imageVersion must still produce a usable URL.
+	if got := c.CompetitionImageURL(352, 0); !strings.Contains(got, "/v1/Competitions/352") {
+		t.Errorf("CompetitionImageURL(352, 0) = %q, want v1 fallback", got)
+	}
+	if got := c.CountryImageURL(116, 1); !strings.Contains(got, "/Countries/116") {
+		t.Errorf("CountryImageURL = %q", got)
+	}
+	// A zero ID has no badge; callers treat "" as nothing to fetch.
+	if got := c.CompetitorImageURL(0, 1); got != "" {
+		t.Errorf("CompetitorImageURL(0) = %q, want empty", got)
+	}
+	// The package-level helper must agree with the method so the
+	// logo fallback chain in internal/events builds the same URL.
+	if pkg, method := CompetitorImageURL(13693, 4), c.CompetitorImageURL(13693, 4); pkg != method {
+		t.Errorf("package helper %q != client method %q", pkg, method)
+	}
+}
+
+func TestClient_NonRetryableStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{BaseURL: srv.URL})
+	if _, err := c.FetchGames(context.Background(), time.Now()); err == nil {
+		t.Fatal("FetchGames: want error on 403, got nil")
+	}
+}

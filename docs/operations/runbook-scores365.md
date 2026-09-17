@@ -6,8 +6,8 @@
 
 This runbook assumes PRs #134 and #135 have been merged into the deployed branch. Without those:
 
-- The dispatcher only registers `fotmob` and `sportsdb`; no events are scraped for any `scraper_leagues` row with `source='scores365'`.
-- The admin UI has no `override_source` field; the documented rollback step below will silently fail.
+- The dispatcher does not register `scores365`; no events are scraped for any `scraper_leagues` row with `source='scores365'`.
+- The `override_source` column does not exist; the documented rollback step below will silently fail.
 - The `override_source` PATCH whitelist is missing in the catalog handler.
 
 Verify with:
@@ -15,6 +15,19 @@ Verify with:
 git log --oneline -1 | grep -E '#13[45]'
 ```
 If neither PR appears in the recent commits, do NOT follow this runbook — the feature is not yet deployed.
+
+## Configuration
+
+Every 365scores knob is optional; the defaults match
+<https://www.365scores.com/es-mx> and need no `/etc/iptv/env` entry.
+See [`README.md`](README.md#environment-variables) for the full table.
+
+| Variable | Default | What it changes |
+|---|---|---|
+| `SCORES365_LANG_ID` | `29` (es-mx) | Language of league, team and status text coming back on the feed. The cancelled/postponed keyword table matches Spanish and English, so changing this to a third language stops those statuses from being recognised. |
+| `SCORES365_TIMEZONE` | `UTC` | IANA zone the feed buckets one day of fixtures into. |
+| `SCORES365_COUNTRY_ID` | `116` | Popularity ordering of the competitions catalog only. It does not filter which competitions come back. |
+| `SCORES365_DISCOVERY_SPORTS` | built-in list | Comma-separated sport slugs the discovery sweep enrols. Empty means every sport except football (FotMob owns football). Unknown slugs are logged and skipped, so a typo silently narrows the sweep — check the `catalog: discovery unknown sport slug` warning after changing it. |
 
 ## Post-deploy verification (smoke test)
 
@@ -30,13 +43,13 @@ Run after `git pull` on the backend host, BEFORE promoting the change to product
 2. Wait 60s for boot + first discovery + cron tick.
 3. Verify discovery:
    ```bash
-   docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -e \
+   docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -e \
      "SELECT source, sport, COUNT(*) FROM scraper_leagues GROUP BY source, sport ORDER BY source, sport;"
    ```
    Expect: `fotmob` and `scores365` rows; scores365 covers basketball, tennis, hockey, american-football, baseball, volleyball.
 4. Verify events:
    ```bash
-   docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -e \
+   docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -e \
      "SELECT source, sport, COUNT(*) FROM events GROUP BY source, sport ORDER BY source, sport;"
    ```
 5. Hit events API:
@@ -47,7 +60,7 @@ Run after `git pull` on the backend host, BEFORE promoting the change to product
    Expect HTTP 200, team names populated.
 6. Verify a team logo:
    ```bash
-   TEAM_ID=$(docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -Nse "SELECT team_id FROM teams ORDER BY team_id DESC LIMIT 1;")
+   TEAM_ID=$(docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -Nse "SELECT team_id FROM teams ORDER BY team_id DESC LIMIT 1;")
    curl -i "http://localhost:8080/api/app/v1/teams/logo/$TEAM_ID" -o /tmp/logo.png
    file /tmp/logo.png   # expect: PNG image data
    ```
@@ -66,7 +79,7 @@ The 365scores source scrapes `https://webws.365scores.com/data/games`, a public 
 | 7 | Baseball | `baseball` | Yes | 12 |
 | 8 | Volleyball | `volleyball` | Yes | 24 |
 
-Football SID 1 is intentionally NOT auto-discovered (`sportSlugsForDiscovery` in `internal/scraper/catalog/discovery.go`) because FotMob gives richer data for football and is the primary source there. Football leagues can still be added to `scraper_leagues` manually via the admin UI; if their `source` column is `scores365` and `override_source` is NULL, the dispatcher routes them to 365scores.
+Football SID 1 is intentionally NOT auto-discovered (`sportSlugsForDiscovery` in `internal/scraper/catalog/discovery.go`) because FotMob gives richer data for football and is the primary source there. Football leagues can still be added to `scraper_leagues` manually via `POST /api/web/v1/scraper-leagues`; if their `source` column is `scores365` and `override_source` is NULL, the dispatcher routes them to 365scores.
 
 After merging PR #135 the dispatcher registers two sources: `fotmob` and `scores365`. Any `scraper_leagues` row whose `source` is `scores365` (whether auto-discovered or manually seeded) goes through the 365scores source unless `override_source='fotmob'` is set.
 
@@ -97,7 +110,7 @@ Discovery runs **once at boot only** (30s timeout per sport, 6 sports total). It
 
 ### "Discovery didn't add new leagues"
 
-1. `docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" sofascore -e "SELECT source, sport, COUNT(*) FROM scraper_leagues WHERE source='scores365' GROUP BY sport;"`
+1. `docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -e "SELECT source, sport, COUNT(*) FROM scraper_leagues WHERE source='scores365' GROUP BY sport;"`
 2. If a sport has fewer rows than the previous release, the sport sitemap may have been moved or renamed.
 3. `curl -I https://www.365scores.com/sitemaps/en_basketball.xml` — 200 means reachable. (Substitute the sport slug: basketball, tennis, hockey, american-football, baseball, volleyball.)
 4. There is no admin endpoint to re-run discovery; restart the backend container (`docker compose restart backend` for compose; `sudo systemctl restart iptv.service` for `.deb`).
@@ -106,11 +119,18 @@ Discovery runs **once at boot only** (30s timeout per sport, 6 sports total). It
 
 The 365scores feed covers NBA via a single bulk day-wide call (comp 47 — NBA), so 365scores is the default. If you want to pin a specific league back to FotMob:
 
-1. Go to `web/src/admin/scraper-leagues`.
-2. Find the NBA row (`source='scores365'`, `source_league_id='47'`).
-3. Click Edit.
-4. Override source = `fotmob`.
-5. Save.
+1. Find the NBA row id (`source='scores365'`, `source_league_id='47'`):
+   ```bash
+   curl -sH "Authorization: Bearer $ADMIN_TOKEN" \
+     "https://your.host/api/web/v1/scraper-leagues?source=scores365"
+   ```
+2. Pin it to FotMob:
+   ```bash
+   curl -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"override_source": "fotmob"}' \
+     "https://your.host/api/web/v1/scraper-leagues/<id>"
+   ```
 
 The next cron tick will route that league through FotMob instead. Note: FotMob does not have a dedicated NBA feed; it resolves NBA matches by per-team or per-match lookup, which is slower than 365scores' single bulk fetch. Use this only if 365scores' NBA coverage is degraded for a sustained period.
 
@@ -138,7 +158,7 @@ If we ever need a fuller history, the fallback plan is to scrape `https://www.36
 
 If 365scores is causing production issues:
 
-1. Set `override_source='fotmob'` for the affected leagues in `scraper_leagues` via the admin UI (per the "I want to keep using FotMob for NBA" procedure above). This routes the affected leagues away from 365scores immediately; the bulk source keeps running for unaffected leagues.
+1. Set `override_source='fotmob'` for the affected leagues in `scraper_leagues` with the PATCH call from the "I want to keep using FotMob for NBA" procedure above. This routes the affected leagues away from 365scores immediately; the bulk source keeps running for unaffected leagues.
 2. For a code-level rollback, revert PR #135 (`git revert <merge-sha>`).
 3. Restart the backend (`docker compose restart backend` for compose; `sudo systemctl restart iptv.service` for `.deb`).
 

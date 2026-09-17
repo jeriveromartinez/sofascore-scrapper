@@ -6,25 +6,25 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/fotmob"
-	scores365source "github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/scores365"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scores365"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/buildinfo"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/playback"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/reporting"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper/catalog"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper/fotmob"
+	scores365source "github.com/jeriveromartinez/scores365-scrapper/internal/scraper/scores365"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scores365"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -216,10 +216,15 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	return router
 }
 
-func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, timezone string) (*scraper.Service, *reporting.AggregationRepository) {
-	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{Timezone: timezone})
+func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *events.EpochStore, logoScheduler events.TeamLogoScheduler, logger *slog.Logger, cfg config.Config) (*scraper.Service, *reporting.AggregationRepository) {
+	fotmobClient := fotmob.NewClient(fotmob.ClientConfig{Timezone: cfg.FotMobTimezone})
 	fotmobSrc := fotmob.NewSource(fotmobClient, logger)
-	scores365Client := scores365.NewClient(scores365.Options{})
+	scores365Client := scores365.NewClient(scores365.Options{
+		LangID:        cfg.Scores365.LangID,
+		TimezoneName:  cfg.Scores365.Timezone,
+		UserCountryID: cfg.Scores365.CountryID,
+		Logger:        logger,
+	})
 	scores365Src := scores365source.NewSource(scores365Client)
 	dispatcher := scraper.NewSourceDispatcher(fotmobSrc, scores365Src)
 	catalogRepo := catalog.NewRepository(db)
@@ -234,12 +239,12 @@ func buildSchedulerDeps(db *gorm.DB, batchSize int, concurrency int, epoch *even
 	})
 	// Run the discovery job once at boot so a fresh database
 	// starts with every league the upstream publishes
-	// auto-imported. The job is idempotent and fast
-	// (<1s on a cold cache, no-op on subsequent boots). The
+	// auto-imported. The job is idempotent and reads a single
+	// /web/competitions/ response (no-op on subsequent boots). The
 	// weekly cron in internal/scheduler runs the same job for
 	// long-lived deployments to pick up new leagues.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	if _, err := catalog.Discovery(ctx, catalogRepo, scores365Client, logger); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	if _, err := catalog.DiscoverySports(ctx, catalogRepo, scores365Client, cfg.Scores365.DiscoverySports, logger); err != nil {
 		logger.Warn("catalog: boot discovery failed (will retry on next cron tick)",
 			slog.String("error", err.Error()))
 	}

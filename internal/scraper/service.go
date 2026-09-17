@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -58,7 +58,7 @@ type EnsureLeague interface {
 
 // SourceDispatcher routes a league to the source that owns it.
 // It is keyed by league.Source (the value of ScraperLeague.Source
-// in the catalog: "fotmob", "sportsdb", ...).
+// in the catalog: "fotmob", "scores365", ...).
 //
 // Sources are registered at construction time. The Service uses
 // the dispatcher's Lookup to find the right source for each
@@ -311,7 +311,7 @@ func (s *Service) dispatchDayMatch(
 			}
 			first := ms[0]
 			// Fix 3 (P1): football is FotMob's primary source. The
-			// discovery job deliberately omits the football sitemap
+			// discovery job deliberately omits football competitions
 			// for that reason; auto-enrol must mirror the same
 			// boundary so a stray football league in the daily
 			// feed does not sneak into the catalog.
