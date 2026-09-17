@@ -46,8 +46,13 @@ func RequireAdmin(userRepo *users.Repository) gin.HandlerFunc {
 			return
 		}
 
-		user, err := userRepo.GetByID(userID)
+		user, err := userRepo.GetByID(c.Request.Context(), userID)
 		if err != nil {
+			server.RespondError(c, http.StatusUnauthorized, "invalid token")
+			c.Abort()
+			return
+		}
+		if user == nil {
 			server.RespondError(c, http.StatusUnauthorized, "invalid token")
 			c.Abort()
 			return

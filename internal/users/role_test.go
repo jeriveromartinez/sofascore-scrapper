@@ -32,7 +32,7 @@ func newUsersTestDB(t *testing.T) *gorm.DB {
 func TestSetRoleValidatesAndUpdates(t *testing.T) {
 	db := newUsersTestDB(t)
 	repo := NewRepository(db)
-	u, err := repo.Create("promote@test.local", "password123")
+	u, err := repo.Create(context.Background(), "promote@test.local", "password123")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestSetRoleValidatesAndUpdates(t *testing.T) {
 		t.Fatalf("expected admin, got role=%q", updated.Role)
 	}
 
-	count, err := repo.CountAdmins()
+	count, err := repo.CountAdmins(context.Background())
 	if err != nil {
 		t.Fatalf("count admins: %v", err)
 	}

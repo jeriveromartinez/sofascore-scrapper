@@ -54,7 +54,7 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 		server.RespondError(c, http.StatusServiceUnavailable, "invitation service unavailable")
 		return
 	}
-	user, promoted, err := h.userRepo.CreateAndMaybeBootstrapAdmin(req.Email, req.Password)
+	user, promoted, err := h.userRepo.CreateAndMaybeBootstrapAdmin(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		server.RespondError(c, http.StatusConflict, "could not create user")
 		return
@@ -115,8 +115,12 @@ func (h *AuthHandler) handleLogin(c *gin.Context) {
 	// lookup. Password normalization is handled inside bcrypt and
 	// the validator (which already trims).
 	email := strings.TrimSpace(req.Email)
-	user, err := h.userRepo.GetByEmail(email)
+	user, err := h.userRepo.GetByEmail(c.Request.Context(), email)
 	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, "lookup failed")
+		return
+	}
+	if user == nil {
 		server.RespondError(c, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -130,7 +134,7 @@ func (h *AuthHandler) handleLogin(c *gin.Context) {
 		return
 	}
 	if upgradedHash != "" {
-		if updateErr := h.userRepo.UpdatePassword(user.ID, upgradedHash); updateErr != nil {
+		if updateErr := h.userRepo.UpdatePassword(c.Request.Context(), user.ID, upgradedHash); updateErr != nil {
 			slog.Default().Warn("auth: failed to upgrade password hash on login",
 				slog.Uint64("user_id", uint64(user.ID)),
 				slog.String("err", updateErr.Error()),
@@ -164,8 +168,12 @@ func (h *AuthHandler) handleRefresh(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userRepo.GetByID(userID)
+	user, err := h.userRepo.GetByID(c.Request.Context(), userID)
 	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, "lookup failed")
+		return
+	}
+	if user == nil {
 		server.RespondError(c, http.StatusUnauthorized, "user not found")
 		return
 	}

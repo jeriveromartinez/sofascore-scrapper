@@ -18,10 +18,13 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) GetAll() ([]User, error) {
+func (r *Repository) GetAll(ctx context.Context) ([]User, error) {
 	var users []User
-	result := r.db.Order("email ASC").Find(&users)
-	return users, result.Error
+	result := r.db.WithContext(ctx).Order("email ASC").Find(&users)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return users, nil
 }
 
 func (r *Repository) ListPage(ctx context.Context, email string, id uint, limit int) ([]User, bool, error) {
@@ -42,20 +45,23 @@ func (r *Repository) ListPage(ctx context.Context, email string, id uint, limit 
 }
 
 // Count returns the total number of user accounts.
-func (r *Repository) Count() (int64, error) {
+func (r *Repository) Count(ctx context.Context) (int64, error) {
 	var n int64
-	err := r.db.Model(&User{}).Count(&n).Error
+	err := r.db.WithContext(ctx).Model(&User{}).Count(&n).Error
 	return n, err
 }
 
-func (r *Repository) Create(email, password string) (*User, error) {
+func (r *Repository) Create(ctx context.Context, email, password string) (*User, error) {
 	hash, err := hashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 	user := &User{Email: email, Password: string(hash)}
-	result := r.db.Create(user)
-	return user, result.Error
+	result := r.db.WithContext(ctx).Create(user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return user, nil
 }
 
 // CreateAndMaybeBootstrapAdmin inserts the user and, when the users
@@ -76,14 +82,14 @@ func (r *Repository) Create(email, password string) (*User, error) {
 // RowsAffected==1 means the new account was promoted; 0 means
 // someone else already grabbed the bootstrap slot and the caller
 // should leave role at the default.
-func (r *Repository) CreateAndMaybeBootstrapAdmin(email, password string) (*User, bool, error) {
+func (r *Repository) CreateAndMaybeBootstrapAdmin(ctx context.Context, email, password string) (*User, bool, error) {
 	hash, err := hashPassword(password)
 	if err != nil {
 		return nil, false, err
 	}
 	user := &User{Email: email, Password: string(hash)}
 	promoted := false
-	err = r.db.Transaction(func(tx *gorm.DB) error {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(user).Error; err != nil {
 			return err
 		}
@@ -109,25 +115,41 @@ func (r *Repository) CreateAndMaybeBootstrapAdmin(email, password string) (*User
 // UpdatePassword overwrites the stored bcrypt hash for a user. It is
 // the storage-layer entry point used by the auth package's lazy-rehash
 // on login (when the existing hash is below the current cost).
-func (r *Repository) UpdatePassword(id uint, hash string) error {
-	return r.db.Model(&User{}).Where("id = ?", id).Update("password", hash).Error
+func (r *Repository) UpdatePassword(ctx context.Context, id uint, hash string) error {
+	return r.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("password", hash).Error
 }
 
-func (r *Repository) GetByEmail(email string) (*User, error) {
+// GetByEmail returns nil, nil when the email is not in the table,
+// rather than returning a partially-zeroed struct + gorm.ErrRecordNotFound
+// — callers should not have to remember the not-found convention.
+func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
-	result := r.db.Where("email = ?", email).First(&user)
-	return &user, result.Error
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
 }
 
-func (r *Repository) GetByID(id uint) (*User, error) {
+// GetByID returns nil, nil on gorm.ErrRecordNotFound so callers can
+// distinguish "no such user" from "DB error" without remembering
+// to errors.Is the error.
+func (r *Repository) GetByID(ctx context.Context, id uint) (*User, error) {
 	var user User
-	result := r.db.First(&user, id)
-	return &user, result.Error
+	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
 }
 
-func (r *Repository) Update(id uint, email, password string) (*User, error) {
+func (r *Repository) Update(ctx context.Context, id uint, email, password string) (*User, error) {
 	var user User
-	if err := r.db.First(&user, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
 		return nil, err
 	}
 
@@ -140,17 +162,19 @@ func (r *Repository) Update(id uint, email, password string) (*User, error) {
 		user.Password = hash
 	}
 
-	result := r.db.Save(&user)
-	return &user, result.Error
+	if err := r.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 // ErrInvalidRole is returned when a role outside the known set is requested.
 var ErrInvalidRole = errors.New("invalid role")
 
 // CountAdmins returns how many users currently hold the admin role.
-func (r *Repository) CountAdmins() (int64, error) {
+func (r *Repository) CountAdmins(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.Model(&User{}).Where("role = ?", RoleAdmin).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&User{}).Where("role = ?", RoleAdmin).Count(&count).Error
 	return count, err
 }
 
@@ -162,9 +186,9 @@ func (r *Repository) CountAdmins() (int64, error) {
 // The caller is expected to enforce the rule that only the user
 // themselves (or an admin) can call this endpoint. This method
 // does not check authorization; that is the handler's job.
-func (r *Repository) SetNotificationsEnabled(id uint, enabled bool) (*User, error) {
+func (r *Repository) SetNotificationsEnabled(ctx context.Context, id uint, enabled bool) (*User, error) {
 	var user User
-	if err := r.db.First(&user, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
 		return nil, err
 	}
 	updates := map[string]any{
@@ -176,13 +200,13 @@ func (r *Repository) SetNotificationsEnabled(id uint, enabled bool) (*User, erro
 		now := time.Now()
 		updates["notifications_enabled_at"] = now
 	}
-	if err := r.db.Model(&user).Updates(updates).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&user).Updates(updates).Error; err != nil {
 		return nil, err
 	}
 	// Re-read so the returned struct reflects the new
 	// notifications_enabled_at stamp (the Updates map bypasses
 	// GORM's after-update hooks for non-zero fields).
-	return r.GetByID(id)
+	return r.GetByID(ctx, id)
 }
 
 // ErrLastAdmin is returned by SetRole when the caller tries to demote
@@ -246,8 +270,8 @@ func (r *Repository) SetRole(ctx context.Context, id uint, role string) (*User, 
 	return &user, nil
 }
 
-func (r *Repository) Delete(id uint) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+func (r *Repository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.First(&User{}, id).Error; err != nil {
 			return err
 		}

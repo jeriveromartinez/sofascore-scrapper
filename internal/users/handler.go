@@ -90,7 +90,7 @@ func (h *Handler) handleGetUsersPage(c *gin.Context) {
 }
 
 func (h *Handler) handleGetUsers(c *gin.Context) {
-	users, err := h.repo.GetAll()
+	users, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -105,8 +105,12 @@ func (h *Handler) handleGetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.repo.GetByID(id)
+	user, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
+		server.RespondError(c, http.StatusNotFound, "user not found")
+		return
+	}
+	if user == nil {
 		server.RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -125,7 +129,7 @@ func (h *Handler) handleCreate(c *gin.Context) {
 		return
 	}
 
-	user, err := h.repo.Create(req.Email, req.Password)
+	user, err := h.repo.Create(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		server.RespondError(c, http.StatusConflict, "could not create user")
 		return
@@ -156,13 +160,17 @@ func (h *Handler) handleUpdate(c *gin.Context) {
 		}
 	}
 
-	user, err := h.repo.Update(id, req.Email, req.Password)
+	user, err := h.repo.Update(c.Request.Context(), id, req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
 			return
 		}
 		server.RespondError(c, http.StatusConflict, "could not update user")
+		return
+	}
+	if user == nil {
+		server.RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 
@@ -212,7 +220,7 @@ func (h *Handler) handleDelete(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Delete(id); err != nil {
+	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
 			return
@@ -248,8 +256,12 @@ func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 		return
 	}
 	if callerID != id {
-		caller, err := h.repo.GetByID(callerID)
-		if err != nil || !caller.IsAdmin() {
+		caller, err := h.repo.GetByID(c.Request.Context(), callerID)
+		if err != nil {
+			server.RespondError(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if caller == nil || !caller.IsAdmin() {
 			server.RespondError(c, http.StatusForbidden, "cannot modify another user's notification settings")
 			return
 		}
@@ -261,13 +273,17 @@ func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 		return
 	}
 
-	user, err := h.repo.SetNotificationsEnabled(id, req.Enabled)
+	user, err := h.repo.SetNotificationsEnabled(c.Request.Context(), id, req.Enabled)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
 			return
 		}
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if user == nil {
+		server.RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 

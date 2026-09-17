@@ -54,7 +54,7 @@ type fakeUserRepo struct {
 	users map[uint]*users.User
 }
 
-func (f *fakeUserRepo) GetByID(id uint) (*users.User, error) {
+func (f *fakeUserRepo) GetByID(_ context.Context, id uint) (*users.User, error) {
 	u, ok := f.users[id]
 	if !ok {
 		return nil, gorm.ErrRecordNotFound

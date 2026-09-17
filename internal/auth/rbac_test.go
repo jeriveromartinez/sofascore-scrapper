@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,11 +78,11 @@ func TestNewUsersDefaultToNonAdmin(t *testing.T) {
 	db := newRBACTestDB(t)
 	repo := users.NewRepository(db)
 
-	created, err := repo.Create("fresh@test.local", "password123")
+	created, err := repo.Create(context.Background(), "fresh@test.local", "password123")
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	reloaded, err := repo.GetByID(created.ID)
+	reloaded, err := repo.GetByID(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("reload user: %v", err)
 	}

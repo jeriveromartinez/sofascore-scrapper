@@ -14,7 +14,6 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"github.com/robfig/cron/v3"
-	"gorm.io/gorm"
 )
 
 // Domain-level errors that handlers map to HTTP status codes. The
@@ -47,7 +46,7 @@ type DomainLister interface {
 // users package to load the user (for the notifications_enabled
 // gate) and audit who fired a push.
 type UserGetter interface {
-	GetByID(id uint) (*users.User, error)
+	GetByID(ctx context.Context, id uint) (*users.User, error)
 }
 
 // Service is the business-logic layer of the push feature. It
@@ -677,9 +676,12 @@ func (s *Service) authorize(ctx context.Context, callerID, ownerID uint) error {
 	if callerID == ownerID {
 		return nil
 	}
-	caller, err := s.userRepo.GetByID(callerID)
+	caller, err := s.userRepo.GetByID(ctx, callerID)
 	if err != nil {
 		return fmt.Errorf("load caller: %w", err)
+	}
+	if caller == nil {
+		return ErrForbidden
 	}
 	if !caller.IsAdmin() {
 		return ErrForbidden
@@ -691,12 +693,12 @@ func (s *Service) authorize(ctx context.Context, callerID, ownerID uint) error {
 // not opted in. This is the gate the spec calls "puede habilitarse
 // esta seccion de forma dinamica a cada usuario".
 func (s *Service) validateFeatureEnabled(ctx context.Context, ownerID uint) error {
-	u, err := s.userRepo.GetByID(ownerID)
+	u, err := s.userRepo.GetByID(ctx, ownerID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrNotFound
-		}
 		return fmt.Errorf("load user: %w", err)
+	}
+	if u == nil {
+		return ErrNotFound
 	}
 	if !u.NotificationsEnabled {
 		return ErrDisabledFeature
