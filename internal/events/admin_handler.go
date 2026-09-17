@@ -217,9 +217,20 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 
 	query := h.repo.DB().WithContext(c.Request.Context()).Model(&Event{})
 	if date != "" {
-		t, err := time.Parse("2006-01-02", date)
+		// Honour the same tz query the cursor-based /events/page
+		// handler accepts. Without it, an operator in
+		// America/Santo_Domingo asking ?date=2026-09-14 misses
+		// their 20:00–24:00 local games (UTC 2026-09-15) because
+		// the default UTC bucket moves the boundary by 4 hours.
+		tz := c.DefaultQuery("tz", "UTC")
+		loc, locErr := time.LoadLocation(tz)
+		if locErr != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid tz: must be a valid IANA timezone (e.g. UTC, America/Santo_Domingo)")
+			return
+		}
+		t, err := time.ParseInLocation("2006-01-02", date, loc)
 		if err != nil {
-			server.RespondError(c, http.StatusBadRequest, "date must use YYYY-MM-DD format (UTC)")
+			server.RespondError(c, http.StatusBadRequest, "date must use YYYY-MM-DD format (interpreted in tz)")
 			return
 		}
 		start := t.UnixMilli()

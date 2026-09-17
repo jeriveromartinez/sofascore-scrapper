@@ -109,8 +109,8 @@ func TestAdminEventsInvalidDateMentionsUTC(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode error body: %v", err)
 	}
-	if !strings.Contains(body["error"], "UTC") {
-		t.Errorf("error message should mention UTC so callers know the day boundary is interpreted in UTC; got %q", body["error"])
+	if !strings.Contains(body["error"], "tz") && !strings.Contains(body["error"], "TZ") {
+		t.Errorf("error message should mention tz so callers know the day boundary needs a timezone; got %q", body["error"])
 	}
 }
 
