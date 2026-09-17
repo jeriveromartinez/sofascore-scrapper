@@ -363,6 +363,14 @@ func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []
 		limit = 6
 	}
 
+	// ResolveTournamentIDs returns an empty (non-nil) slice for a device
+	// with no device_tournaments and an empty global config. Building
+	// `WHERE league_id IN ()` is a syntax error in MariaDB/MySQL/Postgres,
+	// so short-circuit here instead of producing a 500 to the caller.
+	if len(tournamentIDs) == 0 {
+		return nil, nil
+	}
+
 	var events []Event
 
 	if err := r.db.WithContext(ctx).Where("status_type = ? AND league_id IN ?", "inprogress", tournamentIDs).
