@@ -247,9 +247,9 @@ func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
 	}
 
 	chunkDir := filepath.Join(StoragePath(), "legacy-chunks", strconv.FormatUint(uint64(userID), 10), uploadID)
-	absStoragePath, _ := filepath.Abs(StoragePath())
+	absStoragePath, absErr := absoluteStoragePath()
 	absChunkDir, err := filepath.Abs(chunkDir)
-	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
+	if err != nil || absErr != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
@@ -292,9 +292,9 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	}
 
 	chunkDir := filepath.Join(StoragePath(), "legacy-chunks", strconv.FormatUint(uint64(userID), 10), uploadID)
-	absStoragePath, _ := filepath.Abs(StoragePath())
+	absStoragePath, absErr := absoluteStoragePath()
 	absChunkDir, err := filepath.Abs(chunkDir)
-	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
+	if err != nil || absErr != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
