@@ -196,6 +196,14 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 				conn.Close(1011, "ping write error")
 				return
 			}
+			// The ping has been written. Bump the read deadline so the
+			// client has a fresh pongWait window to reply with a WsPong
+			// frame. Without this bump, an idle socket whose only
+			// traffic is server-initiated pings would close when the
+			// original pongWait elapses, even though the connection
+			// is healthy — the server's read deadline ignores that the
+			// *server* is the one driving the traffic.
+			_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
 		}
 	}
 }
