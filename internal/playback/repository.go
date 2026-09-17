@@ -36,20 +36,8 @@ func (r *Repository) Start(ctx context.Context, deviceID uint, content string, s
 	return &created, err
 }
 
-func (r *Repository) Log(deviceID uint, content string, startedAt int64) (*PlaybackLog, error) {
-	var lastLog PlaybackLog
-	r.db.Where("device_id=?", deviceID).Order("started_at DESC").First(&lastLog)
-	if lastLog.ID != 0 {
-		r.db.Model(&lastLog).Where("id = ?", lastLog.ID).Update("ended_at", startedAt)
-	}
-
-	log := &PlaybackLog{DeviceID: deviceID, Content: content, StartedAt: startedAt}
-	result := r.db.Create(log)
-	return log, result.Error
-}
-
-func (r *Repository) UpdateEnd(id uint, endedAt int64) error {
-	return r.db.Model(&PlaybackLog{}).Where("id = ?", id).Update("ended_at", endedAt).Error
+func (r *Repository) UpdateEnd(ctx context.Context, id uint, endedAt int64) error {
+	return r.db.WithContext(ctx).Model(&PlaybackLog{}).Where("id = ?", id).Update("ended_at", endedAt).Error
 }
 
 func (r *Repository) GetList(page, limit int) ([]*PlaybackLog, error) {
