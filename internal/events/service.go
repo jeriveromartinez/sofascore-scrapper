@@ -49,7 +49,14 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 		}
 
 		result := s.currentSF.DoChan(key, func() (interface{}, error) {
-			flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), currentEventsFlightTimeout)
+			// Derive the worker ctx from the caller's ctx so
+			// client disconnects propagate into the in-flight DB
+			// query (previously WithoutCancel meant the worker
+			// happily kept running for the full 30 s flight
+			// timeout even after the originating HTTP request had
+			// gone away; under a sudden burst on a hot match day
+			// this left orphan DB queries per stale-flight key).
+			flightCtx, cancel := context.WithTimeout(ctx, currentEventsFlightTimeout)
 			defer cancel()
 
 			// The single-flight worker re-checks the cache under
