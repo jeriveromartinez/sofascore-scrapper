@@ -80,12 +80,12 @@ func (r *Repository) Register(userID *uint, token, platform, name, version, pack
 	return device, result.Error
 }
 
-func (r *Repository) UpdateLastSeen(token string) error {
-	return r.db.Model(&Device{}).Where("token = ?", token).Update("last_seen", time.Now().Unix()).Error
+func (r *Repository) UpdateLastSeen(ctx context.Context, token string) error {
+	return r.db.WithContext(ctx).Model(&Device{}).Where("token = ?", token).Update("last_seen", time.Now().Unix()).Error
 }
 
-func (r *Repository) UpdateLastSeenByID(deviceID uint, ts int64) error {
-	return r.db.Model(&Device{}).Where("id = ?", deviceID).Update("last_seen", ts).Error
+func (r *Repository) UpdateLastSeenByID(ctx context.Context, deviceID uint, ts int64) error {
+	return r.db.WithContext(ctx).Model(&Device{}).Where("id = ?", deviceID).Update("last_seen", ts).Error
 }
 
 func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
