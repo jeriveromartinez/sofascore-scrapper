@@ -173,7 +173,11 @@ func (s *LogoScheduler) Shutdown(ctx context.Context) {
 	select {
 	case <-done:
 		// Workers finished before the deadline. Nothing to cancel;
-		// s.workCtx had no remaining consumers.
+		// s.workCtx had no remaining consumers. Release it
+		// anyway so the cancel goroutine it carries can exit
+		// cleanly (cheap, idempotent if the deadline branch
+		// already fired).
+		s.cancelWork()
 	case <-ctx.Done():
 		// Deadline hit while workers were mid-download. Signal
 		// s.workCtx so the handler can abort its HTTP round-trip
@@ -182,5 +186,4 @@ func (s *LogoScheduler) Shutdown(ctx context.Context) {
 		s.cancelWork()
 		<-done
 	}
-	s.cancelWork()
 }

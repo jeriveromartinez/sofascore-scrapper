@@ -61,7 +61,9 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer jobCancel()
+		// jobCancel is idempotent; the outer defer at the top of
+		// runLocked covers cleanup once wg.Wait() returns, so we
+		// do not need to defer it again here.
 		jobErr = job(jobCtx)
 	}()
 
