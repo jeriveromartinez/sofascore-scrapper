@@ -182,36 +182,18 @@ func (h *Handler) handleSetRole(c *gin.Context) {
 		return
 	}
 
-	// Guard against demoting the last administrator, which would lock everyone
-	// out of the admin API.
-	if req.Role == RoleUser {
-		target, err := h.repo.GetByID(id)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				server.RespondError(c, http.StatusNotFound, "user not found")
-				return
-			}
-			server.RespondError(c, http.StatusInternalServerError, "could not load user")
-			return
-		}
-		if target.IsAdmin() {
-			admins, err := h.repo.CountAdmins()
-			if err != nil {
-				server.RespondError(c, http.StatusInternalServerError, "could not verify administrators")
-				return
-			}
-			if admins <= 1 {
-				server.RespondError(c, http.StatusConflict, "cannot demote the last administrator")
-				return
-			}
-		}
-	}
-
+	// The repository's SetRole performs the last-admin guard inside
+	// a transaction with a re-count, so two concurrent demotions
+	// cannot both pass the "more than one admin" check and lock
+	// the operator out of the admin API. The handler just maps the
+	// sentinel to HTTP 409.
 	user, err := h.repo.SetRole(id, req.Role)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidRole):
 			server.RespondError(c, http.StatusBadRequest, "role must be 'user' or 'admin'")
+		case errors.Is(err, ErrLastAdmin):
+			server.RespondError(c, http.StatusConflict, "cannot demote the last administrator")
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			server.RespondError(c, http.StatusNotFound, "user not found")
 		default:

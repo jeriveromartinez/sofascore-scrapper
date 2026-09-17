@@ -136,20 +136,45 @@ func (r *Repository) SetNotificationsEnabled(id uint, enabled bool) (*User, erro
 	return r.GetByID(id)
 }
 
-// SetRole updates a single user's role. Only the known roles are accepted.
+// ErrLastAdmin is returned by SetRole when the caller tries to demote
+// the only remaining admin. The handler maps this to HTTP 409 so the
+// operator knows the request was rejected for safety rather than a
+// permissions or validation problem.
+var ErrLastAdmin = errors.New("cannot demote the last administrator")
+
+// SetRole updates a single user's role. Only the known roles are
+// accepted. Demoting an admin re-counts inside the transaction so
+// two concurrent demotions cannot both observe "more than one
+// admin" and drop the count to zero, locking the operator out of
+// the admin API. The count is taken after the row lock is held so
+// a concurrent SetRole sees the prior demotion before its own check.
 func (r *Repository) SetRole(id uint, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
 		return nil, ErrInvalidRole
 	}
 
 	var user User
-	if err := r.db.First(&user, id).Error; err != nil {
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&user, id).Error; err != nil {
+			return err
+		}
+
+		if user.IsAdmin() && role == RoleUser {
+			var admins int64
+			if err := tx.Model(&User{}).Where("role = ?", RoleAdmin).Count(&admins).Error; err != nil {
+				return err
+			}
+			if admins <= 1 {
+				return ErrLastAdmin
+			}
+		}
+
+		return tx.Model(&user).Update("role", role).Error
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	if err := r.db.Model(&user).Update("role", role).Error; err != nil {
-		return nil, err
-	}
 	user.Role = role
 	return &user, nil
 }

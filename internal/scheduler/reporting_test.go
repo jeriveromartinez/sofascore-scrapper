@@ -34,7 +34,7 @@ func TestAPKDownloadCounterJobFlushesWithoutOuterLock(t *testing.T) {
 	counter := &persistingDownloadCounter{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	job := apkDownloadCounterJob(counter, logger)
+	job := apkDownloadCounterJob(counter, logger, context.Background())
 	job()
 
 	if counter.flushCalls != 1 {
