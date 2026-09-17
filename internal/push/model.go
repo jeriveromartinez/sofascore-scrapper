@@ -213,7 +213,7 @@ type DeliveryAttempt struct {
 	MessageID     string        `gorm:"column:message_id;size:36;uniqueIndex:uq_message_id;not null"`
 	State         DeliveryState `gorm:"column:state;size:16;not null;index:idx_attempts_state_created,priority:1"`
 	FailureReason FailureReason `gorm:"column:failure_reason;size:32;null"`
-	SentAt        *time.Time    `gorm:"column:sent_at;null"`
+	SentAt        *time.Time    `gorm:"column:sent_at;null;index:idx_attempts_sent_at"`
 	AckedAt       *time.Time    `gorm:"column:acked_at;null"`
 	LatencyMS     *int          `gorm:"column:latency_ms;null"`
 	CreatedAt     time.Time     `gorm:"column:created_at;not null;index:idx_attempts_state_created,priority:2;index:idx_attempts_device_created,priority:2;index:idx_attempts_push_message,priority:2"`
