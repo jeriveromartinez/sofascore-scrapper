@@ -145,6 +145,22 @@ func (s *LogoScheduler) Stop() {
 	s.mu.Unlock()
 }
 
+// Shutdown stops accepting new work, waits for in-flight handlers
+// to finish (or for ctx to expire, whichever comes first), then
+// releases s.workCtx.
+//
+// The happy path (workers finish naturally) does NOT cancel
+// s.workCtx until after the workers have drained — there is nothing
+// left to cancel, and signalling a Done on a context with no
+// consumers is pointless. Only the deadline path cancels in-flight
+// handlers, because by definition they have not finished and need
+// to be told to abort.
+//
+// We always wait for workers.Wait() to return before exiting, even
+// in the deadline branch. Returning while a worker is still
+// unwinding its cancel path would leak goroutines and leave the
+// scheduler in a half-closed state if a caller invokes Shutdown a
+// second time.
 func (s *LogoScheduler) Shutdown(ctx context.Context) {
 	s.Stop()
 
@@ -156,9 +172,15 @@ func (s *LogoScheduler) Shutdown(ctx context.Context) {
 
 	select {
 	case <-done:
-		s.cancelWork()
+		// Workers finished before the deadline. Nothing to cancel;
+		// s.workCtx had no remaining consumers.
 	case <-ctx.Done():
+		// Deadline hit while workers were mid-download. Signal
+		// s.workCtx so the handler can abort its HTTP round-trip
+		// or disk write, then wait for the worker goroutines to
+		// drain before returning.
 		s.cancelWork()
 		<-done
 	}
+	s.cancelWork()
 }
