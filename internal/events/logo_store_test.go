@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	neturl "net/url"
@@ -46,6 +47,7 @@ func TestDownloadTeamLogoClosesIdleConnections(t *testing.T) {
 	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("test-image"))
 	}))
 	defer server.Close()
@@ -119,6 +121,7 @@ func TestDownloadTeamLogoNegotiatesTLS13(t *testing.T) {
 		if r.TLS.Version != tls.VersionTLS13 {
 			t.Fatalf("TLS version = %x, want %x", r.TLS.Version, tls.VersionTLS13)
 		}
+		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("tls13-image"))
 	}))
 	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13}
@@ -208,6 +211,7 @@ func TestDownloadTeamLogoRefererMatchesSourceCDN(t *testing.T) {
 	var observedReferer string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		observedReferer = r.Header.Get("Referer")
+		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("test-image"))
 	}))
 	defer server.Close()
@@ -284,7 +288,132 @@ func TestDownloadTeamLogoMalformedURLSkipsReferer(t *testing.T) {
 	}
 }
 
-// scores365Badge is the prefix of every competitor badge URL on the
+// TestDownloadTeamLogoRejectsNonImageContentType guards against
+// persisting a CDN "challenge" or JSON error body as a logo. Some
+// CDNs return a small HTML or text body with HTTP 200 when the
+// request is rate-limited, geo-blocked, or intercepted by a WAF;
+// without this check the file would land on disk and silently break
+// every team page that referenced it.
+func TestDownloadTeamLogoRejectsNonImageContentType(t *testing.T) {
+	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<html>blocked</html>"))
+	}))
+	defer server.Close()
+
+	if _, err := DownloadTeamLogo(123, server.URL+"/logo.png"); err == nil {
+		t.Fatal("expected error for non-image Content-Type, got nil")
+	} else if !strings.Contains(err.Error(), "Content-Type") {
+		t.Errorf("error %q should mention Content-Type", err)
+	}
+
+	if _, err := os.Stat(TeamLogoLocalPath(123)); err == nil {
+		t.Error("rejected response must not leave a logo file on disk")
+	}
+}
+
+// TestDownloadTeamLogoAcceptsBinaryBlobContentType covers the
+// "octet-stream" path: a CDN that serves an image without a declared
+// Content-Type. Go's stdlib server-side sniffer detects binary bytes
+// (no known image signature) and sets application/octet-stream in
+// the response header, so the request reaches the downloader with
+// that type. We accept it because:
+//
+//   - the size cap (maxLogoBytes) still bounds the body, so a hostile
+//     upstream cannot push a multi-GB blob to disk;
+//   - rejecting every octet-stream response would also reject every
+//     team whose badge is served by a CDN that omits the declared
+//     type (a common, legitimate configuration);
+//
+// The "challenge page" case (which returns text/html or application/
+// json with a 200) is still rejected by the surrounding check.
+func TestDownloadTeamLogoAcceptsBinaryBlobContentType(t *testing.T) {
+	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// High-bit binary that doesn't match a known image signature
+		// makes Go's stdlib sniffer set application/octet-stream.
+		_, _ = w.Write([]byte{0x00, 0x01, 0x02, 0xff, 0xfe, 0xfd})
+	}))
+	defer server.Close()
+
+	path, err := DownloadTeamLogo(123, server.URL+"/logo.png")
+	if err != nil {
+		t.Fatalf("DownloadTeamLogo returned error: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read downloaded logo: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("downloaded file is empty")
+	}
+}
+
+// TestDownloadTeamLogoCapsBodyAtMaxLogoBytes ensures a hostile or
+// misconfigured upstream cannot push a multi-GB body to disk. The
+// cap is enforced both via Content-Length (fast path, when the
+// server advertises it) and via io.LimitReader (belt-and-suspenders
+// for chunked transfers or a lying Content-Length).
+func TestDownloadTeamLogoCapsBodyAtMaxLogoBytes(t *testing.T) {
+	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
+
+	// Declare a Content-Length above the cap; the downloader must
+	// refuse without reading the body.
+	oversized := maxLogoBytes + 1
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", oversized))
+		_, _ = w.Write(make([]byte, oversized))
+	}))
+	defer server.Close()
+
+	if _, err := DownloadTeamLogo(123, server.URL+"/logo.png"); err == nil {
+		t.Fatal("expected error for oversized Content-Length, got nil")
+	} else if !strings.Contains(err.Error(), "too large") {
+		t.Errorf("error %q should mention 'too large'", err)
+	}
+}
+
+// TestDownloadTeamLogoLimitReaderEnforcesCapForChunked covers the
+// belt-and-suspenders path: a server that omits Content-Length
+// (chunked transfer encoding) cannot blow past maxLogoBytes either,
+// because io.LimitReader bounds the read at the cap regardless of
+// what the server advertises.
+func TestDownloadTeamLogoLimitReaderEnforcesCapForChunked(t *testing.T) {
+	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		// Flush a body well over the cap in chunks; the transfer
+		// encoding becomes chunked because the handler doesn't
+		// declare Content-Length up front.
+		flusher, _ := w.(http.Flusher)
+		for i := 0; i < 4; i++ {
+			_, _ = w.Write(make([]byte, maxLogoBytes))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	// Either the downloader fails outright, or it succeeds but the
+	// file on disk is bounded by the cap. Either way it must not
+	// blow up the test process or the disk with a multi-GB write.
+	path, err := DownloadTeamLogo(123, server.URL+"/logo.png")
+	if err == nil {
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			t.Fatalf("stat downloaded logo: %v", statErr)
+		}
+		if info.Size() > maxLogoBytes {
+			t.Fatalf("downloaded size = %d, want <= %d", info.Size(), maxLogoBytes)
+		}
+	}
+}
 // 365scores image CDN, up to the natural competitor ID.
 const scores365Badge = "https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,d_Competitors:default1.png/v1/Competitors/"
 

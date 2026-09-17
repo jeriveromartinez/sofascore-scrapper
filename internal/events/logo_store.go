@@ -9,6 +9,8 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/scores365"
@@ -17,6 +19,13 @@ import (
 const defaultStoragePath = "./image_storage"
 
 const imageDownloadTimeout = 10 * time.Second
+
+// maxLogoBytes caps the body the downloader will read from a remote
+// CDN. A misconfigured upstream (or a MITM-injected payload) could
+// otherwise push the body to multi-GB and fill the disk. 4 MiB is
+// well above any legitimate team badge; legitimate PNG/SVG/WebP
+// variants stay under 200 KiB.
+const maxLogoBytes int64 = 4 << 20
 
 const imageBrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 
@@ -47,6 +56,24 @@ func newImageHTTPClient() *http.Client {
 		Transport: transport,
 		Timeout:   imageDownloadTimeout,
 	}
+}
+
+// defaultImageClient is the package-wide shared client the logo
+// downloaders use. The LogoScheduler fans out hundreds of downloads
+// per scrape (one HTTP call per team per source URL); allocating a
+// fresh *http.Transport per call destroyed connection reuse and
+// burned one TCP+TLS handshake per call. Sharing one client across
+// the whole scheduler lets idle connections stay warm between jobs.
+var (
+	defaultImageClientOnce sync.Once
+	defaultImageClient     *http.Client
+)
+
+func sharedImageHTTPClient() *http.Client {
+	defaultImageClientOnce.Do(func() {
+		defaultImageClient = newImageHTTPClient()
+	})
+	return defaultImageClient
 }
 
 func StoragePath() string {
@@ -124,16 +151,31 @@ func DownloadTeamLogo(teamID int64, sourceURL string) (string, error) {
 	return DownloadTeamLogoWithContext(context.Background(), teamID, sourceURL)
 }
 
+// DownloadTeamLogoWithContext is the production entry point. It uses
+// the package-level shared HTTP client so the LogoScheduler's many
+// concurrent downloads reuse idle keep-alive connections instead of
+// each spinning up its own TCP+TLS handshake.
 func DownloadTeamLogoWithContext(ctx context.Context, teamID int64, sourceURL string) (string, error) {
-	return downloadTeamLogoWithContext(ctx, teamID, sourceURL, newImageHTTPClient())
+	return downloadTeamLogoWithContext(ctx, teamID, sourceURL, sharedImageHTTPClient())
 }
 
+// downloadTeamLogo is the test seam — it accepts an explicit client
+// so tests can inject httptest server clients and assert on transport
+// behaviour. Production callers should go through DownloadTeamLogo /
+// DownloadTeamLogoWithContext.
 func downloadTeamLogo(teamID int64, sourceURL string, client *http.Client) (string, error) {
 	return downloadTeamLogoWithContext(context.Background(), teamID, sourceURL, client)
 }
 
 func downloadTeamLogoWithContext(ctx context.Context, teamID int64, sourceURL string, client *http.Client) (string, error) {
-	defer client.CloseIdleConnections()
+	// The shared production client is reused across every download on
+	// the scheduler; closing its idle pool per-call would defeat the
+	// connection reuse this refactor exists to enable. Test-injected
+	// one-off clients are still closed so the test seam can assert
+	// clean teardown.
+	if client != sharedImageHTTPClient() {
+		defer client.CloseIdleConnections()
+	}
 
 	// TeamLogoSourceURL returns "" for IDs no upstream can serve
 	// (the removed TheSportsDB namespace). Fail fast instead of
@@ -178,13 +220,37 @@ func downloadTeamLogoWithContext(ctx context.Context, teamID int64, sourceURL st
 		return "", fmt.Errorf("unexpected HTTP status %d when downloading image", resp.StatusCode)
 	}
 
+	// Validate Content-Type before writing anything to disk. Some CDNs
+	// return a small HTML "challenge" or JSON error body with HTTP 200
+	// when the request is rate-limited or geo-blocked; persisting that
+	// as a logo would silently break every team page that referenced
+	// it.
+	//
+	// What we accept:
+	//   - empty Content-Type (some CDNs omit the header for images)
+	//   - image/* (the normal case)
+	//   - application/octet-stream (Go's stdlib sniffs high-bit binary
+	//     blobs that don't match a known image signature into this
+	//     type; legitimate CDNs sometimes serve a logo this way)
+	if ct := resp.Header.Get("Content-Type"); ct != "" && !strings.HasPrefix(strings.ToLower(ct), "image/") && !strings.EqualFold(ct, "application/octet-stream") {
+		return "", fmt.Errorf("unexpected Content-Type %q for team %d", ct, teamID)
+	}
+
+	// Reject obviously oversized responses before reading the body so
+	// we don't allocate a multi-GB buffer for a hostile or buggy
+	// upstream. ContentLength is best-effort (chunked transfer has it
+	// as -1); the LimitReader below is the belt-and-suspenders cap.
+	if resp.ContentLength > maxLogoBytes {
+		return "", fmt.Errorf("logo body too large: Content-Length=%d for team %d", resp.ContentLength, teamID)
+	}
+
 	f, err := os.CreateTemp(dir, "logo-*.tmp")
 	if err != nil {
 		return "", fmt.Errorf("could not create temp file: %w", err)
 	}
 	tmpPath := f.Name()
 
-	if _, copyErr := io.Copy(f, resp.Body); copyErr != nil {
+	if _, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxLogoBytes)); copyErr != nil {
 		f.Close()
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("could not write image data: %w", copyErr)

@@ -139,6 +139,7 @@ func TestDownloadAndPersistLogo_FallsBackToIDSourceWhenLookupEmpty(t *testing.T)
 	var idPath string
 	idServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idPath = r.URL.Path
+		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("id-source-bytes"))
 	}))
 	defer idServer.Close()
