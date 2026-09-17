@@ -425,6 +425,13 @@ func (c *Client) fetchFeed(ctx context.Context, path string, params url.Values) 
 	return &feed, nil
 }
 
+// maxScores365ResponseBytes bounds a single response body. The largest
+// endpoint we hit (/web/games/allscores/) is documented as ~825KB raw,
+// so 4 MiB leaves comfortable headroom for payload growth without
+// turning an upstream bug (or a malicious reply) into an unbounded
+// memory allocation on the scrapper host.
+const maxScores365ResponseBytes = 4 << 20
+
 // doWithRetry performs a GET with exponential backoff on 429 and 5xx.
 func (c *Client) doWithRetry(ctx context.Context, req *http.Request) ([]byte, error) {
 	backoffs := []time.Duration{0, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
@@ -461,7 +468,19 @@ func (c *Client) doWithRetry(ctx context.Context, req *http.Request) ([]byte, er
 			return nil, fmt.Errorf("scores365: status %d", resp.StatusCode)
 		}
 		defer resp.Body.Close()
-		return io.ReadAll(resp.Body)
+		// Cap the body so a runaway upstream cannot OOM the process.
+		// io.LimitReader returns EOF once the cap is reached; we then
+		// surface ErrBodyTooLarge if the response hit the cap, so the
+		// caller can distinguish a healthy full payload from a truncated
+		// one.
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxScores365ResponseBytes+1))
+		if readErr != nil {
+			return nil, readErr
+		}
+		if int64(len(body)) > maxScores365ResponseBytes {
+			return nil, fmt.Errorf("scores365: response exceeded %d bytes", maxScores365ResponseBytes)
+		}
+		return body, nil
 	}
 	return nil, fmt.Errorf("scores365: exhausted retries: %w", lastErr)
 }

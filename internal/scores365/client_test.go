@@ -278,3 +278,48 @@ func TestClient_NonRetryableStatus(t *testing.T) {
 		t.Fatal("FetchGames: want error on 403, got nil")
 	}
 }
+
+// TestClient_RejectsOversizedResponse confirms doWithRetry caps the
+// response body at maxScores365ResponseBytes so an upstream bug or
+// hostile reply cannot OOM the process. The bogus payload here is
+// well past 4 MiB; without the cap, the read would silently swallow
+// everything and round-trip a huge buffer up to the caller.
+func TestClient_RejectsOversizedResponse(t *testing.T) {
+	huge := strings.Repeat("a", maxScores365ResponseBytes+1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(huge))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{BaseURL: srv.URL})
+	if _, err := c.FetchGames(context.Background(), time.Now()); err == nil {
+		t.Fatal("FetchGames: want error on oversized response, got nil")
+	} else if !strings.Contains(err.Error(), "exceeded") {
+		t.Errorf("FetchGames: want 'exceeded' in error, got %v", err)
+	}
+}
+
+// TestClient_AcceptsBodyUnderCap confirms the cap does not reject a
+// healthy payload. The allscoresBody fixture is well under the cap,
+// and the test asserts the JSON parses successfully — which is only
+// possible if doWithRetry returned the body verbatim rather than
+// truncating it.
+func TestClient_AcceptsBodyUnderCap(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(allscoresBody))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{BaseURL: srv.URL})
+	feed, err := c.FetchGames(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("FetchGames: unexpected error: %v", err)
+	}
+	if len(feed.Games) != 1 {
+		t.Fatalf("FetchGames: want 1 game, got %d", len(feed.Games))
+	}
+}
