@@ -325,6 +325,22 @@ func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, tea
 	return true
 }
 
+// maxTournamentIDs bounds the league-id slice fed to the
+// WHERE league_id IN (?) clause in getCurrentAndUpcoming. The
+// planner switches strategies as the IN-list grows (MySQL gives
+// up on index usage beyond a few hundred entries), so an
+// unbounded device assignment combined with the full global
+// fallback produces an O(N) plan that scans the whole events
+// table.
+//
+// 200 is well above any real device assignment today (~10s of
+// leagues is the largest expected) and keeps the query in the
+// range where the planner uses the league_id index. Devices that
+// genuinely need more fall back to the global list (which is
+// what they would have seen before this cap existed) — the
+// truncation is documented in the log so operators can spot it.
+const maxTournamentIDs = 200
+
 func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]uint, error) {
 	var deviceTournaments []tournaments.DeviceTournament
 	if err := r.db.WithContext(ctx).Find(&deviceTournaments, "device_id = ?", devID).Error; err != nil {
@@ -336,7 +352,7 @@ func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]ui
 		for i, dt := range deviceTournaments {
 			ids[i] = dt.TournamentID
 		}
-		return ids, nil
+		return truncateTournamentIDs(devID, ids), nil
 	}
 
 	var globalConfig []tournaments.GlobalTournamentConfig
@@ -347,7 +363,19 @@ func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]ui
 	for i, gc := range globalConfig {
 		ids[i] = gc.TournamentID
 	}
-	return ids, nil
+	return truncateTournamentIDs(devID, ids), nil
+}
+
+// truncateTournamentIDs caps the returned slice at maxTournamentIDs.
+// The caller (getCurrentAndUpcoming) treats a truncated list as
+// 'best-effort subset of the device's leagues' — the same behaviour
+// the user would get by manually trimming the assignment.
+func truncateTournamentIDs(devID uint, ids []uint) []uint {
+	if len(ids) <= maxTournamentIDs {
+		return ids
+	}
+	log.Printf("events: device %d has %d tournament assignments, truncating to %d (cap to keep the IN-list query plan in index-scan range)", devID, len(ids), maxTournamentIDs)
+	return ids[:maxTournamentIDs]
 }
 
 func (r *Repository) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit int) ([]Event, error) {
