@@ -259,6 +259,20 @@ func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
 		return
 	}
 
+	// Enforce the same per-upload chunk cap the new /apk/uploads
+	// flow uses (MaxTotalChunks). The total_chunks param caps the
+	// index, but a caller could keep posting chunk 0 of fresh
+	// upload IDs and fill the disk with one-chunk dirs. Count the
+	// existing chunk files in this upload dir and reject if we
+	// already have the cap (the incoming chunk is not yet counted).
+	entries, dirErr := os.ReadDir(chunkDir)
+	if dirErr == nil && len(entries) >= MaxTotalChunks {
+		c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("upload already has %d chunks (max %d); call /apk/upload/assemble to publish or DELETE the upload", len(entries), MaxTotalChunks),
+		})
+		return
+	}
+
 	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("chunk-%d", chunkIndex))
 	if err := c.SaveUploadedFile(fileHeader, chunkPath); err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not save chunk"})
