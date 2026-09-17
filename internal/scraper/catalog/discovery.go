@@ -152,10 +152,11 @@ func DiscoverySports(
 		// auto-enrol path insert a second, prefixed row beside it.
 		ref := toLeagueRef(l)
 
-		before, err := repo.ExistsBySourceLeagueID(ctx, ref.Source, ref.SourceLeagueId)
-		if err != nil {
-			return result, fmt.Errorf("catalog: discovery exists check %s/%s: %w", ref.Source, ref.SourceLeagueId, err)
-		}
+		// EnsureLeague returns (true, nil) only when it actually
+		// inserted the row; (false, nil) means a row already existed
+		// (possibly disabled by the operator). Trusting that bool
+		// saves two SELECT COUNT queries per league — ~5.4k queries
+		// per discovery sweep at the current 2.7k-league catalog size.
 		created, err := repo.EnsureLeague(ctx, ref.SourceLeagueId, ref)
 		if err != nil {
 			result.Skipped++
@@ -165,11 +166,7 @@ func DiscoverySports(
 				slog.String("error", err.Error()))
 			continue
 		}
-		after, err := repo.ExistsBySourceLeagueID(ctx, ref.Source, ref.SourceLeagueId)
-		if err != nil {
-			return result, fmt.Errorf("catalog: discovery recheck: %w", err)
-		}
-		if created || after > before {
+		if created {
 			result.Upserted++
 		} else {
 			result.Unchanged++
