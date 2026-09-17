@@ -357,13 +357,22 @@ func (s *UploadService) ReconcilePublications(ctx context.Context) error {
 			if _, err := s.store.Get(ctx, uploadID); err != nil {
 				continue
 			}
-			s.store.Complete(context.Background(), uploadID)
+			// Use a derived ctx with a short timeout rather than
+			// context.Background(): the reconciler ctx may already be
+			// cancelled (process shutdown) but we still want the
+			// finalizer to either complete or give up in bounded
+			// time, not hang forever.
+			finCtx, finCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			s.store.Complete(finCtx, uploadID)
+			finCancel()
 		case "assembling":
 			s.db.Model(&pub).Update("status", "failed")
 			if pub.TempPath != "" {
 				os.Remove(pub.TempPath)
 			}
-			s.store.Abort(context.Background(), uploadID)
+			finCtx, finCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			s.store.Abort(finCtx, uploadID)
+			finCancel()
 			s.chunkStore.RemoveChunks(pub.UploadID)
 		}
 	}
