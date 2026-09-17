@@ -75,7 +75,7 @@ func (r *Repository) List(ctx context.Context, f ListFilters) ([]ScraperLeague, 
 		q = q.Where("country = ?", f.Country)
 	}
 	if f.Query != "" {
-		q = q.Where("name LIKE ?", "%"+f.Query+"%")
+		q = q.Where("name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.Query)+"%")
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
@@ -249,7 +249,7 @@ func (r *Repository) SearchLocalByName(ctx context.Context, query string) ([]scr
 	}
 	var rows []ScraperLeague
 	if err := r.db.WithContext(ctx).
-		Where("LOWER(name) LIKE ?", "%"+strings.ToLower(q)+"%").
+		Where("LOWER(name) LIKE ? ESCAPE '\\'", "%"+escapeLike(strings.ToLower(q))+"%").
 		Order("name ASC").
 		Find(&rows).Error; err != nil {
 		return nil, err
@@ -265,6 +265,26 @@ func (r *Repository) SearchLocalByName(ctx context.Context, query string) ([]scr
 		})
 	}
 	return out, nil
+}
+
+// escapeLike escapes the three special characters recognised by SQL LIKE
+// (% multi-char wildcard, _ single-char wildcard, \ literal escape char)
+// by prefixing each with the LIKE escape character (backslash). Without
+// this, an admin entering Query=% widens the search to every row in the
+// catalog table, and Query=_ matches every single-character name — both
+// wildcard-injection primitives that the events package already protects
+// against. Kept here (rather than promoted to a shared util) to avoid a
+// cross-package import for a 12-line helper used in two places.
+func escapeLike(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '%' || r == '_' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func isUniqueViolation(err error) bool {
