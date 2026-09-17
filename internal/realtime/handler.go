@@ -65,7 +65,7 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 		cfg.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	}
 	if cfg.AckHandler == nil {
-		cfg.AckHandler = func(string) {}
+		cfg.AckHandler = func(context.Context, string) {}
 	}
 
 	return func(c *gin.Context) {
@@ -213,7 +213,7 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 // ping/pong/keepalive which gorilla handles via the control
 // channel). Any read error closes the connection.
 func readLoop(conn *Connection, logger *slog.Logger) {
-	// defer conn.Close(1000, "read loop exit")
+	defer conn.Close(1000, "read loop exit")
 
 	_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
 	conn.ws.SetPongHandler(func(string) error {

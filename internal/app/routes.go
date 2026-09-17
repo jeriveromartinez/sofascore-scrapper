@@ -192,15 +192,17 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	// and upgrades the request; no JWT, no appMw — the Flutter app
 	// does not authenticate as a user.
 	wsAuthenticator := realtime.NewAuthenticator(db)
-	ackHandler := realtime.AckHandler(func(string) {})
+	ackHandler := realtime.AckHandler(func(context.Context, string) {})
 	if pushSvc != nil {
 		// Wrap the service's OnAck to the realtime AckHandler
-		// signature (no ctx, no return). The connection's
-		// background context is what the service uses anyway, so
-		// we just call it with context.Background().
+		// signature. The ctx the handler passes in is the
+		// per-connection context — it is cancelled when the WS
+		// closes, so an OnAck firing in the background stops as
+		// soon as the device disconnects instead of running to
+		// completion against a closed connection.
 		pushSvc := pushSvc
-		ackHandler = func(messageID string) {
-			_ = pushSvc.OnAck(context.Background(), messageID)
+		ackHandler = func(ctx context.Context, messageID string) {
+			_ = pushSvc.OnAck(ctx, messageID)
 		}
 	}
 	wsHandler := realtime.Handler(realtime.HandlerConfig{

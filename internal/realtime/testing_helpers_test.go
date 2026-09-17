@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"context"
 	"testing"
 
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
@@ -38,13 +39,16 @@ func (p *testPush) encode() ([]byte, error) {
 func newTestConnection(t *testing.T, deviceID uint64, userID, domainID uint32) *Connection {
 	t.Helper()
 
+	ctx, cancel := context.WithCancel(context.Background())
 	c := &Connection{
 		deviceID:   deviceID,
 		userID:     userID,
 		domainID:   domainID,
 		send:       make(chan []byte, 16),
 		closed:     make(chan struct{}),
-		ackHandler: func(string) {},
+		ackHandler: func(context.Context, string) {},
+		ctx:        ctx,
+		ctxCancel:  cancel,
 		ws:         nil, // tests don't write through gorilla
 		logger:     nil,
 	}
