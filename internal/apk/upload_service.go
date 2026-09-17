@@ -240,22 +240,39 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	// leftover assembled temp to avoid orphaning a full-size APK in storage.
 	os.Remove(tmpPath)
 
-	pub.FinalPath = destPath
-	pub.Status = "published"
-	s.db.Save(pub)
-
+	// Wrap the three DB writes (mark "published", insert ApkVersion,
+	// mark "persisted") in a single transaction so a crash between
+	// them cannot leave a half-applied state visible to other
+	// readers. The file is already on disk at this point — if the
+	// transaction rolls back, ReconcilePublications will pick the
+	// orphaned pub up on its next tick and clean up the file via the
+	// assembling→failed branch.
 	description := session.Description
-	apkV, err := s.repo.Create(
-		version, fileName, destPath, description, apkInfo.PackageName,
-		totalSize, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
-	)
+	var apkV *ApkVersion
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		pub.FinalPath = destPath
+		pub.Status = "published"
+		if err := tx.Save(pub).Error; err != nil {
+			return err
+		}
+		created, err := s.repo.CreateTx(tx,
+			version, fileName, destPath, description, apkInfo.PackageName,
+			totalSize, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
+		)
+		if err != nil {
+			return err
+		}
+		apkV = created
+		pub.Status = "persisted"
+		if err := tx.Save(pub).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		s.markPublicationFailed(pub.ID)
-		return nil, fmt.Errorf("create DB record: %w", err)
+		return nil, fmt.Errorf("persist publication: %w", err)
 	}
-
-	pub.Status = "persisted"
-	s.db.Save(pub)
 
 	if err := s.store.Complete(ctx, uploadID); err != nil {
 		return nil, err
