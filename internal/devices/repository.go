@@ -95,18 +95,23 @@ func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
 		return nil, 0, err
 	}
 	offset := (page - 1) * limit
-	result := r.db.Offset(int(offset)).Limit(int(limit)).Preload("Manager").Find(&devices)
+	// The pb.DeviceList proto never exposes the joined users.User
+	// fields, so the Manager preload was a wasted N+1 roundtrip per
+	// page. Dropped here and in ListPage/GetAll; if a future consumer
+	// needs the manager email, replace with a LEFT JOIN users that
+	// selects only that column rather than loading the whole row.
+	result := r.db.Offset(int(offset)).Limit(int(limit)).Find(&devices)
 	return devices, total, result.Error
 }
 
 func (r *Repository) GetAll() ([]Device, error) {
 	var devices []Device
-	result := r.db.Order("id DESC").Limit(maxAllDevices).Preload("Manager").Find(&devices)
+	result := r.db.Order("id DESC").Limit(maxAllDevices).Find(&devices)
 	return devices, result.Error
 }
 
 func (r *Repository) ListPage(ctx context.Context, id uint, limit int) ([]Device, bool, error) {
-	query := r.db.WithContext(ctx).Preload("Manager").Order("id DESC")
+	query := r.db.WithContext(ctx).Order("id DESC")
 	if id > 0 {
 		query = query.Where("id < ?", id)
 	}
