@@ -229,14 +229,30 @@ func (h *Handler) handleDelete(c *gin.Context) {
 // (just a bool). The response is the updated User so the dashboard
 // can refresh in one round trip.
 //
-// Authorization is enforced by the auth middleware that wraps
-// the route (adminThenRl in routes.go) plus the ownership check
-// below: a non-admin caller may only toggle their own account.
+// Authorization: today the route is mounted behind adminThenRl
+// (admin or self) middleware in routes.go, so only an admin or the
+// user themselves can reach this endpoint. The handler additionally
+// re-checks ownership here so that swapping the middleware for a
+// looser one in the future cannot escalate to flipping every other
+// user's notification flag.
 func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 	id, err := server.ParseID(c.Param("id"))
 	if err != nil {
 		server.RespondError(c, http.StatusBadRequest, "invalid id")
 		return
+	}
+
+	callerID, ok := callerUserID(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if callerID != id {
+		caller, err := h.repo.GetByID(callerID)
+		if err != nil || !caller.IsAdmin() {
+			server.RespondError(c, http.StatusForbidden, "cannot modify another user's notification settings")
+			return
+		}
 	}
 
 	var req pb.SetNotificationsEnabledRequest
@@ -256,4 +272,17 @@ func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 	}
 
 	server.RespondProto(c, http.StatusOK, UserToProto(*user))
+}
+
+// callerUserID returns the authenticated user's id from the gin
+// context. It mirrors auth.GetUserID without importing the auth
+// package (which would create an import cycle: auth already imports
+// users). The key value MUST stay in sync with auth.tokens.userIDKey.
+func callerUserID(c *gin.Context) (uint, bool) {
+	v, exists := c.Get("userID")
+	if !exists {
+		return 0, false
+	}
+	id, ok := v.(uint)
+	return id, ok
 }
