@@ -447,6 +447,10 @@ export interface TournamentRequest {
 }
 
 export interface Tournament {
+  /**
+   * uint64: the scraper namespaces upstream competition ids into their own
+   * range (365scores leagues start at 6_000_000_000), which overflows uint32.
+   */
   id: number;
   createdAt: string;
   updatedAt: string;
@@ -514,11 +518,30 @@ export interface Team {
   name: string;
 }
 
+/**
+ * ExternalEvent carries event metadata to mobile clients.
+ *
+ * Backwards compatibility (added 2026-09-11, PR #122 fix A2):
+ * The pre-FotMob wire schema exposed tag 4 as `int64 sofa_score_event_id`.
+ * PR #118 (model reset) silently changed that tag to a string
+ * `external_match_id`, which broke already-deployed clients built
+ * against the old schema. To restore compatibility we keep the old
+ * int64 at tag 4 (renamed `sofa_score_event_id_deprecated` to make the
+ * intent obvious) and place the new string at a fresh tag (20). Old
+ * clients continue to read int64 at tag 4; new clients read string at
+ * tag 20. See docs/integration-audit-roadmap.md for the rollout plan.
+ */
 export interface ExternalEvent {
   id: number;
   createdAt: string;
   updatedAt: string;
-  externalMatchId: string;
+  /**
+   * Deprecated int64 view of the legacy SofaScore match id. Populated
+   * by the server only when the stored ExternalMatchId is numeric
+   * (i.e. pre-FotMob data). New clients should read the string field
+   * at tag 20 instead. Wire type MUST stay int64 for old clients.
+   */
+  sofaScoreEventIdDeprecated: number;
   sport: string;
   homeScore: number;
   homeTeamId: number;
@@ -534,6 +557,12 @@ export interface ExternalEvent {
   league?: Tournament | undefined;
   statusType: string;
   source: string;
+  /**
+   * String view of the external match id (FotMob id, etc.). New
+   * clients read this. Lives at a fresh tag so the deprecated int64
+   * keeps its wire position.
+   */
+  externalMatchId: string;
 }
 
 export interface EventsList {
@@ -3214,7 +3243,7 @@ function createBaseTournament(): Tournament {
 export const Tournament: MessageFns<Tournament> = {
   encode(message: Tournament, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.id !== 0) {
-      writer.uint32(8).uint32(message.id);
+      writer.uint32(8).uint64(message.id);
     }
     if (message.createdAt !== "") {
       writer.uint32(18).string(message.createdAt);
@@ -3246,7 +3275,7 @@ export const Tournament: MessageFns<Tournament> = {
             break;
           }
 
-          message.id = reader.uint32();
+          message.id = longToNumber(reader.uint64());
           continue;
         }
         case 2: {
@@ -3505,7 +3534,7 @@ export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
       writer.uint32(8).uint32(message.deviceId);
     }
     if (message.tournamentId !== 0) {
-      writer.uint32(16).uint32(message.tournamentId);
+      writer.uint32(16).uint64(message.tournamentId);
     }
     return writer;
   },
@@ -3530,7 +3559,7 @@ export const AssignTournamentRequest: MessageFns<AssignTournamentRequest> = {
             break;
           }
 
-          message.tournamentId = reader.uint32();
+          message.tournamentId = longToNumber(reader.uint64());
           continue;
         }
       }
@@ -3587,7 +3616,7 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
   encode(message: SetTournamentIdsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     writer.uint32(10).fork();
     for (const v of message.tournamentIds) {
-      writer.uint32(v);
+      writer.uint64(v);
     }
     writer.join();
     return writer;
@@ -3602,7 +3631,7 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
       switch (tag >>> 3) {
         case 1: {
           if (tag === 8) {
-            message.tournamentIds.push(reader.uint32());
+            message.tournamentIds.push(longToNumber(reader.uint64()));
 
             continue;
           }
@@ -3610,7 +3639,7 @@ export const SetTournamentIdsRequest: MessageFns<SetTournamentIdsRequest> = {
           if (tag === 10) {
             const end2 = reader.uint32() + reader.pos;
             while (reader.pos < end2) {
-              message.tournamentIds.push(reader.uint32());
+              message.tournamentIds.push(longToNumber(reader.uint64()));
             }
 
             continue;
@@ -3682,7 +3711,7 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
       writer.uint32(32).uint32(message.deviceId);
     }
     if (message.tournamentId !== 0) {
-      writer.uint32(40).uint32(message.tournamentId);
+      writer.uint32(40).uint64(message.tournamentId);
     }
     if (message.device !== undefined) {
       Device.encode(message.device, writer.uint32(50).fork()).join();
@@ -3737,7 +3766,7 @@ export const DeviceTournament: MessageFns<DeviceTournament> = {
             break;
           }
 
-          message.tournamentId = reader.uint32();
+          message.tournamentId = longToNumber(reader.uint64());
           continue;
         }
         case 6: {
@@ -3997,7 +4026,7 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
       writer.uint32(26).string(message.updatedAt);
     }
     if (message.tournamentId !== 0) {
-      writer.uint32(32).uint32(message.tournamentId);
+      writer.uint32(32).uint64(message.tournamentId);
     }
     if (message.tournament !== undefined) {
       Tournament.encode(message.tournament, writer.uint32(42).fork()).join();
@@ -4041,7 +4070,7 @@ export const GlobalTournamentConfig: MessageFns<GlobalTournamentConfig> = {
             break;
           }
 
-          message.tournamentId = reader.uint32();
+          message.tournamentId = longToNumber(reader.uint64());
           continue;
         }
         case 5: {
@@ -4362,7 +4391,7 @@ function createBaseExternalEvent(): ExternalEvent {
     id: 0,
     createdAt: "",
     updatedAt: "",
-    externalMatchId: "",
+    sofaScoreEventIdDeprecated: 0,
     sport: "",
     homeScore: 0,
     homeTeamId: 0,
@@ -4378,6 +4407,7 @@ function createBaseExternalEvent(): ExternalEvent {
     league: undefined,
     statusType: "",
     source: "",
+    externalMatchId: "",
   };
 }
 
@@ -4392,8 +4422,8 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
     if (message.updatedAt !== "") {
       writer.uint32(26).string(message.updatedAt);
     }
-    if (message.externalMatchId !== "") {
-      writer.uint32(34).string(message.externalMatchId);
+    if (message.sofaScoreEventIdDeprecated !== 0) {
+      writer.uint32(32).int64(message.sofaScoreEventIdDeprecated);
     }
     if (message.sport !== "") {
       writer.uint32(42).string(message.sport);
@@ -4440,6 +4470,9 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
     if (message.source !== "") {
       writer.uint32(154).string(message.source);
     }
+    if (message.externalMatchId !== "") {
+      writer.uint32(162).string(message.externalMatchId);
+    }
     return writer;
   },
 
@@ -4475,11 +4508,11 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
           continue;
         }
         case 4: {
-          if (tag !== 34) {
+          if (tag !== 32) {
             break;
           }
 
-          message.externalMatchId = reader.string();
+          message.sofaScoreEventIdDeprecated = longToNumber(reader.int64());
           continue;
         }
         case 5: {
@@ -4602,6 +4635,14 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
           message.source = reader.string();
           continue;
         }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.externalMatchId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4624,11 +4665,11 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
         : isSet(object.updated_at)
         ? globalThis.String(object.updated_at)
         : "",
-      externalMatchId: isSet(object.externalMatchId)
-        ? globalThis.String(object.externalMatchId)
-        : isSet(object.external_match_id)
-        ? globalThis.String(object.external_match_id)
-        : "",
+      sofaScoreEventIdDeprecated: isSet(object.sofaScoreEventIdDeprecated)
+        ? globalThis.Number(object.sofaScoreEventIdDeprecated)
+        : isSet(object.sofa_score_event_id_deprecated)
+        ? globalThis.Number(object.sofa_score_event_id_deprecated)
+        : 0,
       sport: isSet(object.sport) ? globalThis.String(object.sport) : "",
       homeScore: isSet(object.homeScore)
         ? globalThis.Number(object.homeScore)
@@ -4684,6 +4725,11 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
         ? globalThis.String(object.status_type)
         : "",
       source: isSet(object.source) ? globalThis.String(object.source) : "",
+      externalMatchId: isSet(object.externalMatchId)
+        ? globalThis.String(object.externalMatchId)
+        : isSet(object.external_match_id)
+        ? globalThis.String(object.external_match_id)
+        : "",
     };
   },
 
@@ -4698,8 +4744,8 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
     if (message.updatedAt !== "") {
       obj.updatedAt = message.updatedAt;
     }
-    if (message.externalMatchId !== "") {
-      obj.externalMatchId = message.externalMatchId;
+    if (message.sofaScoreEventIdDeprecated !== 0) {
+      obj.sofaScoreEventIdDeprecated = Math.round(message.sofaScoreEventIdDeprecated);
     }
     if (message.sport !== "") {
       obj.sport = message.sport;
@@ -4746,6 +4792,9 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
     if (message.source !== "") {
       obj.source = message.source;
     }
+    if (message.externalMatchId !== "") {
+      obj.externalMatchId = message.externalMatchId;
+    }
     return obj;
   },
 
@@ -4757,7 +4806,7 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
     message.id = object.id ?? 0;
     message.createdAt = object.createdAt ?? "";
     message.updatedAt = object.updatedAt ?? "";
-    message.externalMatchId = object.externalMatchId ?? "";
+    message.sofaScoreEventIdDeprecated = object.sofaScoreEventIdDeprecated ?? 0;
     message.sport = object.sport ?? "";
     message.homeScore = object.homeScore ?? 0;
     message.homeTeamId = object.homeTeamId ?? 0;
@@ -4779,6 +4828,7 @@ export const ExternalEvent: MessageFns<ExternalEvent> = {
       : undefined;
     message.statusType = object.statusType ?? "";
     message.source = object.source ?? "";
+    message.externalMatchId = object.externalMatchId ?? "";
     return message;
   },
 };

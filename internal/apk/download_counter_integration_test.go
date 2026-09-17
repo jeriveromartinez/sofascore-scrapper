@@ -21,8 +21,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -55,7 +55,7 @@ func setupCounterTestClients(t *testing.T) (*gorm.DB, *goredis.Client) {
 	port := envOr("DB_PORT", "3306")
 	user := envOr("DB_USER", "root")
 	pass := os.Getenv("DB_PASSWORD")
-	name := envOr("DB_NAME", "sofascore")
+	name := envOr("DB_NAME", "scores365")
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&multiStatements=true", user, pass, host, port, name)
 
 	sqlDB, err := sql.Open("mysql", dsn)

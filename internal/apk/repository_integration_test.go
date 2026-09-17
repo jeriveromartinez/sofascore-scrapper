@@ -17,7 +17,7 @@ func dbDSN() string {
 	port := envOr("DB_PORT", "3306")
 	user := envOr("DB_USER", "root")
 	pass := os.Getenv("DB_PASSWORD")
-	name := envOr("DB_NAME", "sofascore")
+	name := envOr("DB_NAME", "scores365")
 	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&multiStatements=true", user, pass, host, port, name)
 }
 

@@ -1731,13 +1731,15 @@ func (x *TournamentRequest) GetSlug() string {
 }
 
 type Tournament struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	Slug          string                 `protobuf:"bytes,5,opt,name=slug,proto3" json:"slug,omitempty"`
-	Region        string                 `protobuf:"bytes,6,opt,name=region,proto3" json:"region,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// uint64: the scraper namespaces upstream competition ids into their own
+	// range (365scores leagues start at 6_000_000_000), which overflows uint32.
+	Id            uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	CreatedAt     string `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     string `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Name          string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Slug          string `protobuf:"bytes,5,opt,name=slug,proto3" json:"slug,omitempty"`
+	Region        string `protobuf:"bytes,6,opt,name=region,proto3" json:"region,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1772,7 +1774,7 @@ func (*Tournament) Descriptor() ([]byte, []int) {
 	return file_proto_api_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *Tournament) GetId() uint32 {
+func (x *Tournament) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -1913,7 +1915,7 @@ func (x *TournamentPage) GetPage() *CursorPageInfo {
 type AssignTournamentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DeviceId      uint32                 `protobuf:"varint,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
-	TournamentId  uint32                 `protobuf:"varint,2,opt,name=tournament_id,json=tournamentId,proto3" json:"tournament_id,omitempty"`
+	TournamentId  uint64                 `protobuf:"varint,2,opt,name=tournament_id,json=tournamentId,proto3" json:"tournament_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1955,7 +1957,7 @@ func (x *AssignTournamentRequest) GetDeviceId() uint32 {
 	return 0
 }
 
-func (x *AssignTournamentRequest) GetTournamentId() uint32 {
+func (x *AssignTournamentRequest) GetTournamentId() uint64 {
 	if x != nil {
 		return x.TournamentId
 	}
@@ -1964,7 +1966,7 @@ func (x *AssignTournamentRequest) GetTournamentId() uint32 {
 
 type SetTournamentIdsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TournamentIds []uint32               `protobuf:"varint,1,rep,packed,name=tournament_ids,json=tournamentIds,proto3" json:"tournament_ids,omitempty"`
+	TournamentIds []uint64               `protobuf:"varint,1,rep,packed,name=tournament_ids,json=tournamentIds,proto3" json:"tournament_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1999,7 +2001,7 @@ func (*SetTournamentIdsRequest) Descriptor() ([]byte, []int) {
 	return file_proto_api_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *SetTournamentIdsRequest) GetTournamentIds() []uint32 {
+func (x *SetTournamentIdsRequest) GetTournamentIds() []uint64 {
 	if x != nil {
 		return x.TournamentIds
 	}
@@ -2012,7 +2014,7 @@ type DeviceTournament struct {
 	CreatedAt     string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	DeviceId      uint32                 `protobuf:"varint,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
-	TournamentId  uint32                 `protobuf:"varint,5,opt,name=tournament_id,json=tournamentId,proto3" json:"tournament_id,omitempty"`
+	TournamentId  uint64                 `protobuf:"varint,5,opt,name=tournament_id,json=tournamentId,proto3" json:"tournament_id,omitempty"`
 	Device        *Device                `protobuf:"bytes,6,opt,name=device,proto3" json:"device,omitempty"`
 	Tournament    *Tournament            `protobuf:"bytes,7,opt,name=tournament,proto3" json:"tournament,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2077,7 +2079,7 @@ func (x *DeviceTournament) GetDeviceId() uint32 {
 	return 0
 }
 
-func (x *DeviceTournament) GetTournamentId() uint32 {
+func (x *DeviceTournament) GetTournamentId() uint64 {
 	if x != nil {
 		return x.TournamentId
 	}
@@ -2199,7 +2201,7 @@ type GlobalTournamentConfig struct {
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	TournamentId  uint32                 `protobuf:"varint,4,opt,name=tournament_id,json=tournamentId,proto3" json:"tournament_id,omitempty"`
+	TournamentId  uint64                 `protobuf:"varint,4,opt,name=tournament_id,json=tournamentId,proto3" json:"tournament_id,omitempty"`
 	Tournament    *Tournament            `protobuf:"bytes,5,opt,name=tournament,proto3" json:"tournament,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2256,7 +2258,7 @@ func (x *GlobalTournamentConfig) GetUpdatedAt() string {
 	return ""
 }
 
-func (x *GlobalTournamentConfig) GetTournamentId() uint32 {
+func (x *GlobalTournamentConfig) GetTournamentId() uint64 {
 	if x != nil {
 		return x.TournamentId
 	}
@@ -5977,7 +5979,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\"\x9a\x01\n" +
 	"\n" +
 	"Tournament\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -5992,9 +5994,9 @@ const file_proto_api_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2\x19.sofascore.CursorPageInfoR\x04page\"[\n" +
 	"\x17AssignTournamentRequest\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\rR\bdeviceId\x12#\n" +
-	"\rtournament_id\x18\x02 \x01(\rR\ftournamentId\"@\n" +
+	"\rtournament_id\x18\x02 \x01(\x04R\ftournamentId\"@\n" +
 	"\x17SetTournamentIdsRequest\x12%\n" +
-	"\x0etournament_ids\x18\x01 \x03(\rR\rtournamentIds\"\x84\x02\n" +
+	"\x0etournament_ids\x18\x01 \x03(\x04R\rtournamentIds\"\x84\x02\n" +
 	"\x10DeviceTournament\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
@@ -6002,7 +6004,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\tR\tupdatedAt\x12\x1b\n" +
 	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\x12#\n" +
-	"\rtournament_id\x18\x05 \x01(\rR\ftournamentId\x12)\n" +
+	"\rtournament_id\x18\x05 \x01(\x04R\ftournamentId\x12)\n" +
 	"\x06device\x18\x06 \x01(\v2\x11.sofascore.DeviceR\x06device\x125\n" +
 	"\n" +
 	"tournament\x18\a \x01(\v2\x15.sofascore.TournamentR\n" +
@@ -6018,7 +6020,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"created_at\x18\x02 \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\tR\tupdatedAt\x12#\n" +
-	"\rtournament_id\x18\x04 \x01(\rR\ftournamentId\x125\n" +
+	"\rtournament_id\x18\x04 \x01(\x04R\ftournamentId\x125\n" +
 	"\n" +
 	"tournament\x18\x05 \x01(\v2\x15.sofascore.TournamentR\n" +
 	"tournament\"Y\n" +
@@ -6384,7 +6386,7 @@ const file_proto_api_proto_rawDesc = "" +
 	"'DELIVERY_FAILURE_REASON_WS_DISCONNECTED\x10\x03\x12+\n" +
 	"'DELIVERY_FAILURE_REASON_DOMAIN_MISMATCH\x10\x04\x12)\n" +
 	"%DELIVERY_FAILURE_REASON_EXPIRED_TOKEN\x10\x05\x12*\n" +
-	"&DELIVERY_FAILURE_REASON_INTERNAL_ERROR\x10\x06BEZCgithub.com/jeriveromartinez/sofascore-scrapper/internal/gen/api;apib\x06proto3"
+	"&DELIVERY_FAILURE_REASON_INTERNAL_ERROR\x10\x06BEZCgithub.com/jeriveromartinez/scores365-scrapper/internal/gen/api;apib\x06proto3"
 
 var (
 	file_proto_api_proto_rawDescOnce sync.Once

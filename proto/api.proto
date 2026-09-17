@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package sofascore;
 
-option go_package = "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api;api";
+option go_package = "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api;api";
 
 // ========== Common ==========
 
@@ -173,7 +173,9 @@ message TournamentRequest {
 }
 
 message Tournament {
-  uint32 id = 1;
+  // uint64: the scraper namespaces upstream competition ids into their own
+  // range (365scores leagues start at 6_000_000_000), which overflows uint32.
+  uint64 id = 1;
   string created_at = 2;
   string updated_at = 3;
   string name = 4;
@@ -194,11 +196,11 @@ message TournamentPage {
 
 message AssignTournamentRequest {
   uint32 device_id = 1;
-  uint32 tournament_id = 2;
+  uint64 tournament_id = 2;
 }
 
 message SetTournamentIdsRequest {
-  repeated uint32 tournament_ids = 1;
+  repeated uint64 tournament_ids = 1;
 }
 
 message DeviceTournament {
@@ -206,7 +208,7 @@ message DeviceTournament {
   string created_at = 2;
   string updated_at = 3;
   uint32 device_id = 4;
-  uint32 tournament_id = 5;
+  uint64 tournament_id = 5;
   Device device = 6;
   Tournament tournament = 7;
 }
@@ -226,7 +228,7 @@ message GlobalTournamentConfig {
   uint32 id = 1;
   string created_at = 2;
   string updated_at = 3;
-  uint32 tournament_id = 4;
+  uint64 tournament_id = 4;
   Tournament tournament = 5;
 }
 
