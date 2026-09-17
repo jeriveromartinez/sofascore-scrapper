@@ -43,7 +43,7 @@ async function downloadWithApiBlob(appKey: string): Promise<void> {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `sofascore-${state.data?.latestVersion ?? "latest"}.apk`;
+    anchor.download = `scores365-${state.data?.latestVersion ?? "latest"}.apk`;
     document.body.append(anchor);
     anchor.click();
     anchor.remove();

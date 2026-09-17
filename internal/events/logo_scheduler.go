@@ -12,8 +12,8 @@ const logoWorkerCount = 10
 // LogoJob describes one team whose logo must be resolved. TeamName is
 // optional but, when set, lets the downloader consult an installed
 // LogoLookup as a fallback when the primary URL fails (FotMob and
-// SofaScore maintain independent team-ID spaces, so some teams have
-// no asset in the SofaScore CDN).
+// 365scores maintain independent team-ID spaces, so an ID-derived
+// badge URL only resolves on the CDN that owns that ID).
 type LogoJob struct {
 	TeamID     int64
 	TeamName   string

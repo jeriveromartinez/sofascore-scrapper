@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 	"gorm.io/gorm"
 )
 
@@ -30,7 +30,7 @@ func setupBatchTestDB(tb testing.TB) *gorm.DB {
 }
 
 func testTeam(id int64) Team {
-	return Team{TeamId: id, Name: "Team", LogoUrl: "https://img.sofascore.com/api/v1/team/" + strings.Repeat("0", 10) + "/image"}
+	return Team{TeamId: id, Name: "Team", LogoUrl: "https://imagecache.365scores.com/image/upload/v1/Competitors/" + strings.Repeat("0", 10)}
 }
 
 func testTournament(id uint) tournaments.Tournament {
@@ -120,7 +120,7 @@ func TestUpsertScrapeBatch_UpdatesMutableFields(t *testing.T) {
 	repo := NewRepository(db)
 
 	batch := ScrapeBatch{
-		Teams:       []Team{Team{TeamId: 10, Name: "Original", LogoUrl: "https://img.sofascore.com/api/v1/team/10/image", PrimaryColor: "#111", SecondaryColor: "#222", TextColor: "#333"}},
+		Teams:       []Team{Team{TeamId: 10, Name: "Original", LogoUrl: "https://imagecache.365scores.com/image/upload/v1/Competitors/10", PrimaryColor: "#111", SecondaryColor: "#222", TextColor: "#333"}},
 		Tournaments: []tournaments.Tournament{{Model: gorm.Model{ID: 1}, Name: "Old League", Slug: "old-league", Region: "Old"}},
 		Events: []Event{{
 			ExternalMatchId: "1", Sport: "football", HomeScore: 0, HomeTeamId: 10,
@@ -134,7 +134,7 @@ func TestUpsertScrapeBatch_UpdatesMutableFields(t *testing.T) {
 	}
 
 	updated := ScrapeBatch{
-		Teams:       []Team{Team{TeamId: 10, Name: "Updated", LogoUrl: "https://img.sofascore.com/api/v1/team/10/image", PrimaryColor: "#AAA", SecondaryColor: "#BBB", TextColor: "#CCC"}},
+		Teams:       []Team{Team{TeamId: 10, Name: "Updated", LogoUrl: "https://imagecache.365scores.com/image/upload/v1/Competitors/10", PrimaryColor: "#AAA", SecondaryColor: "#BBB", TextColor: "#CCC"}},
 		Tournaments: []tournaments.Tournament{{Model: gorm.Model{ID: 1}, Name: "New League", Slug: "new-league", Region: "New"}},
 		Events: []Event{{
 			ExternalMatchId:             "1",
@@ -241,7 +241,7 @@ func TestUpsertScrapeBatch_PersistsLocalLogoURLAndSchedulesRemoteSource(t *testi
 	db := setupBatchTestDB(t)
 	repo := NewRepository(db)
 
-	const remoteURL = "https://img.sofascore.com/api/v1/team/10/image"
+	const remoteURL = "https://imagecache.365scores.com/image/upload/v1/Competitors/10"
 	if err := db.Create(&Team{TeamId: 10, Name: "Old", LogoUrl: remoteURL}).Error; err != nil {
 		t.Fatalf("seed team: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestIsProxiedLogoURL(t *testing.T) {
 		{"/teams/logo/123", true},
 		{"/teams/logo/456.png", true},
 		{"/api/app/v1/teams/logo/789", true},
-		{"https://img.sofascore.com/api/v1/team/10/image", false},
+		{"https://imagecache.365scores.com/image/upload/v1/Competitors/10", false},
 		{"/other/path", false},
 		{"", false},
 	}

@@ -64,8 +64,7 @@ async function retryWithRefresh(
 /**
  * Build a JSON-axios instance that re-uses the same 401 refresh-and-retry
  * behavior as `BaseApiService`. Used by services that don't extend
- * `BaseApiService` (e.g. ScraperLeagueService, which speaks plain JSON
- * rather than protobuf).
+ * `BaseApiService` and speak plain JSON rather than protobuf.
  *
  * The interceptor catches 401 in BOTH the success path (when callers opt
  * in with `validateStatus: () => true`) and the standard error path

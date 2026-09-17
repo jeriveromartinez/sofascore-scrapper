@@ -24,7 +24,7 @@ func TestNewImageHTTPClientUsesImageTimeout(t *testing.T) {
 // the standard library's *http.Transport. The previous uTLS-backed
 // implementation (utls.HelloRandomizedALPN pinned to TLS 1.2 with a
 // randomized fingerprint) was rejected by the Cloudflare/CloudFront
-// CDNs that front img.sofascore.com and images.fotmob.com with HTTP
+// CDNs that front imagecache.365scores.com and images.fotmob.com with
 // 403, which made the LogoScheduler silently skip every team. A
 // default *http.Transport negotiates TLS 1.2/1.3 with the Go runtime's
 // stable fingerprint, which both CDNs accept.
@@ -99,7 +99,7 @@ func TestDownloadTeamLogoWithContextCancelsRequest(t *testing.T) {
 // SetTLSVers with VersionTLS12 on both ends and disabled the TLS 1.3
 // extension) and therefore could not talk to any CDN that had
 // deprecated TLS 1.0/1.1. Cloudflare/CloudFront in front of
-// img.sofascore.com would reject the resulting ClientHello with HTTP
+// the image CDNs would reject the resulting ClientHello with HTTP
 // 403. Using the standard *http.Transport lets the Go runtime pick
 // the best protocol the server offers.
 //
@@ -192,14 +192,14 @@ func TestDownloadTeamLogoUsesBrowserHeaders(t *testing.T) {
 
 // TestDownloadTeamLogoRefererMatchesSourceCDN ensures the Referer
 // header is derived from the source URL's origin. Hard-coding the
-// Referer to www.sofascore.com broke FotMob-sourced teams because the
+// Referer to a single CDN host broke FotMob-sourced teams because the
 // FotMob CDN rejects requests with the wrong (or empty) Referer. The
 // fix derives the Referer from the source URL.
 //
 // This test stands up an httptest server and exercises the live
 // download path against the test server's URL, then asserts on the
 // Referer header the server observed. We can't reach the real
-// FotMob/SofaScore CDNs from a unit test, but the Referer derivation
+// FotMob/365scores CDNs from a unit test, but the Referer derivation
 // is a pure function of neturl.Parse on the source URL — if it's
 // correct for localhost, it's correct for every CDN.
 func TestDownloadTeamLogoRefererMatchesSourceCDN(t *testing.T) {
@@ -240,8 +240,8 @@ func TestRefererForKnownCDNShapes(t *testing.T) {
 		sourceURL   string
 		wantReferer string
 	}{
-		{"fotmob", "https://images.fotmob.com/image_resources/logo/teamlogo_6504.png", "https://images.fotmob.com/"},
-		{"sofascore", "https://img.sofascore.com/api/v1/team/47/image", "https://img.sofascore.com/"},
+		{"fotmob", "https://images.fotmob.com/image_resources/logo/teamlogo/6504.png", "https://images.fotmob.com/"},
+		{"scores365", scores365Badge + "13693", "https://imagecache.365scores.com/"},
 		{"localhost", "http://127.0.0.1:8080/logo.png", "http://127.0.0.1:8080/"},
 	}
 	for _, tc := range cases {
@@ -284,23 +284,31 @@ func TestDownloadTeamLogoMalformedURLSkipsReferer(t *testing.T) {
 	}
 }
 
-// TestTeamLogoSourceURLStripsPrefix asserts that the URL the
-// LogoScheduler falls back to for an unknown IDs strips per-source
-// prefixes before building the SofaScore CDN URL. Source IDs in the
-// shared `teams` table are prefixed to avoid collisions (7B for
-// scores365, 2B for the removed TheSportsDB), but SofaScore's CDN is
-// keyed by the upstream's natural ID. With the fix applied,
-// `TeamLogoSourceURL(7000001234)` returns the same URL as
-// `TeamLogoSourceURL(1234)`.
-func TestTeamLogoSourceURLStripsPrefix(t *testing.T) {
+// scores365Badge is the prefix of every competitor badge URL on the
+// 365scores image CDN, up to the natural competitor ID.
+const scores365Badge = "https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,d_Competitors:default1.png/v1/Competitors/"
+
+// TestTeamLogoSourceURL asserts the fallback URL the LogoScheduler
+// uses when neither the source-provided badge nor the name lookup
+// resolves a team. Source IDs in the shared `teams` table are
+// namespaced to avoid collisions (7B for scores365, 2B for the
+// removed TheSportsDB), but every CDN is keyed by the upstream's
+// natural ID — so the prefix must be stripped, and the namespace also
+// decides which CDN is used at all.
+func TestTeamLogoSourceURL(t *testing.T) {
 	cases := []struct {
 		name   string
 		teamID int64
 		want   string
 	}{
-		{"fotmob_natural_id", 9825, "https://img.sofascore.com/api/v1/team/9825/image"},
-		{"scores365_prefixed_id", 7_000_000_000 + 123, "https://img.sofascore.com/api/v1/team/123/image"},
-		{"sportsdb_legacy_prefixed_id", 2_000_000_000 + 789, "https://img.sofascore.com/api/v1/team/789/image"},
+		{"fotmob_natural_id", 9825, "https://images.fotmob.com/image_resources/logo/teamlogo/9825.png"},
+		{"scores365_prefixed_id", 7_000_000_000 + 123, scores365Badge + "123"},
+		// TheSportsDB is gone, so nothing can serve these badges. An
+		// empty URL means "nothing to download" rather than a request
+		// against an empty host.
+		{"sportsdb_legacy_prefixed_id", 2_000_000_000 + 789, ""},
+		{"zero_id", 0, ""},
+		{"negative_id", -5, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

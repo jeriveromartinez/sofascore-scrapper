@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -48,8 +48,8 @@ func escapeLike(s string) string {
 
 // LogoLookup resolves a team name to a remote logo URL. It is the
 // abstraction any search-by-name logo source satisfies so the
-// downloader can fall back to it when the SofaScore CDN returns 404
-// for a FotMob-derived team_id. No implementation is currently
+// downloader can fall back to it when the ID-derived CDN URL returns
+// 404 for a team_id. No implementation is currently
 // wired in production; the interface is kept for future sources.
 type LogoLookup interface {
 	TeamLogoURL(ctx context.Context, name string) (string, error)
@@ -59,12 +59,18 @@ type Repository struct {
 	db           *gorm.DB
 	scheduleLogo func(*gorm.DB, LogoJob)
 	logoLookup   LogoLookup
+	// idSourceURL builds the last-resort, ID-derived badge URL. It
+	// defaults to TeamLogoSourceURL and is only swapped out by tests,
+	// which would otherwise have to reach the live image CDNs to
+	// exercise the tail of the source chain.
+	idSourceURL func(int64) string
 }
 
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{
 		db:           db,
 		scheduleLogo: func(*gorm.DB, LogoJob) {},
+		idSourceURL:  TeamLogoSourceURL,
 	}
 }
 
@@ -249,16 +255,17 @@ func isProxiedLogoURL(url string) bool {
 
 // DownloadAndPersistLogo is the entry point the LogoScheduler calls
 // for every job. It walks the source chain — primary URL, optional
-// LogoLookup, and the ID-based SofaScore CDN fallback — and
-// updates Team.logo_url to the proxied API path on the first hit.
+// LogoLookup, and the ID-derived CDN fallback — and updates
+// Team.logo_url to the proxied API path on the first hit.
 //
 // The chain order matters:
-//  1. Primary URL (scraper-provided, e.g. from FotMob CDN).
+//  1. Primary URL (scraper-provided, e.g. the competitor badge that
+//     came back on the 365scores feed).
 //  2. LogoLookup by name — only consulted when the primary fails and
 //     a LogoLookup has been installed via WithLogoLookup.
-//  3. SofaScore CDN by team_id — last resort, only works when FotMob
-//     and SofaScore share an ID for the team (true for ~25% of the
-//     teams we currently seed).
+//  3. The ID-derived CDN URL (TeamLogoSourceURL) — last resort, and
+//     only reachable for teams whose ID namespace still has an
+//     upstream that serves badges by ID.
 //
 // The lookup step is rate-limited by the upstream source, so we only
 // consult it after the primary has already failed. This keeps the
@@ -283,7 +290,7 @@ func (r *Repository) DownloadAndPersistLogo(ctx context.Context, db *gorm.DB, jo
 			return
 		}
 	}
-	if r.tryDownloadAndPersist(ctx, db, job.TeamID, TeamLogoSourceURL(job.TeamID)) {
+	if r.tryDownloadAndPersist(ctx, db, job.TeamID, r.idSource(job.TeamID)) {
 		return
 	}
 	log.Printf("events: no logo source succeeded for team %d (name=%q, primary=%q)", job.TeamID, job.TeamName, job.PrimaryURL)
@@ -458,4 +465,15 @@ func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event,
 		rows = rows[:f.Limit]
 	}
 	return rows, hasMore, nil
+}
+
+// idSource resolves the last link of the logo source chain. A
+// Repository built by NewRepository always carries a builder; the
+// nil guard keeps a zero-value Repository (or one restored from an
+// older constructor) from panicking mid-download.
+func (r *Repository) idSource(teamID int64) string {
+	if r.idSourceURL == nil {
+		return TeamLogoSourceURL(teamID)
+	}
+	return r.idSourceURL(teamID)
 }

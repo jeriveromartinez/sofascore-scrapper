@@ -24,7 +24,7 @@ import {
 const PROTO_CONTENT_TYPE = "application/x-protobuf";
 const AUTH_PATH = "/api/web/v1/users";
 
-export const E2E_ADMIN_TOKEN_PATH = join(tmpdir(), "sofascore-e2e-admin-token");
+export const E2E_ADMIN_TOKEN_PATH = join(tmpdir(), "scores365-e2e-admin-token");
 
 let cachedAdminToken = "";
 

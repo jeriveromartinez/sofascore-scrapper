@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 	"gorm.io/gorm"
 )
 
@@ -22,34 +22,19 @@ func ToTeam(source Team) events.Team {
 }
 
 // LogoURLForSource returns the URL the LogoScheduler should download
-// for a team. The source-agnostic Team.LogoURL is empty when the
-// upstream payload does not include the field — FotMob's 2026
-// /api/data/matches payload is one such case. As a fallback, derive
-// the public SofaScore CDN URL for the team ID so the LogoScheduler
-// has something to download.
+// for a team.
 //
-// The CDN URL pattern (https://img.sofascore.com/api/v1/team/<id>/image)
-// is the same one the SofaScore web app and the img.sofascore.com CDN
-// serve; it returns the team badge PNG with no further host allow-list
-// restrictions. Verified by hand against the live CDN on 2026-09-13
-// (returns HTTP 200 with Referer https://img.sofascore.com/).
+// If LogoURL is already set the source wins and it is returned
+// verbatim — the 365scores source fills it in from the competitor's
+// own badge on imagecache.365scores.com, so that path is the common
+// one. The source-agnostic Team.LogoURL is empty when the upstream
+// payload does not include the field (FotMob's /api/data/matches
+// payload is one such case); those fall back to
+// events.TeamLogoSourceURL, which derives the CDN URL from the team
+// ID's source namespace.
 //
-// Earlier we pointed the fallback at images.fotmob.com/image_resources/
-// logo/teamlogo_<id>.png; that URL pattern is rejected by the
-// CloudFront distribution in front of the bucket (403 AccessDenied
-// for every Referer we tried). SofaScore's CDN accepts the standard
-// library TLS fingerprint and only checks Referer, which is what the
-// LogoScheduler already sends.
-//
-// Source IDs in the shared `teams` table are prefixed per source to
-// avoid collisions: 7_000_000_000 for scores365 (see
-// internal/scraper/scores365/source.go::TeamIDPrefix), 2_000_000_000
-// for the now-removed TheSportsDB. SofaScore's CDN is keyed by the
-// upstream's natural ID, so we strip the prefix before building the
-// URL.
-//
-// If LogoURL is already set (e.g. for a future source that ships a
-// full image URL), it is returned verbatim — the source wins.
+// events owns that mapping so the scheduler's fallback chain and this
+// conversion can never disagree about which CDN a team belongs to.
 func LogoURLForSource(sourceID int64, logoURL string) string {
 	if logoURL != "" {
 		return logoURL
@@ -57,14 +42,7 @@ func LogoURLForSource(sourceID int64, logoURL string) string {
 	if sourceID == 0 {
 		return ""
 	}
-	natural := sourceID
-	switch {
-	case natural >= 7_000_000_000:
-		natural -= 7_000_000_000
-	case natural >= 2_000_000_000:
-		natural -= 2_000_000_000
-	}
-	return "https://img.sofascore.com/api/v1/team/" + strconv.FormatInt(natural, 10) + "/image"
+	return events.TeamLogoSourceURL(sourceID)
 }
 
 func ToTournament(source LeagueRef) tournaments.Tournament {
