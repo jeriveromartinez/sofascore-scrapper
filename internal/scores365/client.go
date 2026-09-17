@@ -335,8 +335,18 @@ func (c *Client) commonParams() url.Values {
 // for a single day and let callers iterate. Unlike the legacy
 // /data/games feed this works for arbitrary past and future dates,
 // which is what makes a multi-day scrape possible at all.
+//
+// The day string is derived from date in the client's configured
+// timezone, not in the host's local zone. The scrape loop passes a
+// `time.Now()` whose Location is the host's; on a non-UTC host that
+// would silently shift the request to the wrong calendar day and
+// the per-URL cache would lock in the wrong result.
 func (c *Client) FetchGames(ctx context.Context, date time.Time) (*Feed, error) {
-	day := date.Format("02/01/2006")
+	loc, err := time.LoadLocation(c.timezoneName)
+	if err != nil {
+		return nil, fmt.Errorf("scores365: load timezone %q: %w", c.timezoneName, err)
+	}
+	day := date.In(loc).Format("02/01/2006")
 	params := c.commonParams()
 	params.Set("startDate", day)
 	params.Set("endDate", day)
