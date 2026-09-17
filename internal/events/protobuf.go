@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"time"
 
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 )
 
 func TeamToProto(t *Team) *pb.Team {

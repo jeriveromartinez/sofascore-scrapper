@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 	"google.golang.org/protobuf/proto"
 )
 

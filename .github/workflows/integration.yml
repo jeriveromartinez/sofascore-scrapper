@@ -20,7 +20,7 @@ jobs:
           - 3306:3306
         env:
           MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: sofascore
+          MARIADB_DATABASE: scores365
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=10s
@@ -42,7 +42,7 @@ jobs:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: root
-      DB_NAME: sofascore
+      DB_NAME: scores365
       REDIS_URL: redis://127.0.0.1:6379/0
       TEST_REDIS_URL: redis://127.0.0.1:6379/0
       JWT_SECRET: ci-integration-test-secret-with-enough-length

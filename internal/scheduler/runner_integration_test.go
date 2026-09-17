@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 

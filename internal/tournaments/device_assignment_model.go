@@ -1,7 +1,7 @@
 package tournaments
 
 import (
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
 	"gorm.io/gorm"
 )
 

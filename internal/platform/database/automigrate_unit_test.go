@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/database"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

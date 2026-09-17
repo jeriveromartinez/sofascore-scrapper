@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 )
 
 type Job func(context.Context) error

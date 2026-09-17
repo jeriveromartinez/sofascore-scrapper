@@ -3,7 +3,7 @@ package realtime
 import (
 	"testing"
 
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 )
 
 // testPush implements the FramePayload interface for tests so we can

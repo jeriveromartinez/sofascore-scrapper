@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 )
 
 // ErrDeviceNotConnected is returned by DeliverToLocal when the

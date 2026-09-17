@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

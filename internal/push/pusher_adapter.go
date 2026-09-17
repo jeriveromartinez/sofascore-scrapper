@@ -3,8 +3,8 @@ package push
 import (
 	"context"
 
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 )
 
 // realtimeSubscriberPusher adapts realtime.Subscriber to the

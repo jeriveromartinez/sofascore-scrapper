@@ -37,8 +37,8 @@ COPY . .
 ARG VERSION="v0.0.0-dev"
 ARG COMMIT="unknown"
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
-    -ldflags="-s -w -X github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo.Version=${VERSION} -X github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo.Commit=${COMMIT}" \
-    -o /out/sofascore-scrapper ./cmd/server
+    -ldflags="-s -w -X github.com/jeriveromartinez/scores365-scrapper/internal/buildinfo.Version=${VERSION} -X github.com/jeriveromartinez/scores365-scrapper/internal/buildinfo.Commit=${COMMIT}" \
+    -o /out/scores365-scrapper ./cmd/server
 
 FROM ubuntu:22.04 AS package
 
@@ -57,7 +57,7 @@ COPY deployments/package/prerm.sh ./DEBIAN/prerm
 COPY deployments/package/iptv.service ./lib/systemd/system/iptv.service
 
 # Binaries and dashboard.
-COPY --from=build-go /out/sofascore-scrapper ./opt/iptv/iptv
+COPY --from=build-go /out/scores365-scrapper ./opt/iptv/iptv
 COPY --from=build-vue /app/web/dist ./opt/iptv/web/dist
 
 RUN chmod 0755 ./DEBIAN/postinst ./DEBIAN/prerm \

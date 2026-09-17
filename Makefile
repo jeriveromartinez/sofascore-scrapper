@@ -1,4 +1,4 @@
-GO_MODULE := github.com/jeriveromartinez/sofascore-scrapper
+GO_MODULE := github.com/jeriveromartinez/scores365-scrapper
 PROTO_FILE := proto/api.proto
 GENERATED_DIR := internal/gen
 FLUTTER_PROTO_URL := https://raw.githubusercontent.com/jeriveromartinez/flutter-apptv/main/proto/api.proto

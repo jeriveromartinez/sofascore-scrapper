@@ -1,5 +1,5 @@
 # Binaries
-sofascore-scrapper
+scores365-scrapper
 *.exe
 *.out
 dist/

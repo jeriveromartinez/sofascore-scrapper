@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/reporting"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )

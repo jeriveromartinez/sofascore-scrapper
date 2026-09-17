@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
 

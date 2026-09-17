@@ -129,7 +129,7 @@ The server **auto-seeds** a default admin on first boot if the `users` table is 
 - Email: `admin@local`
 - Password: `admin1234` (change on first login)
 
-To re-trigger seeding (e.g. after deleting the admin), `DELETE FROM users` and restart the server, or run `./sofascore-scrapper migrate` on a fresh DB.
+To re-trigger seeding (e.g. after deleting the admin), `DELETE FROM users` and restart the server, or run `./scores365-scrapper migrate` on a fresh DB.
 
 The legacy `bootstrap-invitation` command still works but only on a database with zero users — useful only right after `DELETE FROM users`.
 
@@ -170,7 +170,7 @@ For ad-hoc calls, the minimum Go snippet is:
 
 ```go
 import (
-    pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+    pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
     "google.golang.org/protobuf/proto"
 )
 

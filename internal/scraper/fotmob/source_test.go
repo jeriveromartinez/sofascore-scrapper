@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
 )
 
 func TestSource_ScheduledEvents_MapsToMatch(t *testing.T) {

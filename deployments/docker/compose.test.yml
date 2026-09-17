@@ -11,7 +11,7 @@ services:
     image: mariadb:10.11
     environment:
       MARIADB_ROOT_PASSWORD: test
-      MARIADB_DATABASE: sofascore
+      MARIADB_DATABASE: scores365
     tmpfs:
       - /var/lib/mysql
     healthcheck:
@@ -51,7 +51,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: test
-      DB_NAME: sofascore
+      DB_NAME: scores365
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: test-secret-key-for-e2e
       APK_STORAGE_PATH: /tmp/apk_storage
@@ -79,7 +79,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: test
-      DB_NAME: sofascore
+      DB_NAME: scores365
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: test-secret-key-for-e2e
       API_ADDR: "0.0.0.0:8080"

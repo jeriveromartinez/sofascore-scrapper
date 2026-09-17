@@ -1,4 +1,4 @@
-module github.com/jeriveromartinez/sofascore-scrapper
+module github.com/jeriveromartinez/scores365-scrapper
 
 go 1.25.0
 

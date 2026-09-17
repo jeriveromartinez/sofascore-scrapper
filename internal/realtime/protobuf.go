@@ -8,7 +8,7 @@ package realtime
 import (
 	"errors"
 
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"google.golang.org/protobuf/proto"
 )
 

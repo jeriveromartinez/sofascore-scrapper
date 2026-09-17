@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
 )
 
 type Source struct {

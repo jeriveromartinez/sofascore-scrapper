@@ -119,7 +119,7 @@ admin when the `users` table is empty. So:
 - After a `DROP DATABASE` + no-restore cycle (deliberate wipe),
   the seeder creates `admin@local` on the next boot. To avoid the
   hardcoded default password instead, run
-  `./sofascore-scrapper bootstrap-invitation` *before* the first
+  `./scores365-scrapper bootstrap-invitation` *before* the first
   normal boot so the first human registers through the invitation
   flow.
 

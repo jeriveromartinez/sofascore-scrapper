@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 )
 
 func AuthMiddleware(ts *TokenService) gin.HandlerFunc {
