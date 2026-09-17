@@ -180,7 +180,14 @@ func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
 		s.logger.WarnContext(ctx, "scraper: no active leagues in catalog")
 	}
 	if s.onScrapeComplete != nil {
-		_ = s.onScrapeComplete(parentCtx)
+		if hookErr := s.onScrapeComplete(parentCtx); hookErr != nil {
+			// The hook typically publishes "scrape completed"
+			// notifications or writes a Redis marker. A failure
+			// here means downstream consumers never learn the
+			// scrape ran — surface it loudly rather than swallowing.
+			s.logger.ErrorContext(parentCtx, "scraper: onScrapeComplete hook failed",
+				slog.String("error", hookErr.Error()))
+		}
 	}
 }
 
@@ -218,7 +225,12 @@ func (s *Service) ScrapeNext7Days(ctx context.Context) {
 		}
 		g.Wait()
 		if s.onScrapeComplete != nil {
-			_ = s.onScrapeComplete(parentCtx)
+			if hookErr := s.onScrapeComplete(parentCtx); hookErr != nil {
+				// See ScrapeToday: log rather than swallow so a
+				// failing Redis publish / notifier is visible.
+				s.logger.ErrorContext(parentCtx, "scraper: onScrapeComplete hook failed",
+					slog.String("error", hookErr.Error()))
+			}
 		}
 	}
 }
