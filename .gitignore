@@ -7,6 +7,11 @@ dist/
 # Environment files
 .env
 .vscode/
+
+# Per-branch git worktrees live alongside the repo, per
+# docs/operations/runbook.md → Working with branches.
+.worktrees/
+
 apk_storage/
 image_storage/
 web/node_modules/

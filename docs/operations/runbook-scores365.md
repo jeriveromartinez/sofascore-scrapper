@@ -1,20 +1,27 @@
 # Runbook — 365scores scraper source
 
-**Audience:** on-call operator. **Audience assumes:** basic Go + docker + SQL knowledge.
+**Audience:** on-call operator. **Assumes:** basic Go + docker + SQL knowledge.
+
+This runbook describes how the 365scores source behaves, how discovery and
+the cron tick actually run, the limits of the upstream feed, and the two
+rollback paths available when 365scores is causing production issues.
 
 ## Prerequisites
 
-This runbook assumes PRs #134 and #135 have been merged into the deployed branch. Without those:
+The behavior described here requires the catalog discovery path
+(`internal/scraper/catalog/discovery.go`), the source wiring
+(`internal/scraper/scores365/source.go`), and the scheduler entrypoints
+in `internal/scheduler/scrape.go` to all be present in the deployed build.
+These landed in PR #134 (sitemap-based discovery — superseded, see
+"Discovery" below), PR #135 (source wiring + dispatch), and PR #136 (this
+runbook). Verify with:
 
-- The dispatcher does not register `scores365`; no events are scraped for any `scraper_leagues` row with `source='scores365'`.
-- The `override_source` column does not exist; the documented rollback step below will silently fail.
-- The `override_source` PATCH whitelist is missing in the catalog handler.
-
-Verify with:
 ```bash
-git log --oneline -1 | grep -E '#13[45]'
+git log --oneline | grep -E '#13[456]'
 ```
-If neither PR appears in the recent commits, do NOT follow this runbook — the feature is not yet deployed.
+
+If the relevant commits are not reachable from the deployed branch, the
+features described here are not yet live and this runbook does not apply.
 
 ## Configuration
 
@@ -24,41 +31,44 @@ See [`README.md`](README.md#environment-variables) for the full table.
 
 | Variable | Default | What it changes |
 |---|---|---|
-| `SCORES365_LANG_ID` | `29` (es-mx) | Language of league, team and status text coming back on the feed. The cancelled/postponed keyword table matches Spanish and English, so changing this to a third language stops those statuses from being recognised. |
-| `SCORES365_TIMEZONE` | `UTC` | IANA zone the feed buckets one day of fixtures into. |
+| `SCORES365_LANG_ID` | `29` (es-mx) | Language of league, team, and status text in the feed. The cancelled/postponed keyword table matches Spanish and English only; changing this to a third language causes those statuses to fall through to `finished`. |
+| `SCORES365_TIMEZONE` | `UTC` | IANA zone the feed uses to bucket one day of fixtures. |
 | `SCORES365_COUNTRY_ID` | `116` | Popularity ordering of the competitions catalog only. It does not filter which competitions come back. |
-| `SCORES365_DISCOVERY_SPORTS` | built-in list | Comma-separated sport slugs the discovery sweep enrols. Empty means every sport except football (FotMob owns football). Unknown slugs are logged and skipped, so a typo silently narrows the sweep — check the `catalog: discovery unknown sport slug` warning after changing it. |
+| `SCORES365_DISCOVERY_SPORTS` | built-in list | Comma-separated sport slugs the discovery sweep enrolls. Empty means every sport except football (FotMob owns football). Unknown slugs are logged and skipped, so a typo silently narrows the sweep — check the `catalog: discovery unknown sport slug` warning after changing it. |
 
 ## Post-deploy verification (smoke test)
 
-DB_PASSWORD must be exported (see `.env.example` for the default in dev).
+`DB_PASSWORD` must be exported (see `.env.example` for the default in dev).
 
-Run after `git pull` on the backend host, BEFORE promoting the change to production:
+Run after `git pull` on the backend host, BEFORE promoting the change to
+production:
 
 1. Full reset:
    ```bash
    docker compose -f deployments/docker/compose.dev.yml down -v
    docker compose -f deployments/docker/compose.dev.yml up -d --build backend
    ```
-2. Wait 60s for boot + first discovery + cron tick.
-3. Verify discovery:
+2. Wait ~60s for boot, first discovery sweep, and the first cron tick.
+3. Verify the catalog:
    ```bash
    docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -e \
      "SELECT source, sport, COUNT(*) FROM scraper_leagues GROUP BY source, sport ORDER BY source, sport;"
    ```
-   Expect: `fotmob` and `scores365` rows; scores365 covers basketball, tennis, hockey, american-football, baseball, volleyball.
-4. Verify events:
+   Expect rows for both `fotmob` and `scores365`. `scores365` covers
+   basketball, tennis, ice-hockey, handball, american-football, baseball,
+   volleyball, rugby (football is intentionally not enrolled for 365scores).
+4. Verify events landed:
    ```bash
    docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -e \
      "SELECT source, sport, COUNT(*) FROM events GROUP BY source, sport ORDER BY source, sport;"
    ```
-5. Hit events API:
+5. Hit the public events endpoint. `compose.dev.yml` maps host `8080` to
+   container `8080` (`"${API_PORT:-8080}:8080"` on line 45):
    ```bash
-   # /api/app/v1/current-events is the registered public endpoint; compose.dev.yml maps host 8080 -> container 8180.
-   curl -i http://localhost:8080/api/app/v1/current-events?limit=10
+   curl -i 'http://localhost:8080/api/app/v1/current-events?limit=10'
    ```
-   Expect HTTP 200, team names populated.
-6. Verify a team logo:
+   Expect HTTP 200 with team names populated.
+6. Verify a team logo URL serves correctly:
    ```bash
    TEAM_ID=$(docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -Nse "SELECT team_id FROM teams ORDER BY team_id DESC LIMIT 1;")
    curl -i "http://localhost:8080/api/app/v1/teams/logo/$TEAM_ID" -o /tmp/logo.png
@@ -67,105 +77,250 @@ Run after `git pull` on the backend host, BEFORE promoting the change to product
 
 ## What 365scores gives us
 
-The 365scores source scrapes `https://webws.365scores.com/data/games`, a public REST endpoint that returns all matches for the current UTC day across 7 sports (the upstream SID table in `internal/scraper/scores365/feed.go`):
+The 365scores source is a thin adapter over
+`https://webws.365scores.com`, calling two endpoints:
 
-| SID | Sport | Sport slug (`events.sport`) | Auto-discovered? | Games/day (approx) |
+- **`/web/games/allscores/`** — every fixture for a given UTC calendar
+  day, across every sport. This is the "today" feed.
+- **`/web/competitions/`** — the full competition catalog, with a
+  `?sports=id1,id2,...` filter. Discovery uses this to enroll leagues
+  into the catalog table.
+
+The upstream sport-id table is mapped to the project's canonical slug
+vocabulary in `internal/scraper/scores365/feed.go`. Two slugs deliberately
+differ from the upstream names so the project's vocabulary stays
+self-consistent:
+
+| SID | Sport | Slug (`events.sport`) | Auto-enrolled? | Notes |
 |---|---|---|---|---|
-| 1 | Football | `football` | No (FotMob is primary) | n/a |
-| 2 | Basketball | `basketball` | Yes | 16 |
-| 3 | Tennis | `tennis` | Yes | 104 |
-| 4 | Ice Hockey | `ice-hockey` | Yes | 4 |
-| 6 | American Football | `american-football` | Yes | 1 (off-season) |
-| 7 | Baseball | `baseball` | Yes | 12 |
-| 8 | Volleyball | `volleyball` | Yes | 24 |
+| 1 | Football | `football` | **No** | FotMob owns football; adding it here would steal ~1.5k FotMob leagues. |
+| 2 | Basketball | `basketball` | Yes | |
+| 3 | Tennis | `tennis` | Yes | |
+| 4 | Ice Hockey | `ice-hockey` | Yes | Upstream calls it `hockey`. |
+| 5 | Handball | `handball` | Yes | |
+| 6 | American Football | `american-football` | Yes | Upstream calls it `a.-football`. |
+| 7 | Baseball | `baseball` | Yes | |
+| 8 | Volleyball | `volleyball` | Yes | |
+| 9 | Rugby | `rugby` | Yes | |
 
-Football SID 1 is intentionally NOT auto-discovered (`sportSlugsForDiscovery` in `internal/scraper/catalog/discovery.go`) because FotMob gives richer data for football and is the primary source there. Football leagues can still be added to `scraper_leagues` manually via `POST /api/web/v1/scraper-leagues`; if their `source` column is `scores365` and `override_source` is NULL, the dispatcher routes them to 365scores.
+Football SID 1 is intentionally not auto-enrolled. Football leagues can
+still be added to `scraper_leagues` manually via
+`POST /api/web/v1/scraper-leagues`; if the row's `source='scores365'` and
+`override_source` is NULL, the dispatcher routes them through 365scores
+regardless.
 
-After merging PR #135 the dispatcher registers two sources: `fotmob` and `scores365`. Any `scraper_leagues` row whose `source` is `scores365` (whether auto-discovered or manually seeded) goes through the 365scores source unless `override_source='fotmob'` is set.
+After PR #135 the dispatcher registers two sources: `fotmob` and
+`scores365`. Any `scraper_leagues` row whose `source` is `scores365` goes
+through the 365scores source unless `override_source='fotmob'` (or
+`'scores365'` to force-pin back if it had been overridden away) is set.
+
+## Discovery
+
+Catalog discovery is implemented in
+`internal/scraper/catalog/discovery.go`:
+
+- **One HTTP call** to `client.FetchCompetitions(ctx, sportIDs)` with
+  `?sports=id1,id2,...`, against `/web/competitions/`. The 45-second
+  timeout (`discoveryTimeout = 45s`) is per call, not per sport — the
+  endpoint returns all sports in a single response.
+- **Default sport list (`DefaultSportSlugs`)** — eight slugs:
+  `basketball, tennis, ice-hockey, handball, american-football, baseball,
+  volleyball, rugby`. Football is intentionally omitted; adding it would
+  pull ~1.5k competitions that the dispatcher would then have to route
+  away from FotMob.
+- **Per-row idempotency** — `EnsureLeague` is keyed on
+  `(source, source_league_id)`, so re-running discovery against the same
+  upstream catalog is a no-op (`upserted`/`unchanged` counters in the log).
+  Unknown slugs in `SCORES365_DISCOVERY_SPORTS` are logged as
+  `catalog: discovery unknown sport slug` and dropped.
+- **Boot-only.** Discovery runs once when the backend starts; there is no
+  scheduled re-discovery. To pick up leagues added upstream since the
+  last release, restart the backend.
+
+> Note: PR #134 originally implemented discovery by fanning out across
+> per-sport `sitemaps/en_<sport>.xml` files. PR #135 superseded that
+> with the single `/web/competitions/` request above. Older versions of
+> this runbook described the sitemap mechanism — ignore those paragraphs.
 
 ## How the cron runs
 
-The cron schedule is defined in `internal/scheduler/scrape.go`:
+The schedule is defined in `internal/scheduler/scrape.go`:
 
 - **Today** — `scrapeTodaySpec = "@every 1m"` — every minute, 24/7.
-- **Next 7 days (lookahead)** — `scrapeFutureSpec = "0 6,18 * * *"` — daily at 06:00 and 18:00 UTC.
+- **Next 7 days** — `scrapeFutureSpec = "0 6,18 * * *"` — daily at
+  06:00 and 18:00 UTC.
 
 Each tick:
 
-1. Acquires the Redis lock `scheduler:lock:scrape:today` (5-minute TTL, prevents duplicate work across multiple backend instances).
-2. Calls `scraper.Service.ScrapeToday`, which groups active leagues by source and dispatches each group in parallel. For 365scores this calls `DayMatches(date)` on the source, which hits `/data/games`.
-3. The HTTP layer caches `/data/games` for 60s per UTC date inside the `scores365.Client`, so concurrent per-league lookups in the same tick don't hit the network twice.
-4. New competitions seen in the payload are auto-created via `EnsureLeague` (catalog repo upsert).
-
-Discovery runs **once at boot only** (30s timeout per sport, 6 sports total). It reads `sitemaps/en_<sport>.xml` and upserts new leagues into `scraper_leagues` with `source='scores365'`. There is no scheduled weekly re-discovery; if you need to re-pick-up leagues added upstream since the last release, restart the backend.
+1. Acquires the Redis distributed lock
+   `scheduler:lock:scrape:today` (5-minute TTL,
+   `lockScrapeToday = "scheduler:lock:scrape:today"`,
+   `ttlScrapeToday = 5m`). The future-tick uses
+   `scheduler:lock:scrape:future` with a 25-minute TTL. Locks prevent
+   duplicate work across backend instances.
+2. Groups the active leagues (those in `scraper_leagues` with
+   `enabled=true` and `COALESCE(override_source, source)` matching the
+   source) and dispatches each group in parallel. For 365scores this
+   calls `DayMatches(date)` on the source, which hits
+   `/web/games/allscores/`.
+3. The 365scores HTTP client caches `/web/games/allscores/` for 60s per
+   UTC date inside `scores365.Client` (`defaultCacheTTL = 60s`), so
+   concurrent per-league lookups in the same tick coalesce.
+4. New competitions seen in the payload are auto-created via
+   `EnsureLeague` (catalog repo upsert) using the **namespaced** league
+   id (`LeagueIDPrefix + raw_comp_id = 6_000_000_000 + compId`), so a
+   discovered catalog row and the day's matches share a primary key with
+   the `tournaments` row they materialize into.
 
 ## What to check when something breaks
 
 ### "No events today"
 
-1. Check `curl -i https://webws.365scores.com/data/games?lang=en` from the backend host. 200 = upstream OK; 503/429 = rate-limited or upstream degraded; 404 = endpoint removed (escalate).
-2. `docker logs docker-backend-1 --since 5m | grep -i scores365`. Look for `fetch error`, `decode error`, or `429`.
-3. If 429: The HTTP client retries with exponential backoff (1s, 2s, 4s, 8s, 16s) before giving up. Short 429 bursts within a 60s window are absorbed by the in-memory cache; longer bursts exhaust the retries and the tick fails. Sustained 429s indicate a real rate-limit; escalate before considering a code change.
-4. If decode error: the upstream changed the wire format. Capture the response with `curl 'https://webws.365scores.com/data/games?lang=en' | head -200`, file a bug, and revert to the last working commit.
+1. From the backend host, sanity-check the upstream:
+   ```bash
+   curl -i 'https://webws.365scores.com/web/games/allscores/?lang=29&timezone=UTC&userCountry=116'
+   ```
+   `200` = upstream OK; `503`/`429` = rate-limited or upstream degraded;
+   `404` = endpoint moved (escalate).
+2. `docker logs docker-backend-1 --since 5m | grep -i 365scores` (or
+   `journalctl -u iptv -n 200`). Look for `fetch error`, `decode error`,
+   `429`.
+3. On `429`: the HTTP client retries with exponential backoff (1s, 2s,
+   4s, 8s, 16s) before giving up. Short 429 bursts within a 60s window
+   are absorbed by the in-memory cache; longer bursts exhaust the retries
+   and the tick fails. Sustained 429s indicate a real rate-limit —
+   escalate before considering a code change.
+4. On decode error: the upstream changed the wire format. Capture the
+   raw payload with the curl above piped through `head -200`, file a
+   bug, and revert to the last working commit.
 
-### "Discovery didn't add new leagues"
+### "Discovery didn't add the new leagues"
 
-1. `docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -e "SELECT source, sport, COUNT(*) FROM scraper_leagues WHERE source='scores365' GROUP BY sport;"`
-2. If a sport has fewer rows than the previous release, the sport sitemap may have been moved or renamed.
-3. `curl -I https://www.365scores.com/sitemaps/en_basketball.xml` — 200 means reachable. (Substitute the sport slug: basketball, tennis, hockey, american-football, baseball, volleyball.)
-4. There is no admin endpoint to re-run discovery; restart the backend container (`docker compose restart backend` for compose; `sudo systemctl restart iptv.service` for `.deb`).
+1. Confirm the catalog state:
+   ```bash
+   docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -e \
+     "SELECT source, sport, COUNT(*) FROM scraper_leagues WHERE source='scores365' GROUP BY sport;"
+   ```
+2. If a sport has fewer rows than the previous release, the upstream
+   catalog has likely changed shape; check the upstream feed directly
+   with the curl above.
+3. There is no admin endpoint to re-run discovery. Restart the backend
+   (`docker compose restart backend` for compose;
+   `sudo systemctl restart iptv.service` for `.deb`).
 
 ### "I want to keep using FotMob for NBA"
 
-The 365scores feed covers NBA via a single bulk day-wide call (comp 47 — NBA), so 365scores is the default. If you want to pin a specific league back to FotMob:
+By default the 365scores source covers NBA (comp 47) via a single bulk
+day call, so it's the default. To pin a specific league back to FotMob
+without affecting every other 365scores league:
 
-1. Find the NBA row id (`source='scores365'`, `source_league_id='47'`):
+1. Find the NBA row id (`source='scores365'`, `source_league_id` is the
+   namespaced id `6000000047`):
    ```bash
    curl -sH "Authorization: Bearer $ADMIN_TOKEN" \
-     "https://your.host/api/web/v1/scraper-leagues?source=scores365"
+     'https://your.host/api/web/v1/scraper-leagues?source=scores365'
    ```
-2. Pin it to FotMob:
+2. Pin to FotMob:
    ```bash
-   curl -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" \
+   curl -X PATCH \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"override_source": "fotmob"}' \
-     "https://your.host/api/web/v1/scraper-leagues/<id>"
+     'https://your.host/api/web/v1/scraper-leagues/<id>'
    ```
 
-The next cron tick will route that league through FotMob instead. Note: FotMob does not have a dedicated NBA feed; it resolves NBA matches by per-team or per-match lookup, which is slower than 365scores' single bulk fetch. Use this only if 365scores' NBA coverage is degraded for a sustained period.
+The next cron tick routes that league through FotMob. FotMob does not
+have a dedicated NBA feed; it resolves NBA matches by per-team or
+per-match lookup, which is slower than 365scores' single bulk fetch. Use
+this override only if 365scores' NBA coverage is degraded for a sustained
+period.
 
 ## Limitations (and the workaround we accepted)
 
-The `/data/games` endpoint only returns the **current UTC day** — past and future days are NOT retrievable through this endpoint. As a result:
+`/web/games/allscores/` (and its legacy alias `/data/games`) returns only
+the **current UTC day** — past and future days are NOT retrievable through
+this endpoint. In practice:
 
-- **Yesterday's matches**: present until ~midnight UTC, then gone.
-- **Tomorrow's matches**: appear at midnight UTC on the day-of (the cron will pick them up as "today" then).
-- **The `ScrapeNext7Days` lookahead cron is effectively a no-op for 365scores** — it requests day N+1 but the upstream returns day N regardless. The cron still runs (every minute via `scrapeTodaySpec` and 06:00/18:00 UTC via `scrapeFutureSpec`), but only today's matches land in `events`.
-- If a date-capable endpoint becomes available, the runbook should be updated; today, document this limitation and rely on the per-minute today cron for full coverage.
+- **Yesterday's matches**: present until roughly midnight UTC, then gone.
+- **Tomorrow's matches**: appear at midnight UTC on the day-of (the
+  per-minute today cron picks them up as "today" then).
+- **`ScrapeNext7Days` is effectively a no-op for 365scores.** It asks
+  the client for day N+1, but the upstream returns day N regardless.
+  The future cron (06:00 / 18:00 UTC) still runs, but only today's
+  matches actually land in `events`. The today cron at 1-minute
+  granularity is what carries coverage.
+- If a date-capable endpoint becomes available, this runbook should be
+  updated; today, document this and rely on the per-minute today cron for
+  full coverage.
 
-If we ever need a fuller history, the fallback plan is to scrape `https://www.365scores.com/<sport>/<country>/<league>/calendar` (HTML parser). That is OUT OF SCOPE for this PR — file an issue if a need arises.
+If a fuller history is ever needed, the fallback is to scrape HTML
+calendars at `https://www.365scores.com/<sport>/<country>/<league>/calendar`
+with an HTML parser. That is OUT OF SCOPE for the source package — file
+an issue if the need arises.
+
+## Source-language caveat
+
+`SCORES365_LANG_ID` defaults to `29` (es-mx). The cancelled/postponed
+keyword classifier (in `internal/scraper/scores365/feed.go`) lists the
+es-mx and English variants of the relevant words. Switching to a third
+language causes cancelled or postponed fixtures to fall through the
+classifier as `finished`, because both `statusGroup=4` and the
+localized status text are needed to distinguish them. Leave the default
+unless you have a concrete reason to change it and have verified that
+the new language's status vocabulary is added to the keyword table.
 
 ## Key endpoints
 
-- **Feed:** `GET https://webws.365scores.com/data/games?lang=en`
-  Headers: `Referer: https://www.365scores.com/`, `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`, `Accept: application/json`
-- **Sitemaps:** `https://www.365scores.com/sitemaps/<lang>_<sport>.xml`
-  Sports covered by auto-discovery: basketball, tennis, hockey, american-football, baseball, volleyball. (Football is omitted from auto-discovery; see "What 365scores gives us" above.)
+- **Feed (today):** `GET https://webws.365scores.com/web/games/allscores/?lang=29&timezone=UTC&userCountry=116`
+  Required headers:
+  ```
+  Referer: https://www.365scores.com/
+  User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
+  Accept: application/json
+  ```
+- **Catalog (discovery):** `GET https://webws.365scores.com/web/competitions/?sports=2,3,4,5,6,7,8,9`
 - **Static assets:** `https://imagecache.365scores.com/image/upload/...`
-  Logo URLs follow `…/WebSite/team/<CID>/<TeamID>.png` (verify against current schema if logos break).
+  Team-logo URLs follow `…/WebSite/team/<CID>/<TeamID>.png`.
 
 ## Rollback procedure
 
-If 365scores is causing production issues:
+If 365scores is causing production issues, two rollback paths exist;
+pick the lighter one first.
 
-1. Set `override_source='fotmob'` for the affected leagues in `scraper_leagues` with the PATCH call from the "I want to keep using FotMob for NBA" procedure above. This routes the affected leagues away from 365scores immediately; the bulk source keeps running for unaffected leagues.
-2. For a code-level rollback, revert PR #135 (`git revert <merge-sha>`).
-3. Restart the backend (`docker compose restart backend` for compose; `sudo systemctl restart iptv.service` for `.deb`).
+**Option 1 — pin specific leagues back to FotMob (data-only, instant).**
 
-Note: reverting PR #135 also reverts the auto-discovery changes from PR #134 if you do it on the same branch. To roll back only the source wiring (the dispatcher registration + the `scores365` source impl) without losing discovery, revert PR #135 first, then leave PR #134 in place. The auto-created `scraper_leagues` rows with `source='scores365'` will continue to exist post-revert but the dispatcher will skip them (no source implements that name after revert), so no events will be ingested from those rows.
+Use `PATCH /api/web/v1/scraper-leagues/<id>` to set
+`override_source='fotmob'` for the affected leagues. This routes only
+those leagues away from 365scores; the bulk source keeps running for
+unaffected leagues. No restart needed — the next cron tick honors the
+new override. See the "I want to keep using FotMob for NBA" procedure
+above.
+
+**Option 2 — code rollback (reverts source wiring).**
+
+1. `git revert <merge-sha-of-#135>` on the deployed branch.
+2. Restart the backend (`docker compose restart backend` for compose;
+   `sudo systemctl restart iptv.service` for `.deb`).
+
+After revert, the dispatcher no longer registers a `scores365` source.
+Auto-created `scraper_leagues` rows with `source='scores365'` continue
+to exist (the unique key prevents any FotMob-side replacement), but
+they are silently skipped — no source matches the name, so no events
+are ingested from them. They are dead weight, not corruption.
+
+If you revert both PR #134 (catalog discovery) **and** PR #135 (source
+wiring) together, you also lose catalog auto-discovery for 365scores.
+Existing catalog rows persist as harmless dead weight either way; no
+cleanup is required to keep the system running.
 
 ## Related docs
 
 - Spec: `docs/superpowers/specs/2026-09-13-scores365-source-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-09-13-scores365-source.md`
-- PRs: #134 (sitemap-based discovery), #135 (source wiring + dispatch), #136 (this runbook)
+- Source code:
+  - `internal/scraper/scores365/` — source adapter, feed adapter, sport-map table
+  - `internal/scraper/catalog/discovery.go` — boot-time discovery sweep
+  - `internal/scheduler/scrape.go` — cron specs, lock keys, TTLs
+  - `internal/scores365/client.go` — HTTP client, `LeagueIDPrefix`, cache TTL
+- PRs: #134 (sitemap-based discovery — superseded), #135 (source wiring +
+  dispatch), #136 (this runbook)
