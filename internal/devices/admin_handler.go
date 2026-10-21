@@ -1,13 +1,14 @@
 package devices
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/pagination"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 )
 
 type AdminHandlerDeps struct {
@@ -30,6 +31,14 @@ func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerD
 }
 
 const defaultPageLimit = 20
+
+// maxAdminDevicesPage caps the offset pagination depth on the legacy
+// /devices handler. With LIMIT 10 a page 5000 request walks 50k rows
+// before returning; capping at 5000 (same threshold the admin events
+// handler uses) keeps deep scans from degrading the DB under accidental
+// UI walks. Callers needing deeper history should use the keyset
+// /devices/page endpoint instead.
+const maxAdminDevicesPage = 500
 
 func (h *AdminHandler) handleGetDevicesPage(c *gin.Context) {
 	cursorRaw := c.Query("cursor")
@@ -103,6 +112,12 @@ func (h *AdminHandler) handleGetDevices(c *gin.Context) {
 			parsedLimit = 100
 		}
 		limit = parsedLimit
+	}
+
+	if page > maxAdminDevicesPage {
+		server.RespondError(c, http.StatusBadRequest,
+			fmt.Sprintf("page must be <= %d; use /devices/page (cursor) for deeper history", maxAdminDevicesPage))
+		return
 	}
 
 	devices, total, err := h.repo.GetDevices(uint(page), uint(limit))

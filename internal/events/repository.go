@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -48,8 +48,8 @@ func escapeLike(s string) string {
 
 // LogoLookup resolves a team name to a remote logo URL. It is the
 // abstraction any search-by-name logo source satisfies so the
-// downloader can fall back to it when the SofaScore CDN returns 404
-// for a FotMob-derived team_id. No implementation is currently
+// downloader can fall back to it when the ID-derived CDN URL returns
+// 404 for a team_id. No implementation is currently
 // wired in production; the interface is kept for future sources.
 type LogoLookup interface {
 	TeamLogoURL(ctx context.Context, name string) (string, error)
@@ -59,12 +59,18 @@ type Repository struct {
 	db           *gorm.DB
 	scheduleLogo func(*gorm.DB, LogoJob)
 	logoLookup   LogoLookup
+	// idSourceURL builds the last-resort, ID-derived badge URL. It
+	// defaults to TeamLogoSourceURL and is only swapped out by tests,
+	// which would otherwise have to reach the live image CDNs to
+	// exercise the tail of the source chain.
+	idSourceURL func(int64) string
 }
 
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{
 		db:           db,
 		scheduleLogo: func(*gorm.DB, LogoJob) {},
+		idSourceURL:  TeamLogoSourceURL,
 	}
 }
 
@@ -249,16 +255,17 @@ func isProxiedLogoURL(url string) bool {
 
 // DownloadAndPersistLogo is the entry point the LogoScheduler calls
 // for every job. It walks the source chain — primary URL, optional
-// LogoLookup, and the ID-based SofaScore CDN fallback — and
-// updates Team.logo_url to the proxied API path on the first hit.
+// LogoLookup, and the ID-derived CDN fallback — and updates
+// Team.logo_url to the proxied API path on the first hit.
 //
 // The chain order matters:
-//  1. Primary URL (scraper-provided, e.g. from FotMob CDN).
+//  1. Primary URL (scraper-provided, e.g. the competitor badge that
+//     came back on the 365scores feed).
 //  2. LogoLookup by name — only consulted when the primary fails and
 //     a LogoLookup has been installed via WithLogoLookup.
-//  3. SofaScore CDN by team_id — last resort, only works when FotMob
-//     and SofaScore share an ID for the team (true for ~25% of the
-//     teams we currently seed).
+//  3. The ID-derived CDN URL (TeamLogoSourceURL) — last resort, and
+//     only reachable for teams whose ID namespace still has an
+//     upstream that serves badges by ID.
 //
 // The lookup step is rate-limited by the upstream source, so we only
 // consult it after the primary has already failed. This keeps the
@@ -283,7 +290,7 @@ func (r *Repository) DownloadAndPersistLogo(ctx context.Context, db *gorm.DB, jo
 			return
 		}
 	}
-	if r.tryDownloadAndPersist(ctx, db, job.TeamID, TeamLogoSourceURL(job.TeamID)) {
+	if r.tryDownloadAndPersist(ctx, db, job.TeamID, r.idSource(job.TeamID)) {
 		return
 	}
 	log.Printf("events: no logo source succeeded for team %d (name=%q, primary=%q)", job.TeamID, job.TeamName, job.PrimaryURL)
@@ -318,6 +325,22 @@ func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, tea
 	return true
 }
 
+// maxTournamentIDs bounds the league-id slice fed to the
+// WHERE league_id IN (?) clause in getCurrentAndUpcoming. The
+// planner switches strategies as the IN-list grows (MySQL gives
+// up on index usage beyond a few hundred entries), so an
+// unbounded device assignment combined with the full global
+// fallback produces an O(N) plan that scans the whole events
+// table.
+//
+// 200 is well above any real device assignment today (~10s of
+// leagues is the largest expected) and keeps the query in the
+// range where the planner uses the league_id index. Devices that
+// genuinely need more fall back to the global list (which is
+// what they would have seen before this cap existed) — the
+// truncation is documented in the log so operators can spot it.
+const maxTournamentIDs = 200
+
 func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]uint, error) {
 	var deviceTournaments []tournaments.DeviceTournament
 	if err := r.db.WithContext(ctx).Find(&deviceTournaments, "device_id = ?", devID).Error; err != nil {
@@ -329,7 +352,7 @@ func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]ui
 		for i, dt := range deviceTournaments {
 			ids[i] = dt.TournamentID
 		}
-		return ids, nil
+		return truncateTournamentIDs(devID, ids), nil
 	}
 
 	var globalConfig []tournaments.GlobalTournamentConfig
@@ -340,7 +363,19 @@ func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]ui
 	for i, gc := range globalConfig {
 		ids[i] = gc.TournamentID
 	}
-	return ids, nil
+	return truncateTournamentIDs(devID, ids), nil
+}
+
+// truncateTournamentIDs caps the returned slice at maxTournamentIDs.
+// The caller (getCurrentAndUpcoming) treats a truncated list as
+// 'best-effort subset of the device's leagues' — the same behaviour
+// the user would get by manually trimming the assignment.
+func truncateTournamentIDs(devID uint, ids []uint) []uint {
+	if len(ids) <= maxTournamentIDs {
+		return ids
+	}
+	log.Printf("events: device %d has %d tournament assignments, truncating to %d (cap to keep the IN-list query plan in index-scan range)", devID, len(ids), maxTournamentIDs)
+	return ids[:maxTournamentIDs]
 }
 
 func (r *Repository) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit int) ([]Event, error) {
@@ -354,6 +389,14 @@ func (r *Repository) GetCurrentAndUpcoming(ctx context.Context, devID uint, limi
 func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []uint, limit int) ([]Event, error) {
 	if limit <= 0 || limit > 6 {
 		limit = 6
+	}
+
+	// ResolveTournamentIDs returns an empty (non-nil) slice for a device
+	// with no device_tournaments and an empty global config. Building
+	// `WHERE league_id IN ()` is a syntax error in MariaDB/MySQL/Postgres,
+	// so short-circuit here instead of producing a 500 to the caller.
+	if len(tournamentIDs) == 0 {
+		return nil, nil
 	}
 
 	var events []Event
@@ -458,4 +501,15 @@ func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event,
 		rows = rows[:f.Limit]
 	}
 	return rows, hasMore, nil
+}
+
+// idSource resolves the last link of the logo source chain. A
+// Repository built by NewRepository always carries a builder; the
+// nil guard keeps a zero-value Repository (or one restored from an
+// older constructor) from panicking mid-download.
+func (r *Repository) idSource(teamID int64) string {
+	if r.idSourceURL == nil {
+		return TeamLogoSourceURL(teamID)
+	}
+	return r.idSourceURL(teamID)
 }

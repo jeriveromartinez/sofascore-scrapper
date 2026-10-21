@@ -51,7 +51,7 @@ func TestMakefileProtoTargetUsesProtoc(t *testing.T) {
 	if !strings.Contains(out, "proto/api.proto") {
 		t.Errorf("make proto dry-run missing proto/api.proto input; got:\n%s", out)
 	}
-	if !strings.Contains(out, "github.com/jeriveromartinez/sofascore-scrapper") {
+	if !strings.Contains(out, "github.com/jeriveromartinez/scores365-scrapper") {
 		t.Errorf("make proto dry-run missing go module path; got:\n%s", out)
 	}
 }

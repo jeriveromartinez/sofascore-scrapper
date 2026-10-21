@@ -6,9 +6,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/seeder"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/database"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/seeder"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

@@ -25,12 +25,6 @@ export const adminRoutes: CustomRouteRecordRaw[] = [
     component: () => import("../pages/About.vue"),
     icon: "bx-info-circle",
   },
-  {
-    name: "ScraperLeagues",
-    path: "scraper-leagues",
-    component: () => import("../pages/admin/scraper-leagues/index.vue"),
-    icon: "bx-list-ol",
-  },
 ];
 
 export default adminRoutes;

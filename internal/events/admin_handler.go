@@ -1,15 +1,16 @@
 package events
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/pagination"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 )
 
 type AdminHandlerDeps struct {
@@ -172,6 +173,15 @@ func parseEventStatus(raw string) (string, bool) {
 	return raw, true
 }
 
+// maxAdminEventsPage caps the offset pagination depth on the
+// legacy /events handler. With LIMIT 10 a page 5000 request walks
+// 50k rows before returning; capping at 5000 (the same threshold
+// the public handler uses for page+limit products) keeps deep
+// scans from degrading the DB under accidental UI walks. Callers
+// needing deeper history should use the keyset /events/page
+// endpoint instead.
+const maxAdminEventsPage = 500
+
 func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 	date := c.Query("date")
 	sport := c.Query("sport")
@@ -199,11 +209,28 @@ func (h *AdminHandler) handleGetEvents(c *gin.Context) {
 		limit = parsedLimit
 	}
 
+	if page > maxAdminEventsPage {
+		server.RespondError(c, http.StatusBadRequest,
+			fmt.Sprintf("page must be <= %d; use /events/page (cursor) for deeper history", maxAdminEventsPage))
+		return
+	}
+
 	query := h.repo.DB().WithContext(c.Request.Context()).Model(&Event{})
 	if date != "" {
-		t, err := time.Parse("2006-01-02", date)
+		// Honour the same tz query the cursor-based /events/page
+		// handler accepts. Without it, an operator in
+		// America/Santo_Domingo asking ?date=2026-09-14 misses
+		// their 20:00–24:00 local games (UTC 2026-09-15) because
+		// the default UTC bucket moves the boundary by 4 hours.
+		tz := c.DefaultQuery("tz", "UTC")
+		loc, locErr := time.LoadLocation(tz)
+		if locErr != nil {
+			server.RespondError(c, http.StatusBadRequest, "invalid tz: must be a valid IANA timezone (e.g. UTC, America/Santo_Domingo)")
+			return
+		}
+		t, err := time.ParseInLocation("2006-01-02", date, loc)
 		if err != nil {
-			server.RespondError(c, http.StatusBadRequest, "date must use YYYY-MM-DD format (UTC)")
+			server.RespondError(c, http.StatusBadRequest, "date must use YYYY-MM-DD format (interpreted in tz)")
 			return
 		}
 		start := t.UnixMilli()

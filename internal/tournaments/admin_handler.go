@@ -2,12 +2,14 @@ package tournaments
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/pagination"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 )
 
 type HandlerDeps struct {
@@ -32,6 +34,31 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup, deps HandlerDeps) {
 }
 
 const defaultPageLimit = 20
+
+// slugRE is the canonical slug pattern the operator-typed slug
+// must match. The same shape is what ToTournament derives from
+// the scraper's league name (lower-case + spaces -> dashes), so
+// an admin-typed slug is round-trippable through the scraper
+// path: a later upsert from the scraper will not silently
+// overwrite the operator's slug because the two forms agree.
+var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,190}$`)
+
+// slugInvalidMsg is the validation error returned for malformed
+// slugs. Kept as a constant so the create + update paths share
+// one user-visible message.
+const slugInvalidMsg = "slug must match ^[a-z0-9][a-z0-9-]{0,190}$ (lowercase letters, digits and dashes; must start with a letter or digit)"
+
+// normalizeSlug lower-cases + trims and validates the slug. Empty
+// is rejected: scraper.ToTournament always derives a non-empty
+// slug from the league name, so an empty admin-typed slug would
+// silently lose its identity on the next scraper tick.
+func normalizeSlug(raw string) (string, bool) {
+	slug := strings.ToLower(strings.TrimSpace(raw))
+	if !slugRE.MatchString(slug) {
+		return "", false
+	}
+	return slug, true
+}
 
 func (h *Handler) handleGetTournamentsPage(c *gin.Context) {
 	cursorRaw := c.Query("cursor")
@@ -116,7 +143,13 @@ func (h *Handler) handleCreateTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.Create(req.Name, req.Slug)
+	slug, ok := normalizeSlug(req.Slug)
+	if !ok {
+		server.RespondError(c, http.StatusBadRequest, slugInvalidMsg)
+		return
+	}
+
+	tournament, err := h.repo.Create(req.Name, slug)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -137,7 +170,13 @@ func (h *Handler) handleUpdateTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.Update(id, req.Name, req.Slug)
+	slug, ok := normalizeSlug(req.Slug)
+	if !ok {
+		server.RespondError(c, http.StatusBadRequest, slugInvalidMsg)
+		return
+	}
+
+	tournament, err := h.repo.Update(id, req.Name, slug)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

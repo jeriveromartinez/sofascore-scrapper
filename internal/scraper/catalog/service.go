@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
 )
 
 type SourceSearcher interface {
@@ -94,9 +94,17 @@ func (s *Service) SearchLeagues(ctx context.Context, query string) ([]scraper.Le
 	return s.search.SearchLeagues(ctx, q)
 }
 
+// knownSources are the scraper sources a catalog row may name.
+// FotMob owns football; 365scores owns every other sport (and can
+// own football too when an operator sets override_source).
+var knownSources = map[string]bool{
+	"fotmob":    true,
+	"scores365": true,
+}
+
 func validate(sl *ScraperLeague) error {
-	if sl.Source != "fotmob" {
-		return errors.New("catalog: source must be 'fotmob' in v1")
+	if !knownSources[sl.Source] {
+		return errors.New("catalog: source must be one of 'fotmob', 'scores365'")
 	}
 	if sl.SourceLeagueId == "" {
 		return errors.New("catalog: source_league_id required")

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper/catalog"
 	"gorm.io/gorm"
 )
 

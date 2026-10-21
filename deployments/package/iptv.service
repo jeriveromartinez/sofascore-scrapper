@@ -1,5 +1,5 @@
 [Unit]
-Description=SofaScore scraper and IPTV panel
+Description=Sports results scraper and IPTV panel
 After=network-online.target mariadb.service redis-server.service
 Wants=network-online.target
 Requires=mariadb.service redis-server.service

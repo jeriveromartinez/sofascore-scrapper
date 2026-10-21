@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
 	goredis "github.com/redis/go-redis/v9"
 )
 

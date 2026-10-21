@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 )
 
 type AuthHandler struct {
@@ -54,21 +54,21 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 		server.RespondError(c, http.StatusServiceUnavailable, "invitation service unavailable")
 		return
 	}
-	user, err := h.userRepo.Create(req.Email, req.Password)
+	user, promoted, err := h.userRepo.CreateAndMaybeBootstrapAdmin(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		server.RespondError(c, http.StatusConflict, "could not create user")
 		return
 	}
-	// The very first account bootstraps as admin so a fresh install has an
-	// operator who can invite and manage others; subsequent users default to
-	// the least-privileged role. The bootstrap invitation (see
-	// runBootstrapInvitation) only issues while the users table is empty, so
-	// this promotes exactly one account.
-	if count, countErr := h.userRepo.Count(); countErr == nil && count == 1 {
-		if promoted, roleErr := h.userRepo.SetRole(user.ID, users.RoleAdmin); roleErr == nil {
-			user = promoted
-		}
-	}
+	// The very first account bootstraps as admin so a fresh install
+	// has an operator who can invite and manage others; subsequent
+	// users default to the least-privileged role. The promotion is
+	// done atomically inside the create transaction (see
+	// users.Repository.CreateAndMaybeBootstrapAdmin), so two
+	// concurrent registrations on a fresh install cannot both
+	// observe "count == 1" and both promote themselves, and a slow
+	// DB cannot land the operator with role='user'. The returned
+	// 'promoted' flag is informational.
+	_ = promoted
 	response, err := h.buildAuthResponse(user.ID, user.Email)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "token generation failed")
@@ -115,8 +115,12 @@ func (h *AuthHandler) handleLogin(c *gin.Context) {
 	// lookup. Password normalization is handled inside bcrypt and
 	// the validator (which already trims).
 	email := strings.TrimSpace(req.Email)
-	user, err := h.userRepo.GetByEmail(email)
+	user, err := h.userRepo.GetByEmail(c.Request.Context(), email)
 	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, "lookup failed")
+		return
+	}
+	if user == nil {
 		server.RespondError(c, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -130,7 +134,7 @@ func (h *AuthHandler) handleLogin(c *gin.Context) {
 		return
 	}
 	if upgradedHash != "" {
-		if updateErr := h.userRepo.UpdatePassword(user.ID, upgradedHash); updateErr != nil {
+		if updateErr := h.userRepo.UpdatePassword(c.Request.Context(), user.ID, upgradedHash); updateErr != nil {
 			slog.Default().Warn("auth: failed to upgrade password hash on login",
 				slog.Uint64("user_id", uint64(user.ID)),
 				slog.String("err", updateErr.Error()),
@@ -164,8 +168,12 @@ func (h *AuthHandler) handleRefresh(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userRepo.GetByID(userID)
+	user, err := h.userRepo.GetByID(c.Request.Context(), userID)
 	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, "lookup failed")
+		return
+	}
+	if user == nil {
 		server.RespondError(c, http.StatusUnauthorized, "user not found")
 		return
 	}

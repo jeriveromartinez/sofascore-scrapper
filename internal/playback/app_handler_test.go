@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"google.golang.org/protobuf/proto"
 )
 

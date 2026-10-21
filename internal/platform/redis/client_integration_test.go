@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
 )
 
 func TestNewPingIntegration(t *testing.T) {

@@ -39,19 +39,29 @@ func withImageStorageDir(t *testing.T) string {
 }
 
 // newTestRepoWithLookup returns a Repository wired with a stub
-// LogoLookup and an in-memory tracking db. It avoids real MariaDB by
-// using nil db; DownloadAndPersistLogo will only call into the
-// scheduler logic if a download succeeds, which then updates LogoUrl
-// via db.WithContext. The db is required for the signature; tests
-// that don't expect a successful download can pass nil.
+// LogoLookup and no reachable ID source, so the tail of the chain
+// fails without touching a live CDN. Use it for tests that only care
+// about the primary and lookup steps.
+//
+// The db is nil: DownloadAndPersistLogo only writes LogoUrl when a
+// download succeeds, and it skips that update when db is nil, so
+// tests exercise the source chain without a real MariaDB.
 func newTestRepoWithLookup(lookup LogoLookup) *Repository {
+	return newTestRepoWithSources(lookup, func(int64) string { return "" })
+}
+
+// newTestRepoWithSources is newTestRepoWithLookup with an explicit
+// ID-source builder, for tests that need the chain's last link to
+// resolve to a server they control.
+func newTestRepoWithSources(lookup LogoLookup, idSource func(int64) string) *Repository {
 	r := NewRepository(nil).WithLogoLookup(lookup)
+	r.idSourceURL = idSource
 	return r
 }
 
 // primaryFailingServer always returns 404 so the chain falls through
-// to the LogoLookup and then the SofaScore CDN. The test asserts that
-// the second source is consulted, then the third.
+// to the LogoLookup and then the ID-derived CDN URL. The test asserts
+// that the second source is consulted, then the third.
 func primaryFailingServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -71,8 +81,8 @@ func okServer(body []byte) *httptest.Server {
 // TestDownloadAndPersistLogo_FallsBackToLookup verifies that when
 // the primary URL 404s, the lookup-driven source is consulted and
 // the file lands on disk. This is the core multi-source behaviour
-// that resolves teams like Juventus (FotMob ID 9885) that have no
-// asset in the SofaScore CDN.
+// that resolves teams like Juventus (FotMob ID 9885) whose primary
+// badge URL is missing or stale.
 func TestDownloadAndPersistLogo_FallsBackToLookup(t *testing.T) {
 	dir := withImageStorageDir(t)
 
@@ -113,38 +123,33 @@ func TestDownloadAndPersistLogo_FallsBackToLookup(t *testing.T) {
 	_ = dir
 }
 
-// TestDownloadAndPersistLogo_FallsBackToSofaScoreWhenLookupEmpty
+// TestDownloadAndPersistLogo_FallsBackToIDSourceWhenLookupEmpty
 // covers the chain when the LogoLookup returns no match — the
-// ID-based SofaScore CDN URL must be tried last.
-func TestDownloadAndPersistLogo_FallsBackToSofaScoreWhenLookupEmpty(t *testing.T) {
+// ID-derived CDN URL must be tried last.
+func TestDownloadAndPersistLogo_FallsBackToIDSourceWhenLookupEmpty(t *testing.T) {
 	withImageStorageDir(t)
 
 	primary := primaryFailingServer(t)
 	defer primary.Close()
 
-	// Intercept the SofaScore CDN URL by overriding TeamLogoSourceURL
-	// at test time via a redirect server. We do this by patching
-	// the call: we cannot monkey-patch a package-level function, so
-	// instead we point the lookup at the same server and verify the
-	// SofaScore URL was attempted by tracking the request path.
-	sofascore := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/api/v1/team/") {
-			http.Error(w, "wrong path", http.StatusBadRequest)
-			return
-		}
-		_, _ = w.Write([]byte("sofascore-bytes"))
+	// The real ID source is one of the live image CDNs, so the test
+	// injects its own builder and asserts on the path it received.
+	// That keeps the assertion on the chain's ordering rather than
+	// on whichever badge a CDN happens to hold today.
+	var idPath string
+	idServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idPath = r.URL.Path
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("id-source-bytes"))
 	}))
-	defer sofascore.Close()
+	defer idServer.Close()
 
-	// Build a Repository whose source-URL generator routes to the
-	// test server. We achieve that by replacing TeamLogoSourceURL
-	// via injection: the repository's logoURLsForJob calls the
-	// package-level helper, so we cannot redirect from inside the
-	// test. Instead, verify the behaviour through the lookup
-	// returning the sofascore test URL.
-	lookup := &stubLogoLookup{url: sofascore.URL + "/api/v1/team/9885/image"}
+	// Empty URL, no error: the lookup ran and found nothing.
+	lookup := &stubLogoLookup{}
 
-	repo := newTestRepoWithLookup(lookup)
+	repo := newTestRepoWithSources(lookup, func(teamID int64) string {
+		return fmt.Sprintf("%s/badge/%d.png", idServer.URL, teamID)
+	})
 	repo.DownloadAndPersistLogo(context.Background(), nil, LogoJob{
 		TeamID:     9885,
 		TeamName:   "Juventus",
@@ -154,13 +159,16 @@ func TestDownloadAndPersistLogo_FallsBackToSofaScoreWhenLookupEmpty(t *testing.T
 	if lookup.calls.Load() != 1 {
 		t.Errorf("expected lookup to be consulted once, got %d", lookup.calls.Load())
 	}
+	if idPath != "/badge/9885.png" {
+		t.Errorf("ID source path = %q, want /badge/9885.png", idPath)
+	}
 
 	data, err := os.ReadFile(TeamLogoLocalPath(9885))
 	if err != nil {
 		t.Fatalf("expected logo file: %v", err)
 	}
-	if string(data) != "sofascore-bytes" {
-		t.Errorf("logo content = %q, want sofascore-bytes", data)
+	if string(data) != "id-source-bytes" {
+		t.Errorf("logo content = %q, want id-source-bytes", data)
 	}
 }
 
@@ -200,11 +208,20 @@ func TestDownloadAndPersistLogo_AllSourcesFail(t *testing.T) {
 	primary := primaryFailingServer(t)
 	defer primary.Close()
 
+	// The ID source is injected so the chain's last link 404s
+	// locally. Pointing it at the real CDN would make the test
+	// depend on whether that CDN happens to hold a badge for this
+	// ID — team 9885 is Juventus on FotMob, so it does.
+	idServer := primaryFailingServer(t)
+	defer idServer.Close()
+
 	lookup := &stubLogoLookup{
-		err: fmt.Errorf("sportsdb: no match"),
+		err: fmt.Errorf("lookup: no match"),
 	}
 
-	repo := newTestRepoWithLookup(lookup)
+	repo := newTestRepoWithSources(lookup, func(teamID int64) string {
+		return fmt.Sprintf("%s/badge/%d.png", idServer.URL, teamID)
+	})
 	repo.DownloadAndPersistLogo(context.Background(), nil, LogoJob{
 		TeamID:     9885,
 		TeamName:   "Nonexistent",
@@ -221,9 +238,9 @@ func TestDownloadAndPersistLogo_AllSourcesFail(t *testing.T) {
 
 // TestDownloadAndPersistLogo_EmptyLookupNameSkipped covers the case
 // where the job arrives without a TeamName (e.g. older callers that
-// only knew teamID). The chain must skip the lookup step and try
-// SofaScore CDN. Without this guard the lookup would be called with
-// an empty name and waste a request.
+// only knew teamID). The chain must skip the lookup step and go
+// straight to the ID-derived CDN URL. Without this guard the lookup
+// would be called with an empty name and waste a request.
 func TestDownloadAndPersistLogo_EmptyLookupNameSkipped(t *testing.T) {
 	withImageStorageDir(t)
 
@@ -234,14 +251,11 @@ func TestDownloadAndPersistLogo_EmptyLookupNameSkipped(t *testing.T) {
 		url: "https://should-never-be-used.example/logo.png",
 	}
 
-	// SofaScore CDN URL is constructed via the package helper which
-	// we cannot redirect. To verify the lookup was NOT called, we
-	// rely on the call counter: 0 means empty TeamName was honoured.
+	// The default test repo has no reachable ID source, so the
+	// whole chain fails; the only thing under test is the call
+	// counter — 0 means the empty TeamName was honoured.
 	repo := newTestRepoWithLookup(lookup)
 
-	// We don't care about the download outcome here — only that the
-	// lookup counter is zero. The download will fail (primary 404,
-	// SofaScore unreachable from test), but no panic should occur.
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("DownloadAndPersistLogo panicked: %v", r)
@@ -334,23 +348,22 @@ func TestDownloadAndPersistLogo_LookupErrorTreatedAsChainFailure(t *testing.T) {
 
 // TestDownloadAndPersistLogo_LookupErrorFallsThroughToIDSource
 // documents that even when the lookup returns an error, the chain
-// falls through to the ID-based SofaScore CDN URL. The lookup error
-// must not silently drop the ID-based fallback.
+// falls through to the ID-derived CDN URL. The lookup error must not
+// silently drop the ID-based fallback.
 func TestDownloadAndPersistLogo_LookupErrorFallsThroughToIDSource(t *testing.T) {
 	withImageStorageDir(t)
 
 	primary := primaryFailingServer(t)
 	defer primary.Close()
 
-	// SofaScore CDN URL is hard-coded to img.sofascore.com so we
-	// cannot redirect it in tests. The lookup failing makes the
-	// chain skip the lookup URL entirely; then the chain reaches
-	// the ID-based URL — which 404s in tests because we cannot
-	// reach img.sofascore.com. The point of this test is just that
-	// the lookup error was logged and the chain continued.
+	idServer := okServer([]byte("id-source-bytes"))
+	defer idServer.Close()
+
 	lookup := &stubLogoLookup{err: fmt.Errorf("boom")}
 
-	repo := newTestRepoWithLookup(lookup)
+	repo := newTestRepoWithSources(lookup, func(teamID int64) string {
+		return fmt.Sprintf("%s/badge/%d.png", idServer.URL, teamID)
+	})
 	repo.DownloadAndPersistLogo(context.Background(), nil, LogoJob{
 		TeamID:     42,
 		TeamName:   "X",
@@ -360,12 +373,19 @@ func TestDownloadAndPersistLogo_LookupErrorFallsThroughToIDSource(t *testing.T) 
 	if lookup.calls.Load() != 1 {
 		t.Errorf("lookup calls = %d, want 1 (lookup must be consulted after primary fails)", lookup.calls.Load())
 	}
+	data, err := os.ReadFile(TeamLogoLocalPath(42))
+	if err != nil {
+		t.Fatalf("expected the ID source to be tried after the lookup error: %v", err)
+	}
+	if string(data) != "id-source-bytes" {
+		t.Errorf("logo content = %q, want id-source-bytes", data)
+	}
 }
 
 // TestDownloadAndPersistLogo_NilLookupSkipsLookupStep documents that
 // the chain gracefully handles a Repository that has not been
 // configured with a LogoLookup. Behaviour must match the pre-fallback
-// version: primary → SofaScore CDN only.
+// version: primary → ID-derived CDN only.
 func TestDownloadAndPersistLogo_NilLookupSkipsLookupStep(t *testing.T) {
 	withImageStorageDir(t)
 

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
 )
 
 // TestService_ScrapeToday_HookReceivesLiveContext is the regression

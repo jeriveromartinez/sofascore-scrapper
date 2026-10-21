@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
 )
 
 // timersRunner is the per-timer scheduled-push dispatcher. Each

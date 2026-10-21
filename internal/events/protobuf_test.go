@@ -14,8 +14,8 @@ func TestTeamToProtoAlwaysEmitsCanonicalLocalLogoURL(t *testing.T) {
 			wantLogoURL: "/api/app/v1/teams/logo/123",
 		},
 		{
-			name:        "external SofaScore URL is overridden by canonical local path",
-			storedLogo:  "https://img.sofascore.com/api/v1/team/123/image",
+			name:        "external CDN URL is overridden by canonical local path",
+			storedLogo:  "https://imagecache.365scores.com/image/upload/v1/Competitors/123",
 			wantLogoURL: "/api/app/v1/teams/logo/123",
 		},
 		{

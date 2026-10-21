@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/reporting"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/reporting"
 	"github.com/redis/go-redis/v9"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
@@ -40,9 +40,14 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 
 	c := cron.New()
 
+	// Thread the parent ctx through every cron callback so SIGTERM
+	// tears down jobs promptly instead of waiting for the lease TTL.
+	// robfig/cron.Stop blocks until the running job returns, and the
+	// previous context.Background() meant a job that happened to be
+	// in-flight could stall shutdown by its full lock TTL.
 	if agg != nil {
 		_, err := c.AddFunc("1 0 * * *", func() {
-			_ = runner.RunLocked(context.Background(), lockStatsDaily, ttlStatsDaily, func(jobCtx context.Context) error {
+			_ = runner.RunLocked(ctx, lockStatsDaily, ttlStatsDaily, func(jobCtx context.Context) error {
 				if err := agg.GenerateDaily(); err != nil {
 					logger.Error("failed to generate daily event stats", slog.String("error", err.Error()))
 					return err
@@ -55,7 +60,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 		}
 
 		_, err = c.AddFunc("10 0 1 * *", func() {
-			_ = runner.RunLocked(context.Background(), lockStatsMonthly, ttlStatsMonthly, func(jobCtx context.Context) error {
+			_ = runner.RunLocked(ctx, lockStatsMonthly, ttlStatsMonthly, func(jobCtx context.Context) error {
 				if err := agg.GenerateMonthly(); err != nil {
 					logger.Error("failed to generate monthly event stats", slog.String("error", err.Error()))
 					return err
@@ -70,7 +75,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 
 	if cleanupJob != nil && redisClient != nil {
 		_, err := c.AddFunc("*/15 * * * *", func() {
-			_ = runner.RunLocked(context.Background(), lockUploadsCleanup, ttlUploadsCleanup, func(jobCtx context.Context) error {
+			_ = runner.RunLocked(ctx, lockUploadsCleanup, ttlUploadsCleanup, func(jobCtx context.Context) error {
 				return cleanupJob.Run(jobCtx, redisClient)
 			})
 		})
@@ -80,7 +85,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 	}
 
 	if counter != nil {
-		_, err := c.AddFunc("*/15 * * * *", apkDownloadCounterJob(counter, logger))
+		_, err := c.AddFunc("*/15 * * * *", apkDownloadCounterJob(counter, logger, ctx))
 		if err != nil {
 			logger.Error("failed to schedule apk downloads flush cron job", slog.String("error", err.Error()))
 		}
@@ -96,14 +101,13 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 	}()
 }
 
-func apkDownloadCounterJob(counter apk.DownloadCounter, logger *slog.Logger) func() {
+func apkDownloadCounterJob(counter apk.DownloadCounter, logger *slog.Logger, ctx context.Context) func() {
 	return func() {
-		jobCtx := context.Background()
-		if err := counter.Flush(jobCtx); err != nil {
+		if err := counter.Flush(ctx); err != nil {
 			logger.Error("failed to flush apk download counters", slog.String("error", err.Error()))
 			return
 		}
-		if err := counter.ReprocessOrphans(jobCtx); err != nil {
+		if err := counter.ReprocessOrphans(ctx); err != nil {
 			logger.Error("failed to reprocess orphan apk download batches", slog.String("error", err.Error()))
 		}
 	}

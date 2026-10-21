@@ -8,13 +8,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/app"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/seeder"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/app"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/database"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/seeder"
 	"gorm.io/gorm"
 )
 

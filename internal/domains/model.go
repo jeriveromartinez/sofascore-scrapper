@@ -1,7 +1,7 @@
 package domains
 
 import (
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
 )
 

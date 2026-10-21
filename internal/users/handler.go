@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/pagination"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 	"gorm.io/gorm"
 )
 
@@ -90,7 +90,7 @@ func (h *Handler) handleGetUsersPage(c *gin.Context) {
 }
 
 func (h *Handler) handleGetUsers(c *gin.Context) {
-	users, err := h.repo.GetAll()
+	users, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -105,8 +105,12 @@ func (h *Handler) handleGetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.repo.GetByID(id)
+	user, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
+		server.RespondError(c, http.StatusNotFound, "user not found")
+		return
+	}
+	if user == nil {
 		server.RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -125,7 +129,7 @@ func (h *Handler) handleCreate(c *gin.Context) {
 		return
 	}
 
-	user, err := h.repo.Create(req.Email, req.Password)
+	user, err := h.repo.Create(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		server.RespondError(c, http.StatusConflict, "could not create user")
 		return
@@ -156,13 +160,17 @@ func (h *Handler) handleUpdate(c *gin.Context) {
 		}
 	}
 
-	user, err := h.repo.Update(id, req.Email, req.Password)
+	user, err := h.repo.Update(c.Request.Context(), id, req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
 			return
 		}
 		server.RespondError(c, http.StatusConflict, "could not update user")
+		return
+	}
+	if user == nil {
+		server.RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 
@@ -182,36 +190,18 @@ func (h *Handler) handleSetRole(c *gin.Context) {
 		return
 	}
 
-	// Guard against demoting the last administrator, which would lock everyone
-	// out of the admin API.
-	if req.Role == RoleUser {
-		target, err := h.repo.GetByID(id)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				server.RespondError(c, http.StatusNotFound, "user not found")
-				return
-			}
-			server.RespondError(c, http.StatusInternalServerError, "could not load user")
-			return
-		}
-		if target.IsAdmin() {
-			admins, err := h.repo.CountAdmins()
-			if err != nil {
-				server.RespondError(c, http.StatusInternalServerError, "could not verify administrators")
-				return
-			}
-			if admins <= 1 {
-				server.RespondError(c, http.StatusConflict, "cannot demote the last administrator")
-				return
-			}
-		}
-	}
-
-	user, err := h.repo.SetRole(id, req.Role)
+	// The repository's SetRole performs the last-admin guard inside
+	// a transaction with a re-count, so two concurrent demotions
+	// cannot both pass the "more than one admin" check and lock
+	// the operator out of the admin API. The handler just maps the
+	// sentinel to HTTP 409.
+	user, err := h.repo.SetRole(c.Request.Context(), id, req.Role)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidRole):
 			server.RespondError(c, http.StatusBadRequest, "role must be 'user' or 'admin'")
+		case errors.Is(err, ErrLastAdmin):
+			server.RespondError(c, http.StatusConflict, "cannot demote the last administrator")
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			server.RespondError(c, http.StatusNotFound, "user not found")
 		default:
@@ -230,7 +220,7 @@ func (h *Handler) handleDelete(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Delete(id); err != nil {
+	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
 			return
@@ -247,14 +237,34 @@ func (h *Handler) handleDelete(c *gin.Context) {
 // (just a bool). The response is the updated User so the dashboard
 // can refresh in one round trip.
 //
-// Authorization is enforced by the auth middleware that wraps
-// the route (adminThenRl in routes.go) plus the ownership check
-// below: a non-admin caller may only toggle their own account.
+// Authorization: today the route is mounted behind adminThenRl
+// (admin or self) middleware in routes.go, so only an admin or the
+// user themselves can reach this endpoint. The handler additionally
+// re-checks ownership here so that swapping the middleware for a
+// looser one in the future cannot escalate to flipping every other
+// user's notification flag.
 func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 	id, err := server.ParseID(c.Param("id"))
 	if err != nil {
 		server.RespondError(c, http.StatusBadRequest, "invalid id")
 		return
+	}
+
+	callerID, ok := callerUserID(c)
+	if !ok {
+		server.RespondError(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if callerID != id {
+		caller, err := h.repo.GetByID(c.Request.Context(), callerID)
+		if err != nil {
+			server.RespondError(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if caller == nil || !caller.IsAdmin() {
+			server.RespondError(c, http.StatusForbidden, "cannot modify another user's notification settings")
+			return
+		}
 	}
 
 	var req pb.SetNotificationsEnabledRequest
@@ -263,7 +273,7 @@ func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 		return
 	}
 
-	user, err := h.repo.SetNotificationsEnabled(id, req.Enabled)
+	user, err := h.repo.SetNotificationsEnabled(c.Request.Context(), id, req.Enabled)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
@@ -272,6 +282,23 @@ func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if user == nil {
+		server.RespondError(c, http.StatusNotFound, "user not found")
+		return
+	}
 
 	server.RespondProto(c, http.StatusOK, UserToProto(*user))
+}
+
+// callerUserID returns the authenticated user's id from the gin
+// context. It mirrors auth.GetUserID without importing the auth
+// package (which would create an import cycle: auth already imports
+// users). The key value MUST stay in sync with auth.tokens.userIDKey.
+func callerUserID(c *gin.Context) (uint, bool) {
+	v, exists := c.Get("userID")
+	if !exists {
+		return 0, false
+	}
+	id, ok := v.(uint)
+	return id, ok
 }

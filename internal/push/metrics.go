@@ -3,7 +3,7 @@ package push
 import (
 	"log/slog"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

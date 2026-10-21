@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scores365"
 )
 
 var (
@@ -79,6 +81,40 @@ type Config struct {
 	// editorial day (matches are published with the venue's local
 	// evening as "today's slate").
 	FotMobTimezone string
+	// Scores365 configures the 365scores web API client, the source
+	// for every sport FotMob does not cover.
+	Scores365 Scores365
+}
+
+// Scores365 holds the query parameters webws.365scores.com expects on
+// every request. They are exposed as environment variables because a
+// deployment may want a different locale or day boundary than the
+// es-mx defaults the site itself serves.
+type Scores365 struct {
+	// LangID selects the language of the localized strings in the
+	// payload (competition names, competitor names, status labels).
+	// 29 is es-mx, matching https://www.365scores.com/es-mx.
+	//
+	// Note: the fixture status classifier keys off the localized
+	// status text, and it only carries keyword tables for Spanish
+	// and English (see internal/scraper/scores365/feed.go). Pointing
+	// this at a third language degrades cancelled/postponed fixtures
+	// to "finished".
+	LangID int
+	// Timezone is the IANA zone the API uses to bucket fixtures into
+	// calendar days and to stamp each game's startTime offset.
+	// Defaults to UTC so the scrape loop's day boundary matches the
+	// UTC dates it iterates.
+	Timezone string
+	// CountryID scopes the popularity ordering of the payload. It
+	// does not filter the result set. 116 is what the es-mx site
+	// sends.
+	CountryID int
+	// DiscoverySports overrides the sport-slug list the boot-time
+	// catalog discovery sweep enrols. Empty means "use the catalog
+	// package's default list", which excludes football because
+	// FotMob remains the primary football source.
+	DiscoverySports []string
 }
 
 func Load() (Config, error) {
@@ -103,12 +139,18 @@ func Load() (Config, error) {
 		PushTimerBatchLimit:    getInt("PUSH_TIMER_BATCH_LIMIT", 100),
 		SkipMigrate:            getBool("SKIP_MIGRATE", false),
 		FotMobTimezone:         getEnv("FOTMOB_TIMEZONE", "Europe/Paris"),
+		Scores365: Scores365{
+			LangID:          getInt("SCORES365_LANG_ID", scores365.DefaultLangID),
+			Timezone:        getEnv("SCORES365_TIMEZONE", scores365.DefaultTimezoneName),
+			CountryID:       getInt("SCORES365_COUNTRY_ID", scores365.DefaultUserCountryID),
+			DiscoverySports: getCSV("SCORES365_DISCOVERY_SPORTS"),
+		},
 		Database: Database{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "3306"),
 			User:            getEnv("DB_USER", "root"),
 			Password:        getEnv("DB_PASSWORD", ""),
-			Name:            getEnv("DB_NAME", "sofascore"),
+			Name:            getEnv("DB_NAME", "scores365"),
 			MaxOpenConns:    getInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getInt("DB_MAX_IDLE_CONNS", 10),
 			ConnMaxLifetime: getDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),

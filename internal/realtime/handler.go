@@ -65,7 +65,7 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 		cfg.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	}
 	if cfg.AckHandler == nil {
-		cfg.AckHandler = func(string) {}
+		cfg.AckHandler = func(context.Context, string) {}
 	}
 
 	return func(c *gin.Context) {
@@ -196,6 +196,14 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 				conn.Close(1011, "ping write error")
 				return
 			}
+			// The ping has been written. Bump the read deadline so the
+			// client has a fresh pongWait window to reply with a WsPong
+			// frame. Without this bump, an idle socket whose only
+			// traffic is server-initiated pings would close when the
+			// original pongWait elapses, even though the connection
+			// is healthy — the server's read deadline ignores that the
+			// *server* is the one driving the traffic.
+			_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
 		}
 	}
 }
@@ -205,7 +213,7 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 // ping/pong/keepalive which gorilla handles via the control
 // channel). Any read error closes the connection.
 func readLoop(conn *Connection, logger *slog.Logger) {
-	// defer conn.Close(1000, "read loop exit")
+	defer conn.Close(1000, "read loop exit")
 
 	_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
 	conn.ws.SetPongHandler(func(string) error {

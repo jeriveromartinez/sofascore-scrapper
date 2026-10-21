@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 )
 
 type GlobalConfigHandlerDeps struct {
@@ -33,7 +33,7 @@ func (h *GlobalConfigHandler) RegisterRoutes(group *gin.RouterGroup, deps Global
 }
 
 func (h *GlobalConfigHandler) handleGet(c *gin.Context) {
-	configs, err := h.repo.GetAll()
+	configs, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -53,7 +53,7 @@ func (h *GlobalConfigHandler) handleAdd(c *gin.Context) {
 		ids[i] = uint(id)
 	}
 
-	configs, err := h.repo.Set(ids)
+	configs, err := h.repo.Set(c.Request.Context(), ids)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -71,7 +71,7 @@ func (h *GlobalConfigHandler) handleRemove(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Remove(tournamentID); err != nil {
+	if err := h.repo.Remove(c.Request.Context(), tournamentID); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

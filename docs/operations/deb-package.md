@@ -160,4 +160,4 @@ sudo apt purge iptv         # also removes /etc/iptv/env and storage dirs
 | Service starts then exits | Check `journalctl -u iptv.service -e`; verify DB credentials in `/etc/iptv/env` match what `postinst` created (`sudo mariadb -uroot -e "SELECT User,Host FROM mysql.user"`). |
 | Port 8080 already in use | Change `API_ADDR` in `/etc/iptv/env` and restart. |
 | Dashboard 404 / API-only | The binary serves `web/dist` relative to `WorkingDirectory`; verify `/opt/iptv/web/dist/index.html` exists (it is packaged). |
-| Scraper returns 403 from SofaScore | External anti-bot block on the host IP; unrelated to the package. |
+| Scraper returns 403 from an upstream | External anti-bot block on the host IP; unrelated to the package. |

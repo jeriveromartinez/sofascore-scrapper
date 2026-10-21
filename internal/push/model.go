@@ -10,8 +10,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
 )
 
@@ -104,8 +104,16 @@ const (
 // payload fields are denormalized (not a foreign key to a separate
 // "templates" table) because they never change after send and we want
 // zero joins at delivery time.
+//
+// CreatedAt/UpdatedAt are explicit columns (no auto-stamp tags) so
+// the caller's clock survives: the service stamps m.CreatedAt with
+// time.Now() before insert so audit logs can correlate the push
+// wall-clock against the originating HTTP request. Embedding
+// gorm.Model here would re-stamp CreatedAt from the DB clock at
+// insert time, silently drifting the audit by hundreds of ms under
+// load.
 type PushMessage struct {
-	gorm.Model
+	ID          uint        `gorm:"primaryKey;autoIncrement;column:id"`
 	UserID      uint        `gorm:"column:user_id;not null;index:idx_push_messages_user_created,priority:1;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 	User        *users.User `gorm:"foreignKey:UserID;references:ID"`
 	Category    Category    `gorm:"column:category;size:32;not null"`
@@ -118,6 +126,7 @@ type PushMessage struct {
 	Source      Source      `gorm:"column:source;size:16;not null"`
 	ScheduledID *uint       `gorm:"column:scheduled_id;null;foreignKey:ScheduledID;references:ID;constraint:OnDelete:SET_NULL"`
 	CreatedAt   time.Time   `gorm:"column:created_at;not null;index:idx_push_messages_user_created,priority:2"`
+	UpdatedAt   time.Time   `gorm:"column:updated_at;not null"`
 }
 
 // PushMessageTarget is the join table between a push and its
@@ -213,7 +222,7 @@ type DeliveryAttempt struct {
 	MessageID     string        `gorm:"column:message_id;size:36;uniqueIndex:uq_message_id;not null"`
 	State         DeliveryState `gorm:"column:state;size:16;not null;index:idx_attempts_state_created,priority:1"`
 	FailureReason FailureReason `gorm:"column:failure_reason;size:32;null"`
-	SentAt        *time.Time    `gorm:"column:sent_at;null"`
+	SentAt        *time.Time    `gorm:"column:sent_at;null;index:idx_attempts_sent_at"`
 	AckedAt       *time.Time    `gorm:"column:acked_at;null"`
 	LatencyMS     *int          `gorm:"column:latency_ms;null"`
 	CreatedAt     time.Time     `gorm:"column:created_at;not null;index:idx_attempts_state_created,priority:2;index:idx_attempts_device_created,priority:2;index:idx_attempts_push_message,priority:2"`

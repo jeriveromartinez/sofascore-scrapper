@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

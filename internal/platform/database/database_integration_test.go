@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
 )
 
 func envOr(key, fallback string) string {
@@ -23,7 +23,7 @@ func TestOpenAppliesPoolConfig(t *testing.T) {
 		Port:            envOr("DB_PORT", "3306"),
 		User:            envOr("DB_USER", "root"),
 		Password:        os.Getenv("DB_PASSWORD"),
-		Name:            envOr("DB_NAME", "sofascore"),
+		Name:            envOr("DB_NAME", "scores365"),
 		MaxOpenConns:    1,
 		MaxIdleConns:    0,
 		ConnMaxLifetime: 30 * time.Minute,
@@ -52,7 +52,7 @@ func TestPoolWaitCountWithMaxOpenOne(t *testing.T) {
 		Port:            envOr("DB_PORT", "3306"),
 		User:            envOr("DB_USER", "root"),
 		Password:        os.Getenv("DB_PASSWORD"),
-		Name:            envOr("DB_NAME", "sofascore"),
+		Name:            envOr("DB_NAME", "scores365"),
 		MaxOpenConns:    1,
 		MaxIdleConns:    0,
 		ConnMaxLifetime: 30 * time.Minute,

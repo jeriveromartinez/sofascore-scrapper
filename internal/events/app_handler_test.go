@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
 )
 
 func TestParseCurrentEventsLimit(t *testing.T) {

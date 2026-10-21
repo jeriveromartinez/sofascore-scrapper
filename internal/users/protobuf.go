@@ -3,7 +3,7 @@ package users
 import (
 	"time"
 
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 )
 
 func UserToProto(u User) *pb.User {

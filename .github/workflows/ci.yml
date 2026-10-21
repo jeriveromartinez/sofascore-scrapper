@@ -142,7 +142,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Build Docker image
-        run: docker build -t sofascore-scrapper:ci .
+        run: docker build -t scores365-scrapper:ci .
 
   native-deploy:
     name: Native deployment checks

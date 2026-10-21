@@ -1,7 +1,7 @@
 # Operations
 
 Entry point for **operators, sysadmins, and SREs** running the
-sofascore-scrapper platform.
+scores365-scrapper platform.
 
 ## Two deployment paths
 
@@ -52,7 +52,7 @@ Single source of truth. The `.deb` postinst writes these to
 | `DB_PORT` | `3306` | No | MariaDB port |
 | `DB_USER` | `root` | No | MariaDB user |
 | `DB_PASSWORD` | *(empty)* | Yes (prod) | MariaDB password |
-| `DB_NAME` | `sofascore` | No | Database name |
+| `DB_NAME` | `scores365` | No | Database name |
 | `DB_MAX_OPEN_CONNS` | `25` | No | Max open DB connections |
 | `DB_MAX_IDLE_CONNS` | `10` | No | Max idle DB connections |
 | `DB_CONN_MAX_LIFETIME` | `30m` | No | Max connection lifetime |
@@ -69,13 +69,17 @@ Single source of truth. The `.deb` postinst writes these to
 | `IMAGE_STORAGE_PATH` | `./image_storage` | No | Team logo storage directory |
 | `SCRAPE_BATCH_SIZE` | `500` | No | Events per scrape batch |
 | `SCRAPE_CONCURRENCY` | `8` | No | Concurrent scrape goroutines |
+| `SCORES365_LANG_ID` | `29` | No | 365scores language id; `29` is es-mx. Changes the language of league, team and status text. |
+| `SCORES365_TIMEZONE` | `UTC` | No | IANA zone the 365scores feed buckets a day of fixtures into. Leave at `UTC` unless a day boundary needs to follow a local timezone. |
+| `SCORES365_COUNTRY_ID` | `116` | No | 365scores user-country id. Only affects the popularity ordering of the competitions catalog, not which competitions are returned. |
+| `SCORES365_DISCOVERY_SPORTS` | *(built-in list)* | No | Comma-separated sport slugs the catalog discovery sweep enrols, e.g. `basketball,tennis,baseball`. Empty uses the built-in list (every sport except football, which FotMob owns). Unknown slugs are logged and skipped. |
 | `HTTP_READ_HEADER_TIMEOUT` | `5s` | No | HTTP read header timeout |
 | `HTTP_WRITE_TIMEOUT` | `10s` | No | HTTP write timeout |
 | `HTTP_IDLE_TIMEOUT` | `120s` | No | HTTP idle timeout |
 
 ## Pre-deployment checklist (Ubuntu `.deb` production)
 
-- [ ] Outbound HTTPS to `www.sofascore.com` is reachable from the server.
+- [ ] Outbound HTTPS to `webws.365scores.com`, `imagecache.365scores.com`, `www.fotmob.com` and `images.fotmob.com` is reachable from the server.
 - [ ] Inbound TCP `80` (and/or `8080` if the dashboard is exposed directly) is allowed by the firewall.
 - [ ] DNS records for the dashboard hostname and for the APK distribution domain point to the server's public IP.
 - [ ] The `iptv` system user does not yet exist.
@@ -103,4 +107,4 @@ sudo journalctl -u iptv.service -f
 
 - Day-to-day operations (alerts, Redis outage, counter recovery, cache invalidation) — [`runbook.md`](runbook.md).
 - Rollback procedures — [`rollback.md`](rollback.md).
-- Upstream dependencies — [SofaScore](https://www.sofascore.com), [MariaDB](https://mariadb.org), [Redis](https://redis.io).
+- Upstream dependencies — [365scores](https://www.365scores.com/es-mx), [FotMob](https://www.fotmob.com), [MariaDB](https://mariadb.org), [Redis](https://redis.io).

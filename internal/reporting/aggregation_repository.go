@@ -1,6 +1,8 @@
 package reporting
 
 import (
+	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"gorm.io/gorm"
@@ -15,39 +17,55 @@ func NewAggregationRepository(db *gorm.DB) *AggregationRepository {
 	return &AggregationRepository{db: db}
 }
 
-func (r *AggregationRepository) GenerateDaily() error {
+// GenerateDaily rolls up the previous day's playback_logs into the
+// content_stats table (one row per content_hash, period_type=day)
+// and deletes the source rows so the table stays small.
+//
+// The whole flow runs in a single transaction so a partial write
+// cannot leave playback_logs deleted but content_stats empty. Any
+// panic is logged with the full stack trace and re-raised so the
+// caller (the cron job) sees the failure rather than a silent
+// "aggregation ran but did nothing".
+func (r *AggregationRepository) GenerateDaily() (err error) {
 	db := r.db
 	now := time.Now()
 	begin := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).Add(-time.Hour * 24)
 	end := begin.AddDate(0, 0, 1).Add(-time.Second)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Default().Error("aggregation: GenerateDaily panic",
+				slog.Any("panic", rec),
+				slog.String("stack", string(debug.Stack())))
+			// Best-effort rollback; the tx handle is already
+			// invalid if the panic came from a connection error.
+			_ = tx.Rollback().Error
+			panic(rec)
+		}
+	}()
 
 	var stats []struct {
 		Content    string
 		TotalViews int
 		TimePlayed int
 	}
-	ctx := db.Begin()
-	if ctx.Error != nil {
-		return ctx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			ctx.Rollback()
-		}
-	}()
-
-	if err := ctx.Table("playback_logs").
+	if err = tx.Table("playback_logs").
 		Select("content, COUNT(id) as total_views, COALESCE(SUM(ended_at - started_at) / 1000, 0) as time_played").
 		Group("content").
 		Where("ended_at <= ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).
 		Find(&stats).Error; err != nil {
-		ctx.Rollback()
+		_ = tx.Rollback().Error
 		return err
 	}
 
 	if len(stats) == 0 {
-		ctx.Rollback()
-		return nil
+		// No rows to roll up; commit the empty tx so we don't hold
+		// a write transaction open for nothing.
+		return tx.Commit().Error
 	}
 
 	dayStats := make([]ContentStat, 0, len(stats))
@@ -61,60 +79,69 @@ func (r *AggregationRepository) GenerateDaily() error {
 		})
 	}
 
-	if err := ctx.Clauses(clause.OnConflict{
+	if err = tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "content_hash"}, {Name: "period_type"}, {Name: "period_start"}},
 		DoUpdates: clause.AssignmentColumns([]string{"seconds", "views"}),
 	}).Create(&dayStats).Error; err != nil {
-		ctx.Rollback()
+		_ = tx.Rollback().Error
 		return err
 	}
 
-	if err := ctx.Unscoped().Table("playback_logs").Where("ended_at <= ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).Delete(nil).Error; err != nil {
-		ctx.Rollback()
+	if err = tx.Unscoped().Table("playback_logs").Where("ended_at <= ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).Delete(nil).Error; err != nil {
+		_ = tx.Rollback().Error
 		return err
 	}
 
-	return ctx.Commit().Error
+	return tx.Commit().Error
 }
 
-func (r *AggregationRepository) GenerateMonthly() error {
+// GenerateMonthly rolls up the previous month's per-day content_stats
+// into a single per-month row per content_hash, then deletes the
+// source day rows. Same panic-and-error semantics as GenerateDaily.
+func (r *AggregationRepository) GenerateMonthly() (err error) {
 	db := r.db
 	now := time.Now()
 	begin := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).AddDate(0, -1, 0)
 	end := begin.AddDate(0, 1, 0)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Default().Error("aggregation: GenerateMonthly panic",
+				slog.Any("panic", rec),
+				slog.String("stack", string(debug.Stack())))
+			_ = tx.Rollback().Error
+			panic(rec)
+		}
+	}()
+
 	var stats []struct {
 		ContentHash string
 		TotalViews  int
 		TimePlayed  int
 	}
-	ctx := db.Begin()
-	if ctx.Error != nil {
-		return ctx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			ctx.Rollback()
-		}
-	}()
-
-	if err := ctx.Model(&ContentStat{}).
+	if err = tx.Model(&ContentStat{}).
 		Select("content_hash, SUM(views) as total_views, SUM(seconds) as time_played").
 		Group("content_hash").
 		Where("period_start >= ? AND period_start < ? AND period_type = ?", begin, end, PeriodTypeDay).
 		Find(&stats).Error; err != nil {
-		ctx.Rollback()
+		_ = tx.Rollback().Error
 		return err
 	}
 
 	if len(stats) == 0 {
-		ctx.Rollback()
-		return nil
+		return tx.Commit().Error
 	}
 
-	if err := ctx.Unscoped().
+	// Clear any stale month rows from a previous run before
+	// inserting the freshly aggregated values.
+	if err = tx.Unscoped().
 		Where("period_start >= ? AND period_start < ? AND period_type = ?", begin, end, PeriodTypeMonth).
 		Delete(&ContentStat{}).Error; err != nil {
-		ctx.Rollback()
+		_ = tx.Rollback().Error
 		return err
 	}
 
@@ -129,20 +156,20 @@ func (r *AggregationRepository) GenerateMonthly() error {
 		})
 	}
 
-	if err := ctx.Clauses(clause.OnConflict{
+	if err = tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "content_hash"}, {Name: "period_type"}, {Name: "period_start"}},
 		DoUpdates: clause.AssignmentColumns([]string{"seconds", "views"}),
 	}).Create(&monthStats).Error; err != nil {
-		ctx.Rollback()
+		_ = tx.Rollback().Error
 		return err
 	}
 
-	if err := ctx.Unscoped().
+	if err = tx.Unscoped().
 		Where("period_start >= ? AND period_start < ? AND period_type = ?", begin, end, PeriodTypeDay).
 		Delete(&ContentStat{}).Error; err != nil {
-		ctx.Rollback()
+		_ = tx.Rollback().Error
 		return err
 	}
 
-	return ctx.Commit().Error
+	return tx.Commit().Error
 }

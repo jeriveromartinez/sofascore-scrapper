@@ -10,20 +10,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/config"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/database"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/realtime"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scheduler"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/seeder"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/database"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scheduler"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/seeder"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"github.com/prometheus/client_golang/prometheus"
 	goredis "github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
@@ -179,7 +179,7 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}
 
-	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis), a.logoScheduler, a.logger, a.Cfg.FotMobTimezone)
+	scrapeSvc, aggRepo := buildSchedulerDeps(a.DB, a.batchSize, a.concur, events.NewEpochStore(a.Redis), a.logoScheduler, a.logger, a.Cfg)
 	a.Scheduler.Init(a.DB, scrapeSvc, aggRepo, redisplatform.NewLocker(a.Redis))
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))

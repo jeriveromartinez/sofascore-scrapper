@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
 
@@ -486,16 +486,31 @@ func (r *Repository) UpdateScheduledPushActive(ctx context.Context, id, userID u
 // DeleteScheduledPush soft-deletes a schedule by setting
 // is_active=false. The row stays in the table for audit; the
 // runner simply skips inactive rows.
+//
+// RowsAffected==0 happens for two reasons: (a) no such row, or
+// (b) the row is already inactive (re-delete or paused-then-delete).
+// The previous code returned ErrRecordNotFound in both cases, which
+// made the dashboard show "not found" on a row that exists and is
+// just paused — operators interpreted this as a bug and re-created
+// schedules that already exist. On RowsAffected==0 we now look the
+// row up to distinguish the two: missing row returns the sentinel,
+// already-inactive returns nil (idempotent delete).
 func (r *Repository) DeleteScheduledPush(ctx context.Context, id, userID uint) error {
 	res := r.db.WithContext(ctx).Model(&ScheduledPush{}).
-		Where("id = ? AND user_id = ?", id, userID).
+		Where("id = ? AND user_id = ? AND is_active = ?", id, userID, true).
 		Update("is_active", false)
 	if res.Error != nil {
 		return res.Error
 	}
-	if res.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+	if res.RowsAffected == 1 {
+		return nil
 	}
+	var existing ScheduledPush
+	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).First(&existing).Error
+	if err != nil {
+		return err
+	}
+	// Row exists and is already inactive — idempotent delete.
 	return nil
 }
 

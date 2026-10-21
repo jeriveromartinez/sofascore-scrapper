@@ -47,8 +47,13 @@ func startScrape(ctx context.Context, svc scraperService, runner *Runner, wg *sy
 
 	c := cron.New()
 
+	// Thread the parent ctx through every cron callback. Without this,
+	// robfig/cron.Stop() on SIGTERM blocks until the running job
+	// returns naturally; with ttlScrapeFuture = 25m a future-tick that
+	// happens to be in-flight can stall shutdown by the full lease TTL
+	// per backend instance.
 	if _, err := c.AddFunc(scrapeTodaySpec, func() {
-		_ = runner.RunLocked(context.Background(), lockScrapeToday, ttlScrapeToday, func(jobCtx context.Context) error {
+		_ = runner.RunLocked(ctx, lockScrapeToday, ttlScrapeToday, func(jobCtx context.Context) error {
 			svc.ScrapeToday(jobCtx, time.Now())
 			return nil
 		})
@@ -62,7 +67,7 @@ func startScrape(ctx context.Context, svc scraperService, runner *Runner, wg *sy
 	}
 
 	if _, err := c.AddFunc(scrapeFutureSpec, func() {
-		_ = runner.RunLocked(context.Background(), lockScrapeFuture, ttlScrapeFuture, func(jobCtx context.Context) error {
+		_ = runner.RunLocked(ctx, lockScrapeFuture, ttlScrapeFuture, func(jobCtx context.Context) error {
 			svc.ScrapeNext7Days(jobCtx)
 			return nil
 		})

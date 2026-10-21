@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/playback"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 )
 
 func TestUserToProto(t *testing.T) {

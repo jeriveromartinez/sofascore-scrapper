@@ -64,7 +64,7 @@ onMounted(() => {
           <thead>
             <tr>
               <th>#</th>
-              <th>SofaScore Event ID</th>
+              <th>External Match ID</th>
               <th>Views</th>
             </tr>
           </thead>

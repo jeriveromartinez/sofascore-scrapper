@@ -1,7 +1,7 @@
 package realtime
 
 import (
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 )
 
 // pbWsHello is a tiny adapter so handler.go can build WsHello

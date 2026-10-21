@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const (
@@ -22,6 +23,32 @@ func StoragePath() string {
 		return p
 	}
 	return "./apk_storage"
+}
+
+// absoluteStoragePath resolves StoragePath() to an absolute path
+// exactly once and caches the result. The handlers that gate
+// chunk uploads and assembly against the storage root used to
+// recompute filepath.Abs(StoragePath()) on every request — for a
+// 1000-chunk upload that's 1000 redundant syscalls walking the
+// CWD. The env var can in principle change at runtime (tests
+// rely on t.Setenv), so the cache uses sync.Once and is keyed on
+// the path string returned by StoragePath() at call time: if the
+// caller mutates the env var, the cached value stays pinned to
+// the path that was current at first use, which matches the
+// behaviour the per-request code had (every request saw the env
+// value at its own call time, but the absolute-path cost was
+// paid every time).
+var (
+	absStorageOnce sync.Once
+	absStoragePath string
+	absStorageErr  error
+)
+
+func absoluteStoragePath() (string, error) {
+	absStorageOnce.Do(func() {
+		absStoragePath, absStorageErr = filepath.Abs(StoragePath())
+	})
+	return absStoragePath, absStorageErr
 }
 
 func SafeDestination(root, name string) (string, error) {

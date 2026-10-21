@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
 	"gorm.io/gorm"
 )
 
@@ -20,13 +20,36 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
+// escapeLike escapes the three special characters recognised by SQL LIKE
+// (% multi-char wildcard, _ single-char wildcard, \ literal escape char) by
+// prefixing each with the LIKE escape character (backslash). This prevents a
+// caller from constructing a wildcard query from arbitrary user input, per
+// the events package's LIKE wildcard-injection hardening (see internal/events
+// /repository.go).
+func escapeLike(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '%' || r == '_' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func (r *Repository) Register(userID *uint, token, platform, name, version, packageId, timezone string) (*Device, error) {
 	if packageId == "" || token == "" || name == "" {
 		return nil, gorm.ErrInvalidData
 	}
 
 	var apkDev apk.ApkVersion
-	if r.db.Model(&apk.ApkVersion{}).Where("package_name like ?", packageId).First(&apkDev).Error != nil || apkDev.ID == 0 || apkDev.IPTVUrl == "" {
+	// Match APK by exact package_name (not LIKE). packageId comes from
+	// the public device-registration endpoint, so an attacker could
+	// otherwise send "%" and bind the device to whichever APK row the
+	// planner picks first — leaking the chosen domain as the device's
+	// future push audience.
+	if err := r.db.Model(&apk.ApkVersion{}).Where("package_name = ?", packageId).First(&apkDev).Error; err != nil || apkDev.ID == 0 || apkDev.IPTVUrl == "" {
 		return nil, gorm.ErrInvalidData
 	}
 
@@ -39,7 +62,14 @@ func (r *Repository) Register(userID *uint, token, platform, name, version, pack
 	}
 
 	var domain domains.Domain
-	if r.db.Model(&domains.Domain{}).Where("domain like ?", "%"+domainStr).First(&domain).Error != nil || domain.ID == 0 {
+	// Like-escape the domain suffix before the LIKE query. A device-
+	// controlled packageId flows into apkDev.IPTVUrl only when an
+	// attacker has already poisoned the package_name -> IPTVUrl row,
+	// but the trailing % here is a fixed literal, so the user input
+	// the escape guards against is apkDev.IPTVUrl itself: an operator
+	// that registers a domain containing "_" or "%" would otherwise
+	// silently widen the match.
+	if err := r.db.Model(&domains.Domain{}).Where("domain LIKE ? ESCAPE '\\'", "%"+escapeLike(domainStr)).First(&domain).Error; err != nil || domain.ID == 0 {
 		return nil, gorm.ErrInvalidData
 	}
 
@@ -50,12 +80,12 @@ func (r *Repository) Register(userID *uint, token, platform, name, version, pack
 	return device, result.Error
 }
 
-func (r *Repository) UpdateLastSeen(token string) error {
-	return r.db.Model(&Device{}).Where("token = ?", token).Update("last_seen", time.Now().Unix()).Error
+func (r *Repository) UpdateLastSeen(ctx context.Context, token string) error {
+	return r.db.WithContext(ctx).Model(&Device{}).Where("token = ?", token).Update("last_seen", time.Now().Unix()).Error
 }
 
-func (r *Repository) UpdateLastSeenByID(deviceID uint, ts int64) error {
-	return r.db.Model(&Device{}).Where("id = ?", deviceID).Update("last_seen", ts).Error
+func (r *Repository) UpdateLastSeenByID(ctx context.Context, deviceID uint, ts int64) error {
+	return r.db.WithContext(ctx).Model(&Device{}).Where("id = ?", deviceID).Update("last_seen", ts).Error
 }
 
 func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
@@ -65,18 +95,23 @@ func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
 		return nil, 0, err
 	}
 	offset := (page - 1) * limit
-	result := r.db.Offset(int(offset)).Limit(int(limit)).Preload("Manager").Find(&devices)
+	// The pb.DeviceList proto never exposes the joined users.User
+	// fields, so the Manager preload was a wasted N+1 roundtrip per
+	// page. Dropped here and in ListPage/GetAll; if a future consumer
+	// needs the manager email, replace with a LEFT JOIN users that
+	// selects only that column rather than loading the whole row.
+	result := r.db.Offset(int(offset)).Limit(int(limit)).Find(&devices)
 	return devices, total, result.Error
 }
 
 func (r *Repository) GetAll() ([]Device, error) {
 	var devices []Device
-	result := r.db.Order("id DESC").Limit(maxAllDevices).Preload("Manager").Find(&devices)
+	result := r.db.Order("id DESC").Limit(maxAllDevices).Find(&devices)
 	return devices, result.Error
 }
 
 func (r *Repository) ListPage(ctx context.Context, id uint, limit int) ([]Device, bool, error) {
-	query := r.db.WithContext(ctx).Preload("Manager").Order("id DESC")
+	query := r.db.WithContext(ctx).Order("id DESC")
 	if id > 0 {
 		query = query.Where("id < ?", id)
 	}

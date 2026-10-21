@@ -1,4 +1,4 @@
-# SofaScore Scrapper — Product Overview
+# 365scores Scrapper — Product Overview
 
 This document is the entry point for the **sales / commercial / pre-sales**
 audience. It describes what the platform is, who it is for, what problems it
@@ -8,12 +8,14 @@ those, see [`docs/development/README.md`](../development/README.md).
 ## What it is
 
 A self-hosted backend platform that lets IPTV / OTT operators run a sports
-content channel backed by [SofaScore](https://www.sofascore.com/) data and
-their own Android-based set-top-box app.
+content channel backed by [365scores](https://www.365scores.com/es-mx) and
+[FotMob](https://www.fotmob.com/) data and their own Android-based
+set-top-box app.
 
 It bundles three things in one deployable package:
 
-1. A backend service that continuously ingests sports events from SofaScore.
+1. A backend service that continuously ingests sports events from the
+   365scores and FotMob APIs.
 2. An admin web dashboard for the operator (event browsing, device and APK
    management, content analytics).
 3. An Android APK distribution channel (resumable uploads, versioned
@@ -38,7 +40,7 @@ out of scope (see "What it does not do" below).
 
 | Pain point | How the platform addresses it |
 |---|---|
-| Manual CSV / spreadsheet event schedules | Continuous scraping of SofaScore; events refresh every minute for today and every 12 hours for the next 7 days. |
+| Manual CSV / spreadsheet event schedules | Continuous ingestion from 365scores and FotMob; events refresh every minute for today and every 12 hours for the next 7 days. |
 | Hand-distributing APK updates to boxes | Versioned APK hosting with capability-token downloads; clients poll `GET /update` and pull new builds automatically. |
 | No visibility into who is using the service | Per-device registration, per-playback event logging, content-stat aggregation, top-events reports. |
 | Tying devices to specific content (tournaments / domains) | Per-device tournament assignments and a domain whitelist; a device only sees events for tournaments it is assigned to. |
@@ -47,7 +49,8 @@ out of scope (see "What it does not do" below).
 ## Core capabilities
 
 ### Live sports event ingestion
-- Scrapes SofaScore continuously (`chromedp`-based) with tunable concurrency.
+- Polls the 365scores and FotMob JSON APIs continuously, with tunable
+  concurrency. No headless browser and no HTML parsing.
 - Caches "current events" for fast device polling; cache invalidates by an
   epoch counter, not by TTL.
 - Captures match status (`scheduled` / `live` / `finished`) so the client UI
@@ -97,7 +100,7 @@ out of scope (see "What it does not do" below).
 | Disk | 10 GB + APK storage | `apk_storage` and `image_storage` grow with content. |
 | MariaDB | 10.5+ | Provided automatically as a `.deb` dependency. |
 | Redis | 5.0+ | Provided automatically as a `.deb` dependency. |
-| Outbound HTTPS | `www.sofascore.com` | Required for the scraper. |
+| Outbound HTTPS | `webws.365scores.com`, `imagecache.365scores.com`, `www.fotmob.com`, `images.fotmob.com` | Required for the scraper. |
 | Inbound | TCP 80 / TCP 8080 | TCP 80 if fronted by nginx; 8080 for direct dashboard access. |
 
 A single host handles a single-tenant operator comfortably. Horizontal
@@ -118,8 +121,9 @@ To set expectations honestly, the platform currently does **not** provide:
   consumes.
 - **Multi-tenant SaaS mode.** One backend serves one operator; tenancy is
   not modeled in the schema.
-- **SofaScore alternatives.** The scraper is hard-coded to SofaScore; there
-  is no pluggable source framework.
+- **Arbitrary data providers.** Sources are pluggable (365scores and FotMob
+  ship in the box, routed per league from the admin catalog), but adding a
+  new provider means writing a Go source adapter — it is not configuration.
 
 If a customer needs any of those, treat the platform as a **foundation**,
 not a turnkey product.

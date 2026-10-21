@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 )
 
 func TestRateLimitAuthFailClosedOnRedisError(t *testing.T) {

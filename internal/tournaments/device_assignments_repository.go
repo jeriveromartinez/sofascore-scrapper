@@ -60,20 +60,28 @@ func (r *DeviceAssignmentsRepository) Remove(deviceID, tournamentID uint) error 
 }
 
 func (r *DeviceAssignmentsRepository) Set(deviceID uint, tournamentIDs []uint) error {
-	tx := r.db.Begin()
-
-	if err := tx.Where("device_id = ?", deviceID).Unscoped().Delete(&DeviceTournament{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	for _, tournamentID := range tournamentIDs {
-		dt := &DeviceTournament{DeviceID: deviceID, TournamentID: tournamentID}
-		if err := tx.Create(dt).Error; err != nil {
-			tx.Rollback()
+	// Replaces the entire per-device tournament set in a single
+	// transaction. The previous implementation issued one INSERT per
+	// tournament (N+1 round-trips): on the admin "assign all" path a
+	// device with 100 tournaments cost 100 round-trips and 100 WAL
+	// flushes. Bulk-inserting via a single CREATE keeps the whole
+	// operation atomic and bounded to two SQL round-trips (DELETE +
+	// one multi-row INSERT, or just the DELETE when the new set is
+	// empty).
+	//
+	// db.Transaction wraps the body so a panic mid-loop still triggers
+	// Rollback instead of leaking an open transaction on the pool.
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("device_id = ?", deviceID).Unscoped().Delete(&DeviceTournament{}).Error; err != nil {
 			return err
 		}
-	}
-
-	return tx.Commit().Error
+		if len(tournamentIDs) == 0 {
+			return nil
+		}
+		rows := make([]DeviceTournament, 0, len(tournamentIDs))
+		for _, tid := range tournamentIDs {
+			rows = append(rows, DeviceTournament{DeviceID: deviceID, TournamentID: tid})
+		}
+		return tx.Create(&rows).Error
+	})
 }

@@ -12,7 +12,7 @@ services:
     image: mariadb:10.11
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      MARIADB_DATABASE: ${DB_NAME:-sofascore}
+      MARIADB_DATABASE: ${DB_NAME:-scores365}
     volumes:
       - mariadb_data:/var/lib/mysql
     healthcheck:
@@ -51,7 +51,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      DB_NAME: ${DB_NAME:-sofascore}
+      DB_NAME: ${DB_NAME:-scores365}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       API_ADDR: "0.0.0.0:8080"
@@ -86,7 +86,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      DB_NAME: ${DB_NAME:-sofascore}
+      DB_NAME: ${DB_NAME:-scores365}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       API_ADDR: "0.0.0.0:8080"
@@ -121,7 +121,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      DB_NAME: ${DB_NAME:-sofascore}
+      DB_NAME: ${DB_NAME:-scores365}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       API_ADDR: "0.0.0.0:8080"

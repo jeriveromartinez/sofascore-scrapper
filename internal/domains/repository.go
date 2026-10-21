@@ -3,7 +3,7 @@ package domains
 import (
 	"context"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
 )
 
@@ -70,23 +70,26 @@ func (r *Repository) Create(domain string, userID uint) (*Domain, error) {
 	return record, nil
 }
 
-func (r *Repository) Update(id uint, domain string, userID uint) (*Domain, error) {
+// Update changes the domain string for an existing record. Ownership
+// (UserID) is deliberately NOT writable through this path: a generic
+// update endpoint that accepts a fresh UserID lets a future caller
+// (or a future regression in the auth middleware) reassign the
+// record to any user. If ownership reassignment becomes a product
+// feature, expose it as a dedicated TransferOwnership(ctx, caller,
+// domainID, newUserID) method that checks the caller is admin and
+// logs the transfer — never as a side effect of an "edit" path.
+func (r *Repository) Update(ctx context.Context, id uint, domain string) (*Domain, error) {
 	var record Domain
-	if err := r.db.First(&record, id).Error; err != nil {
-		return nil, err
-	}
-
-	if err := r.db.First(&users.User{}, userID).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&record, id).Error; err != nil {
 		return nil, err
 	}
 
 	record.Domain = domain
-	record.UserID = userID
-	if err := r.db.Save(&record).Error; err != nil {
+	if err := r.db.WithContext(ctx).Save(&record).Error; err != nil {
 		return nil, err
 	}
 
-	if err := r.db.Preload("User").First(&record, record.ID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("User").First(&record, record.ID).Error; err != nil {
 		return nil, err
 	}
 

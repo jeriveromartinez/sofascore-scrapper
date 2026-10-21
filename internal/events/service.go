@@ -33,25 +33,38 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 	}
 
 	if s.cache != nil && len(tournamentIDs) > 0 {
-		epoch, _ := s.epoch.Get(ctx)
-		key := BuildCacheKey(epoch, tournamentIDs, limit)
-
-		if data, hit, _ := s.cache.Get(ctx, key); hit {
-			events, deserErr := deserializeEvents(data)
-			if deserErr == nil {
-				return events, nil
-			}
-			log.Printf("events: corrupt cache key %s, repopulating: %v", key, deserErr)
+		epoch, err := s.epoch.Get(ctx)
+		if err != nil || epoch == 0 {
+			// Redis unreachable / no epoch yet: bypass the cache
+			// entirely. With epoch=0 every device would key off
+			// the same entry, so a stale value from before the
+			// outage would silently serve every request until the
+			// epoch key reappears.
+			return s.repo.getCurrentAndUpcoming(ctx, tournamentIDs, limit)
 		}
+		key := BuildCacheKey(epoch, tournamentIDs, limit)
 
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
 		result := s.currentSF.DoChan(key, func() (interface{}, error) {
-			flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), currentEventsFlightTimeout)
+			// Derive the worker ctx from the caller's ctx so
+			// client disconnects propagate into the in-flight DB
+			// query (previously WithoutCancel meant the worker
+			// happily kept running for the full 30 s flight
+			// timeout even after the originating HTTP request had
+			// gone away; under a sudden burst on a hot match day
+			// this left orphan DB queries per stale-flight key).
+			flightCtx, cancel := context.WithTimeout(ctx, currentEventsFlightTimeout)
 			defer cancel()
 
+			// The single-flight worker re-checks the cache under
+			// flightCtx so a request that lost the outer race
+			// (e.g. concurrent first call) still hits Redis rather
+			// than hammering the DB. The earlier outer cache.Get
+			// was redundant: it always returned miss whenever the
+			// worker had to fall through to the DB anyway.
 			if data, hit, _ := s.cache.Get(flightCtx, key); hit {
 				events, deserErr := deserializeEvents(data)
 				if deserErr == nil {

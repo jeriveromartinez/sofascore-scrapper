@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/playback"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/playback"
 	"gorm.io/gorm"
 )
 

@@ -12,12 +12,12 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/glebarez/sqlite"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	redisplatform "github.com/jeriveromartinez/sofascore-scrapper/internal/platform/redis"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/push"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )

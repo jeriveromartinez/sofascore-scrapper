@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 
@@ -12,7 +13,11 @@ import (
 // delivery_attempts row from SENT to DELIVERED. messageID is the
 // client-side transport UUID v4 that uniquely identifies the delivery
 // attempt (future Tasks 8-9); the server looks up the row by it.
-type AckHandler func(messageID string)
+//
+// The ctx is the per-connection context; it is cancelled when the
+// connection is torn down, so handlers can stop any background work
+// (DB lookups, retries) the moment the socket goes away.
+type AckHandler func(ctx context.Context, messageID string)
 
 // CloseHandler is invoked exactly once when the connection is being
 // torn down (either by the server, by the client, or because of an
@@ -41,6 +46,11 @@ type Connection struct {
 
 	ackHandler AckHandler
 	closeHook  CloseHandler
+	// ctx is cancelled when the connection closes; ack handlers and
+	// anything else tied to the lifetime of the socket should
+	// select on it so they do not outlive the connection.
+	ctx        context.Context
+	ctxCancel  context.CancelFunc
 	// logger is used for WS send-path diagnostics (e.g. the hub
 	// logs when the send buffer saturates and a connection is
 	// force-closed). nil-safe: callers may pass nil in unit tests
@@ -51,6 +61,7 @@ type Connection struct {
 // newConnection constructs a Connection. ws may be nil in unit tests
 // that exercise the hub without a real socket.
 func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn, ack AckHandler, closeHook CloseHandler, logger *slog.Logger) *Connection {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Connection{
 		deviceID:   deviceID,
 		userID:     userID,
@@ -60,6 +71,8 @@ func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn,
 		closed:     make(chan struct{}),
 		ackHandler: ack,
 		closeHook:  closeHook,
+		ctx:        ctx,
+		ctxCancel:  cancel,
 		logger:     logger,
 	}
 }
@@ -97,6 +110,10 @@ func (c *Connection) Close(code int, reason string) {
 	close(c.closed)
 	c.closedMu.Unlock()
 
+	if c.ctxCancel != nil {
+		c.ctxCancel()
+	}
+
 	if c.ws != nil {
 		msg := websocket.FormatCloseMessage(code, reason)
 		_ = c.ws.WriteControl(websocket.CloseMessage, msg, _deadlineSoon())
@@ -114,9 +131,10 @@ func (c *Connection) Closed() <-chan struct{} { return c.closed }
 
 // onAck is called by the connection's reader loop when the client
 // sends a WsPushAck. It dispatches to the ackHandler installed at
-// construction time.
+// construction time, passing the per-connection ctx so the handler
+// can be cancelled when the socket goes away.
 func (c *Connection) onAck(messageID string) {
 	if c.ackHandler != nil {
-		c.ackHandler(messageID)
+		c.ackHandler(c.ctx, messageID)
 	}
 }

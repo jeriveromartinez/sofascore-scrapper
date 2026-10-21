@@ -55,7 +55,7 @@ advisory and patch ship together to give operators a chance to upgrade.
 
 In scope:
 
-- The `sofascore-scrapper` Go backend, the Vue web admin, and the
+- The `scores365-scrapper` Go backend, the Vue web admin, and the
   scraper/scheduler under `internal/`.
 - Configuration templates under `deployments/` (Docker, Nginx,
   Prometheus rules).

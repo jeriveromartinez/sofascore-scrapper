@@ -20,6 +20,23 @@ func NewRepository(db *gorm.DB) *Repository {
 }
 
 func (r *Repository) Create(version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
+	return r.createOn(r.db, version, fileName, filePath, description, packageName, fileSize, versionCode, minSDK, targetSDK)
+}
+
+// CreateTx inserts a new ApkVersion row inside the caller-supplied
+// transaction. Use this from any flow that needs the insert to be
+// atomic with sibling writes (e.g. UploadService.Complete writing
+// the publication row + APK row + persisted status in one shot so a
+// crash mid-way cannot leave a half-applied state visible to other
+// readers).
+func (r *Repository) CreateTx(tx *gorm.DB, version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
+	if tx == nil {
+		return nil, errors.New("CreateTx: tx is nil")
+	}
+	return r.createOn(tx, version, fileName, filePath, description, packageName, fileSize, versionCode, minSDK, targetSDK)
+}
+
+func (r *Repository) createOn(db *gorm.DB, version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
 	major, minor, patch, err := ParseSemverComponents(version)
 	if err != nil {
 		return nil, fmt.Errorf("invalid semver %q: %w", version, err)
@@ -41,12 +58,18 @@ func (r *Repository) Create(version, fileName, filePath, description, packageNam
 		VersionPatch:     patch,
 	}
 
-	lastVersion, err := r.GetLatest(apk.PackageName)
-	if strings.TrimSpace(apk.IPTVUrl) == "" && err == nil && lastVersion != nil {
-		apk.IPTVUrl = lastVersion.IPTVUrl
+	if strings.TrimSpace(apk.IPTVUrl) == "" {
+		// GetLatest still runs on r.db (not the caller's tx) because
+		// it is read-only and the result only seeds a default field.
+		// Doing it inside the tx would widen the read-set for no
+		// benefit and could deadlock with concurrent updates on the
+		// same package_name.
+		if lastVersion, err := r.GetLatest(apk.PackageName); err == nil && lastVersion != nil {
+			apk.IPTVUrl = lastVersion.IPTVUrl
+		}
 	}
 
-	if err := r.db.Create(apk).Error; err != nil {
+	if err := db.Create(apk).Error; err != nil {
 		return nil, err
 	}
 

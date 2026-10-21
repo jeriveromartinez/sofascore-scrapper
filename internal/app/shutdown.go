@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/apk"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 )
 
 func (a *App) shutdown() error {

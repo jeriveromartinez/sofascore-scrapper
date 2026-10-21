@@ -3,13 +3,13 @@ package tournaments
 import (
 	"time"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 )
 
 func TournamentToProto(t Tournament) *pb.Tournament {
 	return &pb.Tournament{
-		Id:        uint32(t.ID),
+		Id:        uint64(t.ID),
 		CreatedAt: formatDateTime(t.CreatedAt),
 		UpdatedAt: formatDateTime(t.UpdatedAt),
 		Name:      t.Name,
@@ -38,7 +38,7 @@ func GlobalConfigToProto(g GlobalTournamentConfig) *pb.GlobalTournamentConfig {
 		Id:           uint32(g.ID),
 		CreatedAt:    formatDateTime(g.CreatedAt),
 		UpdatedAt:    formatDateTime(g.UpdatedAt),
-		TournamentId: uint32(g.TournamentID),
+		TournamentId: uint64(g.TournamentID),
 		Tournament:   TournamentPtrToProto(g.Tournament),
 	}
 }
@@ -72,7 +72,7 @@ func DeviceTournamentToProto(dt DeviceTournament) *pb.DeviceTournament {
 		CreatedAt:    formatDateTime(dt.CreatedAt),
 		UpdatedAt:    formatDateTime(dt.UpdatedAt),
 		DeviceId:     uint32(dt.DeviceID),
-		TournamentId: uint32(dt.TournamentID),
+		TournamentId: uint64(dt.TournamentID),
 	}
 	if dt.Tournament != nil {
 		p.Tournament = TournamentToProto(*dt.Tournament)

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/platform/observability"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 )
 
 func TestHealthLiveReturns200(t *testing.T) {

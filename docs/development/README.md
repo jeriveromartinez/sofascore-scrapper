@@ -1,7 +1,7 @@
 # Development Guide
 
 Entry point for engineers writing, building, and testing the
-sofascore-scrapper backend, the Vue admin dashboard, and the
+scores365-scrapper backend, the Vue admin dashboard, and the
 packaging pipeline.
 
 For installation, deployment, and day-to-day operations, see
@@ -60,7 +60,7 @@ internal/                  # Go packages (one per domain)
   realtime/                # WebSocket hub
   reporting/               # crash reports + stats
   scheduler/               # cron-driven jobs
-  scraper/                 # SofaScore HTTP client + batch upsert
+  scraper/                 # 365scores/FotMob API clients + batch upsert
   server/                  # HTTP server bootstrap
   testing/                 # test fixtures
   tournaments/             # tournament CRUD + device assignments
@@ -78,7 +78,7 @@ tests/                     # Integration and load tests (k6, Go integration)
 ### Go binary
 
 ```bash
-go build -o ./bin/sofascore-scrapper ./cmd/server
+go build -o ./bin/scores365-scrapper ./cmd/server
 ```
 
 For a release build with buildinfo overrides:
@@ -86,9 +86,9 @@ For a release build with buildinfo overrides:
 ```bash
 VERSION=v0.1.0 COMMIT=$(git rev-parse --short HEAD) \
     go build -trimpath -ldflags="-s -w \
-        -X github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo.Version=$VERSION \
-        -X github.com/jeriveromartinez/sofascore-scrapper/internal/buildinfo.Commit=$COMMIT" \
-        -o ./bin/sofascore-scrapper ./cmd/server
+        -X github.com/jeriveromartinez/scores365-scrapper/internal/buildinfo.Version=$VERSION \
+        -X github.com/jeriveromartinez/scores365-scrapper/internal/buildinfo.Commit=$COMMIT" \
+        -o ./bin/scores365-scrapper ./cmd/server
 ```
 
 ### Vue dashboard

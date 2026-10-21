@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
 	"gorm.io/gorm"
 )
 
@@ -75,7 +75,7 @@ func (r *Repository) List(ctx context.Context, f ListFilters) ([]ScraperLeague, 
 		q = q.Where("country = ?", f.Country)
 	}
 	if f.Query != "" {
-		q = q.Where("name LIKE ?", "%"+f.Query+"%")
+		q = q.Where("name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.Query)+"%")
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
@@ -208,7 +208,7 @@ func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, le
 		SourceLeagueId: sourceLeagueID,
 		Name:           league.Name,
 		Sport:          league.Sport,
-		Country:        league.Country,
+		Country:        truncateCountry(league.Country),
 		Enabled:        true,
 	}
 	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
@@ -249,7 +249,7 @@ func (r *Repository) SearchLocalByName(ctx context.Context, query string) ([]scr
 	}
 	var rows []ScraperLeague
 	if err := r.db.WithContext(ctx).
-		Where("LOWER(name) LIKE ?", "%"+strings.ToLower(q)+"%").
+		Where("LOWER(name) LIKE ? ESCAPE '\\'", "%"+escapeLike(strings.ToLower(q))+"%").
 		Order("name ASC").
 		Find(&rows).Error; err != nil {
 		return nil, err
@@ -265,6 +265,26 @@ func (r *Repository) SearchLocalByName(ctx context.Context, query string) ([]scr
 		})
 	}
 	return out, nil
+}
+
+// escapeLike escapes the three special characters recognised by SQL LIKE
+// (% multi-char wildcard, _ single-char wildcard, \ literal escape char)
+// by prefixing each with the LIKE escape character (backslash). Without
+// this, an admin entering Query=% widens the search to every row in the
+// catalog table, and Query=_ matches every single-character name — both
+// wildcard-injection primitives that the events package already protects
+// against. Kept here (rather than promoted to a shared util) to avoid a
+// cross-package import for a 12-line helper used in two places.
+func escapeLike(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '%' || r == '_' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func isUniqueViolation(err error) bool {
@@ -283,4 +303,23 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// countryColumnSize mirrors ScraperLeague.Country's `size:8` column.
+const countryColumnSize = 8
+
+// truncateCountry bounds a country label to what the column can hold.
+// Sources disagree on what they publish here: FotMob sends a short
+// code ("ENG"), while the 365scores competitions API only exposes a
+// full country name ("Argentina"). Writing the longer value straight
+// through makes MariaDB reject the INSERT in strict mode, which would
+// abort a whole discovery sweep over one row, so the value is clipped
+// instead. The full, untruncated name still reaches tournaments.Region
+// (a longtext column) via scraper.ToTournament.
+func truncateCountry(country string) string {
+	country = strings.TrimSpace(country)
+	if len([]rune(country)) <= countryColumnSize {
+		return country
+	}
+	return string([]rune(country)[:countryColumnSize])
 }

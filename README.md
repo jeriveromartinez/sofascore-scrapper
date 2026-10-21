@@ -1,8 +1,8 @@
-# sofascore-scrapper
+# scores365-scrapper
 
-IPTV backend service — scrapes sports events from SofaScore, manages
-APK distribution, device registration, playback tracking, and
-provides a web dashboard.
+IPTV backend service — scrapes sports events from 365scores and
+FotMob, manages APK distribution, device registration, playback
+tracking, and provides a web dashboard.
 
 ## Documentation by audience
 

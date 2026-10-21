@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"golang.org/x/crypto/bcrypt"
 )
 

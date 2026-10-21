@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
 	"gorm.io/gorm"
 )
 

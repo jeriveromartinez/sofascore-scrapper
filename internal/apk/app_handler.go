@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 )
 
 type AppHandler struct {
@@ -83,9 +83,23 @@ func (h *AppHandler) handleDownload(c *gin.Context) {
 		return
 	}
 
-	storagePath, _ := filepath.Abs(StoragePath())
+	// Resolve the storage root through the same cached helper the
+	// chunk-upload handler uses, then EvalSymlinks so a symlinked
+	// storage root can't be tricked into accepting a FilePath that
+	// resolves outside it. SafeDestination applies the same
+	// treatment on the write path; doing it here on read keeps the
+	// two sides consistent.
+	storageRoot, err := absoluteStoragePath()
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, "storage path unavailable")
+		return
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(storageRoot)
+	if err != nil {
+		resolvedRoot = storageRoot
+	}
 	absPath, err := filepath.Abs(apk.FilePath)
-	if err != nil || !strings.HasPrefix(absPath, storagePath+string(filepath.Separator)) {
+	if err != nil || !strings.HasPrefix(absPath, resolvedRoot+string(filepath.Separator)) {
 		server.RespondError(c, http.StatusForbidden, "file path is invalid")
 		return
 	}

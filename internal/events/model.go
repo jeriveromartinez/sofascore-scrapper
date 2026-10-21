@@ -1,7 +1,7 @@
 package events
 
 import (
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 	"gorm.io/gorm"
 )
 
@@ -25,11 +25,30 @@ type Event struct {
 	AwayScore                   int                     `gorm:"column:away_score"`
 	AwayTeamId                  int64                   `gorm:"column:away_team_id;foreignKey:AwayTeamId;references:TeamId"`
 	ScrapedAt                   int64                   `gorm:"column:scraped_at"`
-	StartTimestamp              int64                   `gorm:"column:start_timestamp"`
+	// Index notes:
+	//
+	//   idx_events_start_timestamp covers two hot paths:
+	//   - repository.ListPage's cursor ORDER BY events.start_timestamp
+	//     ASC, events.id ASC (the trailing id tiebreaker is a cheap
+	//     lookup against the PK).
+	//   - admin_handler.handleGetEvents' date-range filter
+	//     start_timestamp >= ? AND start_timestamp < ?.
+	//
+	//   idx_events_status_type covers getCurrentAndUpcoming's
+	//   WHERE status_type = ? AND league_id IN ?; the planner can use
+	//   it as the leading column and apply league_id as a residual
+	//   filter. (league_id already has an index because the FK
+	//   constraint forces MySQL/MariaDB to create one.)
+	//
+	//   current_period_start_timestamp intentionally has no index:
+	//   it is the secondary sort on a result set already bounded by
+	//   status_type + LIMIT, so an extra index would only slow
+	//   writes down.
+	StartTimestamp              int64                   `gorm:"column:start_timestamp;index:idx_events_start_timestamp"`
 	CurrentPeriodStartTimestamp int64                   `gorm:"column:current_period_start_timestamp"`
 	Slug                        string                  `gorm:"column:slug;type:longtext"`
 	LeagueId                    uint                    `gorm:"column:league_id;foreignKey:LeagueId;references:ID"`
-	StatusType                  string                  `gorm:"column:status_type;size:32;not null;default:''"`
+	StatusType                  string                  `gorm:"column:status_type;size:32;not null;default:'';index:idx_events_status_type"`
 	HomeTeamModel               *Team                   `gorm:"foreignKey:HomeTeamId;references:TeamId" json:"teamHome,omitempty"`
 	AwayTeamModel               *Team                   `gorm:"foreignKey:AwayTeamId;references:TeamId" json:"teamAway,omitempty"`
 	League                      *tournaments.Tournament `gorm:"foreignKey:LeagueId;references:ID" json:"league,omitempty"`

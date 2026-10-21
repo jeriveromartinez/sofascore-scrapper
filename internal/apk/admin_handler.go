@@ -16,10 +16,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/auth"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/pagination"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/server"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/pagination"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 	"gorm.io/gorm"
 )
 
@@ -247,15 +247,29 @@ func (h *AdminHandler) handleUploadChunk(c *gin.Context) {
 	}
 
 	chunkDir := filepath.Join(StoragePath(), "legacy-chunks", strconv.FormatUint(uint64(userID), 10), uploadID)
-	absStoragePath, _ := filepath.Abs(StoragePath())
+	absStoragePath, absErr := absoluteStoragePath()
 	absChunkDir, err := filepath.Abs(chunkDir)
-	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
+	if err != nil || absErr != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}
 
 	if err := os.MkdirAll(chunkDir, 0o755); err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not create chunk directory"})
+		return
+	}
+
+	// Enforce the same per-upload chunk cap the new /apk/uploads
+	// flow uses (MaxTotalChunks). The total_chunks param caps the
+	// index, but a caller could keep posting chunk 0 of fresh
+	// upload IDs and fill the disk with one-chunk dirs. Count the
+	// existing chunk files in this upload dir and reject if we
+	// already have the cap (the incoming chunk is not yet counted).
+	entries, dirErr := os.ReadDir(chunkDir)
+	if dirErr == nil && len(entries) >= MaxTotalChunks {
+		c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("upload already has %d chunks (max %d); call /apk/upload/assemble to publish or DELETE the upload", len(entries), MaxTotalChunks),
+		})
 		return
 	}
 
@@ -292,9 +306,9 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	}
 
 	chunkDir := filepath.Join(StoragePath(), "legacy-chunks", strconv.FormatUint(uint64(userID), 10), uploadID)
-	absStoragePath, _ := filepath.Abs(StoragePath())
+	absStoragePath, absErr := absoluteStoragePath()
 	absChunkDir, err := filepath.Abs(chunkDir)
-	if err != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
+	if err != nil || absErr != nil || !strings.HasPrefix(absChunkDir, absStoragePath+string(filepath.Separator)) {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid upload_id"})
 		return
 	}

@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/devices"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/domains"
-	pb "github.com/jeriveromartinez/sofascore-scrapper/internal/gen/api"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
 )
 

@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/events"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/scraper/catalog"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/tournaments"
-	"github.com/jeriveromartinez/sofascore-scrapper/internal/users"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper/catalog"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
 )
 

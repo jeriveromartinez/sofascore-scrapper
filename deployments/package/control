@@ -5,7 +5,7 @@ Priority: optional
 Architecture: amd64
 Depends: mariadb-server (>= 10.5), redis-server (>= 5.0)
 Maintainer: jeriveromartinez <jeriveromartinez@gmail.com>
-Description: SofaScore scraper + admin panel for IPTV
- Scrapes SofaScore events and serves the web admin panel plus the
- IPTV-facing API. Installs a systemd service (iptv.service) and
- configuration in /etc/iptv.
+Description: Sports results scraper + admin panel for IPTV
+ Scrapes sports events from 365scores and FotMob and serves the web
+ admin panel plus the IPTV-facing API. Installs a systemd service
+ (iptv.service) and configuration in /etc/iptv.
