@@ -251,8 +251,8 @@ func TestUpsertScrapeBatch_PersistsLocalLogoURLAndSchedulesRemoteSource(t *testi
 		sourceURL string
 	}
 	var scheduled []scheduledLogo
-	repo.scheduleLogo = func(_ *gorm.DB, teamID int64, sourceURL string) {
-		scheduled = append(scheduled, scheduledLogo{teamID: teamID, sourceURL: sourceURL})
+	repo.scheduleLogo = func(_ *gorm.DB, job LogoJob) {
+		scheduled = append(scheduled, scheduledLogo{teamID: job.TeamID, sourceURL: job.PrimaryURL})
 	}
 
 	batch := ScrapeBatch{
@@ -295,10 +295,10 @@ func TestReconcileTeamLogosNormalizesRowsAndSchedulesMissingFiles(t *testing.T) 
 
 	repo := NewRepository(db)
 	var scheduled []int64
-	repo.scheduleLogo = func(_ *gorm.DB, teamID int64, sourceURL string) {
-		scheduled = append(scheduled, teamID)
-		if sourceURL != TeamLogoSourceURL(teamID) {
-			t.Errorf("source URL = %q for team %d", sourceURL, teamID)
+	repo.scheduleLogo = func(_ *gorm.DB, job LogoJob) {
+		scheduled = append(scheduled, job.TeamID)
+		if job.PrimaryURL != TeamLogoSourceURL(job.TeamID) {
+			t.Errorf("source URL = %q for team %d", job.PrimaryURL, job.TeamID)
 		}
 	}
 	if err := repo.ReconcileTeamLogos(context.Background()); err != nil {
