@@ -43,7 +43,7 @@ func (f *fixtureDomainRepo) ListByUser(_ context.Context, userID uint) ([]domain
 
 type fixtureUserRepo struct{ users map[uint]*users.User }
 
-func (f *fixtureUserRepo) GetByID(id uint) (*users.User, error) {
+func (f *fixtureUserRepo) GetByID(_ context.Context, id uint) (*users.User, error) {
 	u, ok := f.users[id]
 	if !ok {
 		return nil, gorm.ErrRecordNotFound

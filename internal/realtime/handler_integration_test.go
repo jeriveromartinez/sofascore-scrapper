@@ -3,6 +3,7 @@
 package realtime
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -68,7 +69,7 @@ func setupWSTest(t *testing.T) (string, *Hub, string, func()) {
 		Authenticator: auth,
 		Hub:           hub,
 		Logger:        slog.Default(),
-		AckHandler:    func(string) {},
+		AckHandler:    func(context.Context, string) {},
 	}))
 
 	srv := httptest.NewServer(r)

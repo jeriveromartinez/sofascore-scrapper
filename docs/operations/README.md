@@ -106,5 +106,6 @@ sudo journalctl -u iptv.service -f
 ## Where to escalate
 
 - Day-to-day operations (alerts, Redis outage, counter recovery, cache invalidation) — [`runbook.md`](runbook.md).
+- Verifying that events are actually reaching the database, and by which source — [`verify-scraper-output.md`](verify-scraper-output.md).
 - Rollback procedures — [`rollback.md`](rollback.md).
 - Upstream dependencies — [365scores](https://www.365scores.com/es-mx), [FotMob](https://www.fotmob.com), [MariaDB](https://mariadb.org), [Redis](https://redis.io).
