@@ -1,251 +1,249 @@
 # Production-Like Local Deploy
 
-Use the iptv `.deb` package on a real Ubuntu 24.04 + MariaDB 10.11 + Redis 7
-container, **without** `systemd`. This is the closest thing to a production
-host you can run on a developer laptop, and it is the recommended way to
-validate a new `.deb` build before pushing it to a real server.
+**Audience:** operators and release engineers validating a `.deb` build
+before it reaches a real Ubuntu host.
 
-The compose files under `deployments/docker/compose.{dev,test,multi}.yml`
-are for development and CI; this page is about a one-shot **containerised
-.dedeb smoke test** that mirrors what `apt install iptv_*.deb && systemctl
-start iptv.service` does on the dedicated runner.
+> **Status: historical.** Earlier revisions of this page documented a
+> one-shot "production-like" deploy driven by the container image
+> `iptv-prod-like:latest` and the entrypoint script
+> `/usr/local/bin/deploy-prod-like.sh`. **Neither exists in this
+> repository.** There is no `Dockerfile` for that image and no such
+> script anywhere on disk; the only references to either name were in
+> this page itself. Every command in the old revision — `docker run
+> iptv-prod-like:latest`, `docker exec iptv-prod …`, the smoke-battery
+> table, `/var/log/iptv.log` — was therefore unrunnable.
+>
+> The page is kept because the *goal* is still valid: exercise a real
+> `.deb` against real MariaDB and Redis before shipping it. The rest
+> of this document describes the workflows that actually exist.
 
-## When to use this
+## Validate a `.deb` today
 
-- You changed code under `cmd/server`, `internal/`, or `migrations/` and
-  want to confirm the built `.deb` boots cleanly, runs migrations, and
-  serves a valid `/health/ready` against real MariaDB and Redis.
-- You are about to upgrade a production `.deb` and want to dry-run the
-  postinst → first-boot → first-admin → first-crash-report flow end to end.
-- You want to share a working system with a reviewer or operator without
-  giving them access to a real host.
+| Goal | Use |
+|---|---|
+| Prove a `.deb` installs and the binary boots against real MariaDB and Redis | [Chain test](#chain-test) — `deployments/docker/Dockerfile.test` |
+| Prove a **sequence** of `.deb` upgrades does not break the schema | [Chain test](#chain-test) — mount every `.deb` in `dist/` |
+| Iterate on Go or Vue code against MariaDB + Redis without a `.deb` | [`compose.dev.yml`](README.md#docker-compose-for-testing) |
+| Prove the install behaves on a real Ubuntu 24.04 host, with systemd | [Dedicated VM](#dedicated-ubuntu-vm) |
 
-## When NOT to use this
+The compose files under `deployments/docker/` build from source; they
+do **not** exercise `postinst`, the systemd unit, or the packaged
+binary. Only the chain test and a real VM install do.
 
-- Iterating on Go code with hot reload. Use
-  [`compose.dev.yml`](../development/README.md#option-a---docker-compose-recommended)
-  instead — it builds from source and binds the repo.
-- Running long-lived staging. Use
-  [`compose.multi.yml`](../operations/runbook.md#environment-matrix) for a
-  three-instance stack behind nginx.
-- CI integration tests. Use
-  [`compose.test.yml`](../development/README.md#integration-tests).
+## Chain test
 
-## Prerequisites
-
-- Docker with the WSL2 / Hyper-V backend (Linux containers, not Windows
-  containers).
-- A built `.deb` under `dist/`, e.g. `dist/iptv_0.0.11_amd64.deb`. See
-  [`build-deb.sh`](../development/README.md#build--lint-commands) to
-  produce one.
-
-## One-shot deploy
-
-The container image `iptv-prod-like:latest` is a pre-built Ubuntu 24.04
-with MariaDB 10.11, Redis 7, and the entrypoint script
-`/usr/local/bin/deploy-prod-like.sh`. Mount your `.deb` directory and the
-container takes care of the rest:
+`deployments/docker/Dockerfile.test` builds `iptv-chain-test`: Ubuntu
+24.04 with `mariadb-server`, `redis-server`, `sudo`, and `wget`. Its
+entrypoint is `deployments/docker/chain-test.sh`. Nothing pre-baked —
+the whole point is that `dpkg -i` runs the real `postinst` from the
+real package.
 
 ```bash
-# Linux / macOS / Git Bash
-DEB_DIR="$PWD/dist"
+# 1. Produce one or more .deb files.
+./deployments/package/build-deb.sh <version>
 
-docker run -d --name iptv-prod \
-    -p 8080:8080 \
-    -v "$DEB_DIR:/tmp/dist:ro" \
-    iptv-prod-like:latest
+# 2. Build the harness.
+docker build -f deployments/docker/Dockerfile.test -t iptv-chain-test .
+
+# 3. Run it against everything in dist/.
+docker run --rm -p 8080:8080 -v "$PWD/dist:/tmp/dist:ro" iptv-chain-test
 ```
 
 ```powershell
-# Windows PowerShell
-$DebDir = (Resolve-Path .\dist).Path
-
-docker run -d --name iptv-prod `
-    -p 8080:8080 `
-    -v "${DebDir}:/tmp/dist:ro" `
-    iptv-prod-like:latest
+docker build -f deployments/docker/Dockerfile.test -t iptv-chain-test .
+docker run --rm -p 8080:8080 -v "${PWD}/dist:/tmp/dist:ro" iptv-chain-test
 ```
 
-The entrypoint performs, in order:
+Docker Desktop on Windows: use the resolved Windows path for `-v`, not
+a relative one.
 
-1. Start MariaDB and wait for `mariadb-admin ping` to succeed.
-2. Drop any leftover `iptv` database and user (clean baseline).
-3. Start Redis and wait for `redis-cli ping` to succeed.
-4. `dpkg -i` the lexicographic-last `.deb` in `/tmp/dist` (this matches
-   semver for the project's `0.0.x` versioning scheme as long as no
-   version crosses a `0.1.0` boundary; if you need to test multiple
-   versions in one container, mount a directory holding only the one
-   you want to validate).
-5. Verify `/etc/iptv/env` was generated by the postinst, that the `iptv`
-   system user exists, and that the MariaDB grants were applied.
-6. Source `/etc/iptv/env`, then `exec` `/opt/iptv/iptv` as user `iptv`
-   with `WorkingDirectory=/opt/iptv` (matches what `iptv.service` does).
-7. Tail `/var/log/iptv.log` for live request logs; the iptv process
-   keeps the container alive until `docker stop`.
-8. Tail the test battery (see below).
+### What the chain test does
 
-Open <http://localhost:8080> for the dashboard.
+1. Starts MariaDB and waits for `mariadb-admin ping` (up to 30 s).
+2. Drops any leftover `iptv` database and `iptv` database user so each
+   container run starts from the same baseline.
+3. Starts Redis and waits for `redis-cli ping`.
+4. Globs `/tmp/dist/iptv_*.deb` and installs them **in shell glob
+   order** — oldest filename first — with `dpkg -i`. Each install
+   therefore runs `postinst` against the state left by the previous
+   version.
+5. After each install, starts the binary directly as the `iptv` user
+   (`sudo -u iptv -E /opt/iptv/iptv`) and polls `/health/live` for up
+   to 60 seconds. The container has no systemd, so `iptv.service` is
+   never started; the binary is launched the same way the unit would,
+   with the same `WorkingDirectory` and env file.
+6. On failure, prints the last 15 lines of the binary's log.
 
-## What the test battery checks
+A version that fails to become healthy is logged and skipped — the
+run only fails if the **last** `.deb` in the chain does not come up.
+That models reality: an old published release may be broken, but the
+release you are about to tag must not be.
 
-The entrypoint runs an inline smoke battery once `/health/live` returns
-200. The battery is intentionally narrow — its job is to catch
-regressions in the build pipeline (wrong `go build` flags, broken
-migrations, missing assets, wrong port) rather than to exercise the
-business logic.
+### Schema smoke test
 
-| Probe | Expected |
-|---|---|
-| `GET /health/live` | 200 `{"status":"alive"}` |
-| `GET /health/ready` | 200 `{"status":"ready"}` |
-| `GET /api/web/v1/version` | 200 with the embedded buildinfo (`v0.0.x <sha>`) |
-| `GET /metrics` | 200 with Prometheus metrics |
-| `GET /` | 200 (Vue dashboard SPA) |
-| `POST /api/app/v1/crash-report` (realistic payload) | 200 |
-| `POST /api/app/v1/crash-report` (`{}`) | 400 |
-| `POST /api/app/v1/crash-report` (invalid JSON) | 400 |
-| 80 rapid `POST /api/app/v1/crash-report` | hits 429 (rate limit) |
-| Every other `/api/web/v1/*` endpoint without auth | 401 |
+After the final `.deb` is healthy, the script asserts the schema that
+GORM `AutoMigrate` produced, guarding the class of bug from PR #101
+(`Unknown column 'deleted_at'` on insert):
 
-After the battery, `crash_reports` should contain one row per successful
-test (plus the 80 in the rate-limit run). The `crash_reports` columns
-are managed by GORM AutoMigrate (`app_*` and `device_*` prefixes on the
-embedded `AppReport` / `DeviceReport` structs in
-`internal/realtime/model.go`).
+- `deleted_at` column present on `push_messages`, `scheduled_pushes`,
+  and `delivery_attempts`.
+- Indexes `idx_push_messages_deleted_at`,
+  `idx_scheduled_pushes_deleted_at`,
+  `idx_delivery_attempts_deleted_at` present.
+- An `INSERT` into each of the three tables accepts `deleted_at IS NULL`
+  and a real timestamp, with `FOREIGN_KEY_CHECKS=0` (the harness has no
+  user, device, or tournament rows to reference).
+- The smoke rows are deleted again.
 
-Tail the live output:
+### Gotchas
+
+- **Filename order is upgrade order.** The script globs with shell
+  ordering, not a semver sort. `0.0.11` sorts before `0.0.5`
+  lexicographically. Mount a directory containing only the packages you
+  want, or rename copies so the glob order matches the upgrade order.
+- **Do not pre-create the `iptv` database user.** `postinst` generates a
+  random password and runs `CREATE USER IF NOT EXISTS`, which does not
+  update an existing user's password. A pre-created user makes the env
+  file and the actual grants diverge, and the binary then fails to
+  authenticate. The script therefore drops the user and lets `postinst`
+  create it.
+- **The container has no systemd.** A unit-file regression that only
+  shows up under `systemctl` — a bad `EnvironmentFile` mode, a missing
+  `ReadWritePaths` — will not be caught here. Use the VM flow below for
+  that.
+
+## Dedicated Ubuntu VM
+
+The only flow that exercises `apt install`, `postinst`, and
+`iptv.service` exactly as production does:
 
 ```bash
-docker logs -f iptv-prod
-# or exec into the container
-docker exec -it iptv-prod bash
-tail -f /var/log/iptv.log
+# On the VM (Ubuntu 24.04, amd64)
+scp dist/iptv_<version>_amd64.deb user@vm:/tmp/
+ssh user@vm
+sudo apt install /tmp/iptv_<version>_amd64.deb
+systemctl status iptv.service
+curl -s http://127.0.0.1:8080/health/ready
+sudo journalctl -u iptv.service -n 100 --no-pager
 ```
 
-## Bootstrap the first admin
+To exercise an upgrade path rather than a fresh install, install the
+older package first, create some state (a registered admin, a scraped
+event), then install the newer one and confirm the state survived and
+`AutoMigrate` applied cleanly.
 
-The server **auto-seeds** a default admin on first boot if the `users` table is empty:
+See [`deb-package.md`](deb-package.md) for the full postinst contract
+and the upgrade procedure.
 
-- Email: `admin@local`
-- Password: `admin1234` (change on first login)
+## Iterating on code: compose.dev.yml
 
-To re-trigger seeding (e.g. after deleting the admin), `DELETE FROM users` and restart the server, or run `./scores365-scrapper migrate` on a fresh DB.
-
-The legacy `bootstrap-invitation` command still works but only on a database with zero users — useful only right after `DELETE FROM users`.
-
-## Register the admin (auth wire format is protobuf)
-
-`POST /api/web/v1/users/register` and every other `/api/web/v1/users/*`
-endpoint speaks **Protocol Buffers**, not JSON. The request body is the
-binary wire encoding of the proto message in `proto/api.proto`; the
-`Content-Type` is `application/x-protobuf`. The response is also protobuf.
-
-If you `curl` these endpoints with `-d '{...}'` you get
-`{"error":"email and password are required"}` because `proto.Unmarshal`
-silently ignores the JSON bytes and the handler sees zero-valued fields.
-
-Use the bundled smoke test, a generated client, or `grpcurl` with a
-reflection-enabled build:
+For the edit-restart loop, skip the packaging entirely:
 
 ```bash
+# compose.dev.yml fails fast unless DB_PASSWORD and JWT_SECRET are set.
+printf 'DB_PASSWORD=%s\nJWT_SECRET=%s\n' \
+    "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" > .env
+
+docker compose -f deployments/docker/compose.dev.yml up --build
+curl http://localhost:8080/health/live
+```
+
+MariaDB 10.11, Redis 7-alpine, and one backend built from the repo
+`Dockerfile`, with persistent volumes. It reuses the same `/health/live`
+and `/health/ready` probes as the packaged service, so a green
+`compose.dev.yml` plus a green chain test is a good signal before the
+VM step.
+
+`compose.multi.yml` runs three backends behind nginx with Prometheus;
+`compose.test.yml` is the integration-test harness. Both are documented
+in [`README.md`](README.md#docker-compose-for-testing).
+
+## Registering the first admin: the wire format is protobuf
+
+Every `/api/web/v1/users/*` endpoint speaks **Protocol Buffers**, not
+JSON. The request body is the binary wire encoding of the message
+declared in `proto/api.proto`, the response is protobuf, and the
+content type is `application/x-protobuf`.
+
+`server.ParseProtoBody` calls `proto.Unmarshal` on the raw body without
+looking at `Content-Type`. A `curl -d '{"email":…,"password":…}'`
+therefore either fails protobuf decoding or decodes to a zero-valued
+message; either way the handler short-circuits and answers:
+
+```
+400 {"error":"email and password are required"}
+```
+
+This looks like a validation bug but is a wire-format mismatch. Do not
+`curl` these endpoints with JSON.
+
+Use the bundled round-trip client instead, which speaks the real format.
+It needs a base URL and a bootstrap token, so point it at a host you
+control:
+
+```bash
+# Mint the invitation token on the machine holding the install.
+sudo -u iptv bash -c 'set -a; . /etc/iptv/env; set +a; /opt/iptv/iptv bootstrap-invitation'
+
+# Paste the token and base URL into scripts/auth_smoke/main.go, then:
 go run ./scripts/auth_smoke/
 ```
 
-`scripts/auth_smoke/main.go` exercises the full auth round-trip:
+> Do not try to `docker exec` into the chain-test container for this.
+> It runs with `--rm`, so its writable layer — `/etc/iptv/env` and the
+> generated database password — is discarded the moment the chain
+> finishes. Mint the token on a `.deb` install host or a container you
+> started yourself.
 
-1. `POST /api/web/v1/users/register` (token inlined; email is timestamped
-   so re-runs don't collide).
-2. `GET /api/web/v1/users` with the issued bearer token (must be 200).
-3. `POST /api/web/v1/users/invitations` to mint a 1h invitation (the new
-   admin can then invite operators without touching `bootstrap-invitation`
-   again).
-4. `POST /api/web/v1/users/refresh` to rotate the refresh token.
-5. `POST /api/web/v1/users/logout?all=true` to revoke every session for
-   the test user.
+`scripts/auth_smoke/main.go` exercises register → list users → mint an
+invitation → refresh → logout, printing each status and the decoded
+proto fields. For ad-hoc calls, marshal the request with
+`google.golang.org/protobuf/proto` and the generated bindings in
+`internal/gen/api` — see [`runbook.md`](runbook.md) → Bootstrap via
+invitation.
 
-It prints each step's status and (for register / invitation) the decoded
-proto fields.
+The Vue dashboard at `http://localhost:8080` speaks protobuf correctly
+through its generated `web/src/api` bindings.
 
-For ad-hoc calls, the minimum Go snippet is:
+## Known limitation: push metrics on MariaDB
 
-```go
-import (
-    pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
-    "google.golang.org/protobuf/proto"
-)
+`GET /api/web/v1/pushes/metrics/aggregate` (registered in
+`internal/push/handler.go`, under the `pushes` group) answers `200`,
+but two of its sub-queries use `strftime('%H', sent_at)` and
+`date('now')` — SQLite functions that MariaDB does not implement. See
+`internal/push/metrics_aggregator.go`.
 
-body, _ := proto.Marshal(&pb.AuthRequest{
-    Email:           "operator@example.com",
-    Password:        "CorrectHorseBatteryStaple!9",
-    InvitationToken: "<bootstrap-token-here>",
-})
-req, _ := http.NewRequest("POST",
-    "http://localhost:8080/api/web/v1/users/register",
-    bytes.NewReader(body))
-req.Header.Set("Content-Type", "application/x-protobuf")
-resp, _ := http.DefaultClient.Do(req)
-defer resp.Body.Close()
-authResp := &pb.AuthResponse{}
-proto.Unmarshal(resp.Body, authResp)
-// authResp.Token and authResp.RefreshToken are JWTs.
-```
+The aggregator ignores those two errors (`if err == nil`), so on
+MariaDB:
 
-## Login as the admin
+- `audiencePeakToday` comes back `0`.
+- `hourlyHistogram30D` comes back empty.
+- `topPlatforms` and `topAppVersions` are unaffected — that query is
+  plain SQL and works.
 
-Once registered, log in:
-
-```bash
-go run ./scripts/auth_smoke/  # uses the last issued credentials
-```
-
-Or use the Vue dashboard at <http://localhost:8080> — it speaks protobuf
-through the generated `web/src/api` bindings.
-
-## Tear down
-
-```bash
-docker rm -f iptv-prod
-```
-
-`/var/lib/mysql`, `/opt/iptv/apk_storage`, and `/opt/iptv/image_storage`
-live inside the container and disappear with it. The host only mounts
-`/tmp/dist` (read-only); the data persists in the container's writable
-layer for the container's lifetime.
-
-If you want persistent storage across container restarts, mount host
-directories on top of those paths:
-
-```bash
-docker run -d --name iptv-prod \
-    -p 8080:8080 \
-    -v "$PWD/dist:/tmp/dist:ro" \
-    -v iptv-mysql:/var/lib/mysql \
-    -v iptv-data:/opt/iptv \
-    iptv-prod-like:latest
-```
-
-(Note: bind-mounting `/var/lib/mysql` from a case-insensitive host
-filesystem can confuse MariaDB; use a named Docker volume on Windows
-and macOS.)
+The endpoint never surfaces an error, so this shows up as "the chart is
+blank", not as a 500. Fixing it means swapping the date functions for
+their MariaDB equivalents (`HOUR(sent_at)`, `DATE(sent_at)`); that
+change is not in this repository yet.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `FAIL: no .deb files in /tmp/dist` | Mount empty or wrong path | Check `docker exec iptv-prod ls /tmp/dist` — Windows users: use the absolute Windows path (`E:\\dist`) for `-v`. |
-| Container exits with `mariadbd: Fatal error: Can't open and lock privilege tables` | `/var/lib/mysql` bind-mounted from empty host dir | Use a named Docker volume, not a host bind mount, for `/var/lib/mysql`. |
-| `users table is not empty, refusing to bootstrap invitation` | A previous test (or operator) already registered an admin | Either log in with the existing admin or reset: `docker rm -f iptv-prod` then start fresh. |
-| Register returns `{"error":"email and password are required"}` | Sending JSON to a protobuf endpoint | Use `scripts/auth_smoke/` or send `application/x-protobuf`. |
-| `push/metrics/aggregate` returns 200 but no rows | The hourly aggregation query uses `strftime`, which exists only in SQLite | MariaDB returns 0 rows instead of an error. See the open bug in `internal/push/metrics_aggregator.go:194` — to be fixed in a follow-up. |
+| Symptom | Cause and fix |
+|---|---|
+| `FAIL: no .deb files found in /tmp/dist` | Empty or wrong bind mount. `docker run --rm -v "$PWD/dist:/tmp/dist:ro" alpine ls /tmp/dist` to check the mount independently. |
+| `FAIL: final version ... did not start cleanly` | The last `.deb` in the chain. The script prints the last 15 log lines before the summary — read those first. |
+| An older version logs `FAIL: <deb> did not become healthy` | Expected and tolerated when the historical release was broken. Only the final version gates the run. |
+| `mariadbd: Can't open and lock privilege tables` | `/var/lib/mysql` bind-mounted from an empty host directory. The chain-test image uses the image's own `datadir`; do not mount over it. |
+| Register returns `email and password are required` | JSON sent to a protobuf endpoint. See above. |
+| `users table is not empty, refusing to bootstrap invitation` | Someone already registered. Recreate the container for a clean slate, or use the existing credentials. |
+| Chain installs versions out of order | Filename glob order, not semver. See gotchas above. |
+| Metrics chart is empty on MariaDB | Known limitation, documented above. |
 
-## Relationship to the chain test
+## Where to escalate
 
-The chain test (`deployments/docker/chain-test.sh`) walks every `.deb`
-in `/tmp/dist` sequentially, treating the first install as a baseline
-and upgrading through the rest. It catches migration breaks and
-install-time regressions across versions. The production-like deploy
-on this page validates **one** version in isolation, which is what you
-want when iterating on a single build.
-
-Use the chain test before tagging a release; use this production-like
-deploy while developing.
+- Packaging, install, and upgrade — [`deb-package.md`](deb-package.md).
+- Backups and downgrades — [`rollback.md`](rollback.md).
+- Day-to-day operations and alerts — [`runbook.md`](runbook.md).
+- Compose stacks and the iteration loop —
+  [`README.md`](README.md#docker-compose-for-testing) and
+  [`../development/README.md`](../development/README.md).

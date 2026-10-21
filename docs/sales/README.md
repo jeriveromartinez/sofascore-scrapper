@@ -9,17 +9,17 @@ those, see [`docs/development/README.md`](../development/README.md).
 
 A self-hosted backend platform that lets IPTV / OTT operators run a sports
 content channel backed by [365scores](https://www.365scores.com/es-mx) and
-[FotMob](https://www.fotmob.com/) data and their own Android-based
-set-top-box app.
+[FotMob](https://www.fotmob.com/) data, served to operator-owned Android
+set-top-box clients.
 
 It bundles three things in one deployable package:
 
-1. A backend service that continuously ingests sports events from the
-   365scores and FotMob APIs.
-2. An admin web dashboard for the operator (event browsing, device and APK
-   management, content analytics).
-3. An Android APK distribution channel (resumable uploads, versioned
-   downloads, capability-token access).
+1. **Continuous event ingestion** from 365scores (`webws.365scores.com`)
+   and FotMob (`www.fotmob.com`), normalized into a single event catalog.
+2. **An operator admin dashboard** (Vue 3 SPA) for browsing events,
+   managing devices, uploading APKs, and reviewing content stats.
+3. **An Android APK distribution channel** — chunked, resumable uploads,
+   versioned downloads with capability-token access and atomic activation.
 
 The package is delivered as a single Ubuntu `.deb` (binary + dashboard +
 systemd unit) so an operator can install and forget it.
@@ -40,72 +40,80 @@ out of scope (see "What it does not do" below).
 
 | Pain point | How the platform addresses it |
 |---|---|
-| Manual CSV / spreadsheet event schedules | Continuous ingestion from 365scores and FotMob; events refresh every minute for today and every 12 hours for the next 7 days. |
+| Manual CSV / spreadsheet event schedules | Continuous ingestion from 365scores and FotMob; "today" events refresh every minute, next-7-days lookahead runs twice a day. |
 | Hand-distributing APK updates to boxes | Versioned APK hosting with capability-token downloads; clients poll `GET /update` and pull new builds automatically. |
 | No visibility into who is using the service | Per-device registration, per-playback event logging, content-stat aggregation, top-events reports. |
-| Tying devices to specific content (tournaments / domains) | Per-device tournament assignments and a domain whitelist; a device only sees events for tournaments it is assigned to. |
+| Tying devices to specific content (tournaments / domains) | Per-device tournament assignments and a domain whitelist; a device only sees events for the tournaments it is assigned to. |
 | Operational fragility when one server dies | Multi-instance deployment with shared MariaDB + Redis, distributed scheduler locks, atomic binary rollback. |
 
 ## Core capabilities
 
-### Live sports event ingestion
-- Polls the 365scores and FotMob JSON APIs continuously, with tunable
-  concurrency. No headless browser and no HTML parsing.
-- Caches "current events" for fast device polling; cache invalidates by an
-  epoch counter, not by TTL.
-- Captures match status (`scheduled` / `live` / `finished`) so the client UI
-  can show "LIVE" / "FINAL" badges.
+- **Live event ingestion** from two configured upstreams with a normalized
+  catalog; per-league source routing via the `scraper_leagues` table, with
+  an `override_source` escape hatch per row.
+- **Admin SPA** (Vue 3 + Vite + Pinia + TypeScript) for event browsing,
+  device roster, APK uploads, tournament assignment, domain whitelist, and
+  content stats. JWT-authenticated, role-based (`admin` / `user`); the
+  first registered user is promoted to `admin` automatically.
+- **APK distribution** with chunked resumable upload, per-version metadata
+  (semver, package name, active flag, download count), per-device download
+  tokens with optional TTL, and atomic swap of the active version.
+- **Device lifecycle**: self-registration via `POST /devices`; per-playback
+  reporting via `POST /devices/viewing` feeding the content-stats
+  aggregation; crash reports via `POST /crash-report` with rate limiting
+  and body-size caps.
+- **Analytics**: daily and monthly aggregation jobs (cron + Redis
+  distributed lock); top-events ranking at `GET /stats/top-events`; a
+  per-team logo cache served directly by the backend.
+- **Ops primitives**: single binary + systemd unit (`iptv.service`);
+  `/health/live` and `/health/ready`; `/metrics` (Prometheus); optional
+  pprof debug server.
 
-### Admin web dashboard
-- Built-in SPA (Vue 3 + Vite + Pinia + TypeScript).
-- Browser-based event browser, device roster, APK upload, tournament
-  assignment, domain whitelist, content stats.
-- JWT-authenticated, role-based (`admin` / `user`); first registered user is
-  promoted to admin automatically.
+## Polling cadence
 
-### APK distribution
-- Chunked, resumable upload from the dashboard.
-- Per-version metadata (semver, package name, active flag, download count).
-- Per-device download tokens with optional TTL.
-- Atomic swap of active version; devices detect updates via `GET /update`.
+Two scrapers run concurrently:
 
-### Device lifecycle
-- Self-registration via `POST /devices`; each device gets a server-assigned
-  ID and a tournament assignment.
-- Per-playback reporting (`POST /devices/viewing`) feeds the content-stats
-  aggregation.
-- Crash reports (`POST /crash-report`) with IP rate limiting and a body-size
-  cap.
+- **Today (`scrapeTodaySpec = "@every 1m"`)** — fires every minute against
+  the current UTC day. Soccer and most daily schedules renew fast enough
+  that this is what fills the live board.
+- **Next 7 days (`scrapeFutureSpec = "0 6,18 * * *"`)**: 06:00 and 18:00
+  UTC, daily, for the lookahead fixture pull.
 
-### Analytics
-- Daily and monthly aggregation jobs (cron + Redis distributed lock).
-- Top-events ranking exposed via `GET /stats/top-events`.
-- Per-team logo cache served directly by the backend.
+Both jobs are guarded by a Redis distributed lock so multiple backend
+instances coordinate cleanly. The HTTP client caches each `/data/games`
+day-feed response for 60s so concurrent per-league lookups inside the
+same tick coalesce.
 
-### Operations
-- Single binary, single systemd unit (`iptv.service`).
-- Health endpoints: `/health/live` (always 200 if process alive) and
-  `/health/ready` (checks DB + Redis).
-- Prometheus metrics at `/metrics`; optional pprof endpoint.
-- Production deploy via the Ubuntu `.deb` package (see
-  [`docs/operations/deb-package.md`](../operations/deb-package.md))
-  with rollback via `apt install iptv=<previous-version>`.
+The catalog of leagues is discovered **once at boot**; re-discovery is not
+scheduled. Restart the backend to pick up leagues added upstream since the
+last release.
 
 ## Hosting requirements
 
 | Resource | Minimum | Notes |
 |---|---|---|
 | OS | Ubuntu 22.04 LTS or 24.04 LTS (amd64) | The `.deb` package targets these versions. |
-| RAM | 2 GB | The scheduler, scraper and HTTP server are all in one process. |
-| Disk | 10 GB + APK storage | `apk_storage` and `image_storage` grow with content. |
-| MariaDB | 10.5+ | Provided automatically as a `.deb` dependency. |
-| Redis | 5.0+ | Provided automatically as a `.deb` dependency. |
+| RAM | 2 GB | The scheduler, scraper, and HTTP server are all in one process. |
+| Disk | 10 GB + APK storage | APK and image storage grow with content. |
+| MariaDB | ≥ 10.5 | Provided as a `.deb` dependency. |
+| Redis | ≥ 5.0 | Provided as a `.deb` dependency. |
 | Outbound HTTPS | `webws.365scores.com`, `imagecache.365scores.com`, `www.fotmob.com`, `images.fotmob.com` | Required for the scraper. |
 | Inbound | TCP 80 / TCP 8080 | TCP 80 if fronted by nginx; 8080 for direct dashboard access. |
 
 A single host handles a single-tenant operator comfortably. Horizontal
-scaling is supported (the codebase is multi-instance ready) but is not part
-of the standard install path.
+scaling is supported (multi-instance ready, shared state in MariaDB and
+Redis) but is not part of the standard install path.
+
+## Observability
+
+- `/health/live` — always `200` if the process is alive.
+- `/health/ready` — checks MariaDB and Redis before returning `200`.
+- `/metrics` — Prometheus.
+- **pprof** is gated by **both** `ENABLE_PPROF=true` and `PPROF_ADDR=:port`.
+  Setting only one does nothing; the server does not bind. Either leave both
+  unset (default — disabled) or set both. See
+  [`docs/operations/README.md`](../operations/README.md) for the env-var
+  table.
 
 ## What it does **not** do
 
@@ -113,8 +121,8 @@ To set expectations honestly, the platform currently does **not** provide:
 
 - **Content transcoding or DRM.** It distributes metadata and APKs; video
   stream origin and protection are the operator's responsibility.
-- **Billing, subscriptions, or paywall logic.** No payment integration; the
-  platform assumes an external billing system handles customer
+- **Billing, subscriptions, or paywall logic.** No payment integration;
+  the platform assumes an external billing system handles customer
   relationships.
 - **End-user playback UI.** The Android TV client lives in a separate
   repository (`flutter-apptv`); the backend exposes the API the client
@@ -132,8 +140,8 @@ not a turnkey product.
 
 1. **Install** — `sudo apt install ./iptv_<version>_amd64.deb` on a fresh
    Ubuntu host. The postinst creates the `iptv` system user, generates
-   `/etc/iptv/env` with random DB credentials and a JWT secret, creates the
-   `iptv` database and user in MariaDB, and starts the service.
+   `/etc/iptv/env` with random DB credentials and a JWT secret, creates
+   the `iptv` database and user in MariaDB, and starts the service.
 2. **Bootstrap** — log in to the dashboard using the bootstrap invitation
    token printed by `bootstrap-invitation`. The first registered user is
    promoted to admin automatically.
