@@ -159,6 +159,8 @@ func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
 			continue
 		}
 		if len(leagues) == 0 {
+			s.logger.WarnContext(ctx, "scraper: no active leagues for source",
+				slog.String("source", srcName))
 			continue
 		}
 		anyLeagues = true
@@ -292,6 +294,18 @@ func (s *Service) dispatchDayMatch(
 	for _, m := range matches {
 		byLeague[m.League.SourceLeagueId] = append(byLeague[m.League.SourceLeagueId], m)
 	}
+	known := make(map[string]struct{}, len(srcLeagues))
+	for _, l := range srcLeagues {
+		known[l.SourceLeagueId] = struct{}{}
+	}
+	for id := range byLeague {
+		if _, ok := known[id]; ok {
+			continue
+		}
+		s.logger.WarnContext(ctx, "scrape day: unknown league from source",
+			slog.String("source", src.Name()),
+			slog.String("source_league_id", id))
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.concur)
@@ -422,6 +436,8 @@ func (s *Service) dispatchPerLeague(
 // category.
 func (s *Service) upsertLeagueMatches(ctx context.Context, league LeagueRef, date time.Time, matches []Match) error {
 	if len(matches) == 0 {
+		s.logger.DebugContext(ctx, "scraper: no matches for league",
+			slog.String("league_id", league.SourceLeagueId))
 		return nil
 	}
 	sport := league.Sport
