@@ -1,0 +1,113 @@
+{
+  "lastUpdateId": 5758996845,
+  "ttl": 5,
+  "sports": [
+    { "id": 1, "name": "Fútbol", "nameForURL": "football", "imageVersion": 1 },
+    { "id": 7, "name": "Béisbol", "nameForURL": "baseball", "imageVersion": 1 }
+  ],
+  "countries": [
+    { "id": 44, "name": "Inglaterra", "nameForURL": "england", "imageVersion": 1 },
+    { "id": 323, "name": "EE.UU.", "nameForURL": "usa", "imageVersion": 1 }
+  ],
+  "competitions": [
+    {
+      "id": 438,
+      "countryId": 44,
+      "sportId": 1,
+      "name": "Premier League",
+      "nameForURL": "premier-league",
+      "imageVersion": 2
+    },
+    {
+      "id": 439,
+      "countryId": 323,
+      "sportId": 7,
+      "name": "MLB",
+      "nameForURL": "mlb",
+      "imageVersion": 2
+    }
+  ],
+  "games": [
+    {
+      "id": 4620228,
+      "sportId": 1,
+      "competitionId": 438,
+      "competitionDisplayName": "Premier League",
+      "startTime": "2026-09-14T15:00:00+01:00",
+      "statusGroup": 2,
+      "statusText": "Próximo",
+      "shortStatusText": "",
+      "winner": 0,
+      "homeCompetitor": {
+        "id": 7421,
+        "name": "Arsenal",
+        "score": -1,
+        "color": "#EF0107",
+        "awayColor": "#FFFFFF",
+        "imageVersion": 4
+      },
+      "awayCompetitor": {
+        "id": 7422,
+        "name": "Chelsea",
+        "score": -1,
+        "color": "#034694",
+        "awayColor": "#FFFFFF",
+        "imageVersion": 2
+      }
+    },
+    {
+      "id": 4620229,
+      "sportId": 7,
+      "competitionId": 439,
+      "competitionDisplayName": "MLB",
+      "startTime": "2026-09-14T23:20:00-06:00",
+      "statusGroup": 3,
+      "statusText": "6ta Entrada",
+      "shortStatusText": "6",
+      "winner": 2,
+      "homeCompetitor": {
+        "id": 7430,
+        "name": "San Francisco Giants",
+        "score": 4,
+        "color": "#FD5A1E",
+        "awayColor": "#27251F",
+        "imageVersion": 4
+      },
+      "awayCompetitor": {
+        "id": 7431,
+        "name": "San Diego Padres",
+        "score": 6,
+        "color": "#2F241D",
+        "awayColor": "#FFC425",
+        "imageVersion": 1
+      }
+    },
+    {
+      "id": 4620230,
+      "sportId": 1,
+      "competitionId": 438,
+      "competitionDisplayName": "Premier League",
+      "startTime": "2026-09-14T17:30:00+01:00",
+      "statusGroup": 3,
+      "statusText": "23'",
+      "shortStatusText": "23",
+      "winner": 0,
+      "homeCompetitor": {
+        "id": 7432,
+        "name": "Liverpool",
+        "score": -1,
+        "color": "#C8102E",
+        "awayColor": "#00B2A9",
+        "imageVersion": 3
+      },
+      "awayCompetitor": {
+        "id": 7433,
+        "name": "Manchester City",
+        "score": -1,
+        "color": "#6CABDD",
+        "awayColor": "#1C2C5B",
+        "imageVersion": 5
+      }
+    }
+  ]
+}
