@@ -41,15 +41,21 @@ func newNotifTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// newNoAuthRouter builds a router with the user routes mounted but
-// no auth middleware. Authorization is the responsibility of
-// whatever middleware is plugged in at wire-up; for the unit
-// test we exercise the handler in isolation.
-func newNoAuthRouter(db *gorm.DB) *gin.Engine {
+// newCallerRouter builds a router with the user routes mounted and a
+// stub standing in for the auth middleware. The real middleware
+// resolves the caller from the bearer token; the handlers read that
+// identity from the gin context key "userID" (see callerUserID), so
+// the stub has to set the same key — without it every request is
+// rejected as unauthorized before reaching the logic under test.
+func newCallerRouter(db *gorm.DB, callerID uint) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	userRepo := NewRepository(db)
 	h := &Handler{repo: userRepo}
+	r.Use(func(c *gin.Context) {
+		c.Set("userID", callerID)
+		c.Next()
+	})
 	r.PUT("/api/admin/v1/users/:id/notifications", h.handleSetNotificationsEnabled)
 	r.GET("/api/admin/v1/users/:id", h.handleGetUser)
 	return r
@@ -57,7 +63,12 @@ func newNoAuthRouter(db *gorm.DB) *gin.Engine {
 
 func seedUserForHandlerTest(t *testing.T, db *gorm.DB) uint {
 	t.Helper()
-	u := &User{Email: fmt.Sprintf("u-%d@x.com", time.Now().UnixNano()), Password: "x", Role: RoleUser}
+	return seedUserWithRoleForHandlerTest(t, db, RoleUser)
+}
+
+func seedUserWithRoleForHandlerTest(t *testing.T, db *gorm.DB, role string) uint {
+	t.Helper()
+	u := &User{Email: fmt.Sprintf("u-%d@x.com", time.Now().UnixNano()), Password: "x", Role: role}
 	if err := db.Create(u).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -70,7 +81,7 @@ func seedUserForHandlerTest(t *testing.T, db *gorm.DB) uint {
 func TestSetNotificationsEnabled_EnableStampsTimestamp(t *testing.T) {
 	db := newNotifTestDB(t)
 	uid := seedUserForHandlerTest(t, db)
-	router := newNoAuthRouter(db)
+	router := newCallerRouter(db, uid)
 
 	body, err := proto.Marshal(&pb.SetNotificationsEnabledRequest{Enabled: true})
 	if err != nil {
@@ -115,7 +126,7 @@ func TestSetNotificationsEnabled_EnableStampsTimestamp(t *testing.T) {
 func TestSetNotificationsEnabled_DisableLeavesTimestamp(t *testing.T) {
 	db := newNotifTestDB(t)
 	uid := seedUserForHandlerTest(t, db)
-	router := newNoAuthRouter(db)
+	router := newCallerRouter(db, uid)
 
 	// Enable first.
 	enableBody, _ := proto.Marshal(&pb.SetNotificationsEnabledRequest{Enabled: true})
@@ -164,9 +175,12 @@ func TestSetNotificationsEnabled_DisableLeavesTimestamp(t *testing.T) {
 
 // TestSetNotificationsEnabled_UnknownUserIs404 covers the not-found
 // path: PUT to a user id that does not exist returns 404, not 500.
+// The caller is an admin, because a non-admin acting on another
+// user's id is rejected with 403 before the lookup ever runs.
 func TestSetNotificationsEnabled_UnknownUserIs404(t *testing.T) {
 	db := newNotifTestDB(t)
-	router := newNoAuthRouter(db)
+	adminID := seedUserWithRoleForHandlerTest(t, db, RoleAdmin)
+	router := newCallerRouter(db, adminID)
 
 	body, _ := proto.Marshal(&pb.SetNotificationsEnabledRequest{Enabled: true})
 	req := httptest.NewRequest(http.MethodPut,
