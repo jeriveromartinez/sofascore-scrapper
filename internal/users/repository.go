@@ -3,8 +3,10 @@ package users
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -82,14 +84,40 @@ func (r *Repository) Create(ctx context.Context, email, password string) (*User,
 // RowsAffected==1 means the new account was promoted; 0 means
 // someone else already grabbed the bootstrap slot and the caller
 // should leave role at the default.
+//
+// On InnoDB the NOT EXISTS scan takes shared locks on the rows other
+// in-flight registrations just inserted, so concurrent registrations
+// on a fresh install deadlock and all but one are rolled back. Those
+// transactions changed nothing and are replayed.
 func (r *Repository) CreateAndMaybeBootstrapAdmin(ctx context.Context, email, password string) (*User, bool, error) {
 	hash, err := hashPassword(password)
 	if err != nil {
 		return nil, false, err
 	}
-	user := &User{Email: NormalizeEmail(email), Password: string(hash)}
+	for attempt := 1; ; attempt++ {
+		user, promoted, err := r.createAndMaybePromote(ctx, NormalizeEmail(email), hash)
+		if err == nil {
+			return user, promoted, nil
+		}
+		if !isDeadlock(err) || attempt == maxBootstrapAttempts {
+			return nil, false, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		case <-time.After(time.Duration(rand.IntN(10*attempt)+1) * time.Millisecond):
+		}
+	}
+}
+
+// maxBootstrapAttempts bounds the deadlock replays in
+// CreateAndMaybeBootstrapAdmin.
+const maxBootstrapAttempts = 10
+
+func (r *Repository) createAndMaybePromote(ctx context.Context, email, hash string) (*User, bool, error) {
+	user := &User{Email: email, Password: hash}
 	promoted := false
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(user).Error; err != nil {
 			return err
 		}
@@ -110,6 +138,13 @@ func (r *Repository) CreateAndMaybeBootstrapAdmin(ctx context.Context, email, pa
 		return nil, false, err
 	}
 	return user, promoted, nil
+}
+
+const mysqlErrDeadlock = 1213
+
+func isDeadlock(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == mysqlErrDeadlock
 }
 
 // UpdatePassword overwrites the stored bcrypt hash for a user. It is

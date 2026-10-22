@@ -35,7 +35,7 @@ func (h *GlobalConfigHandler) RegisterRoutes(group *gin.RouterGroup, deps Global
 func (h *GlobalConfigHandler) handleGet(c *gin.Context) {
 	configs, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list global tournament config failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.GlobalTournamentConfigList{Configs: GlobalConfigsToProto(configs)})
@@ -55,12 +55,10 @@ func (h *GlobalConfigHandler) handleAdd(c *gin.Context) {
 
 	configs, err := h.repo.Set(c.Request.Context(), ids)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "set global tournament config failed", err)
 		return
 	}
-	if h.onChange != nil {
-		_ = h.onChange(c.Request.Context())
-	}
+	notifyChange(c, h.onChange)
 	server.RespondProto(c, http.StatusCreated, &pb.GlobalTournamentConfigList{Configs: GlobalConfigPtrsToProto(configs)})
 }
 
@@ -72,11 +70,9 @@ func (h *GlobalConfigHandler) handleRemove(c *gin.Context) {
 	}
 
 	if err := h.repo.Remove(c.Request.Context(), tournamentID); err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "remove global tournament config failed", err)
 		return
 	}
-	if h.onChange != nil {
-		_ = h.onChange(c.Request.Context())
-	}
+	notifyChange(c, h.onChange)
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament removed from global config"})
 }

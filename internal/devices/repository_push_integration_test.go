@@ -3,6 +3,7 @@
 package devices
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sync/atomic"
@@ -81,7 +82,7 @@ func TestRegisterDerivesDomainFromPackage(t *testing.T) {
 	seedApkDomain(t, db, "com.example.app", "iptv://example.com", "example.com")
 	repo := NewRepository(db)
 
-	device, err := repo.Register(nil, "tok-1", "android", "Test Box", "1.0", "com.example.app", "America/Mexico_City")
+	device, err := repo.Register(context.Background(), nil, "tok-1", "android", "Test Box", "1.0", "com.example.app", "America/Mexico_City")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestRegisterPersistsTimezone(t *testing.T) {
 	seedApkDomain(t, db, "com.example.app", "iptv://example.com", "example.com")
 	repo := NewRepository(db)
 
-	device, err := repo.Register(nil, "tok-tz-1", "android", "Box", "1.0", "com.example.app", "America/Mexico_City")
+	device, err := repo.Register(context.Background(), nil, "tok-tz-1", "android", "Box", "1.0", "com.example.app", "America/Mexico_City")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestRegisterEmptyTimezoneStoresEmpty(t *testing.T) {
 	seedApkDomain(t, db, "com.example.app", "iptv://example.com", "example.com")
 	repo := NewRepository(db)
 
-	device, err := repo.Register(nil, "tok-tz-2", "android", "Box", "1.0", "com.example.app", "")
+	device, err := repo.Register(context.Background(), nil, "tok-tz-2", "android", "Box", "1.0", "com.example.app", "")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestRegisterReusesRowAndKeepsTimezone(t *testing.T) {
 	seedApkDomain(t, db, "com.example.app", "iptv://example.com", "example.com")
 	repo := NewRepository(db)
 
-	first, err := repo.Register(nil, "tok-tz-3", "android", "Box", "1.0", "com.example.app", "America/Bogota")
+	first, err := repo.Register(context.Background(), nil, "tok-tz-3", "android", "Box", "1.0", "com.example.app", "America/Bogota")
 	if err != nil {
 		t.Fatalf("first register: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestRegisterReusesRowAndKeepsTimezone(t *testing.T) {
 		t.Fatalf("first.Timezone = %q, want %q", first.Timezone, "America/Bogota")
 	}
 
-	second, err := repo.Register(nil, "tok-tz-3", "android", "Box", "1.0", "com.example.app", "")
+	second, err := repo.Register(context.Background(), nil, "tok-tz-3", "android", "Box", "1.0", "com.example.app", "")
 	if err != nil {
 		t.Fatalf("second register: %v", err)
 	}
@@ -179,10 +180,10 @@ func TestRegisterUpdatesTimezoneWhenProvided(t *testing.T) {
 	seedApkDomain(t, db, "com.example.app", "iptv://example.com", "example.com")
 	repo := NewRepository(db)
 
-	if _, err := repo.Register(nil, "tok-tz-4", "android", "Box", "1.0", "com.example.app", "America/Bogota"); err != nil {
+	if _, err := repo.Register(context.Background(), nil, "tok-tz-4", "android", "Box", "1.0", "com.example.app", "America/Bogota"); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
-	second, err := repo.Register(nil, "tok-tz-4", "android", "Box", "1.0", "com.example.app", "Europe/Madrid")
+	second, err := repo.Register(context.Background(), nil, "tok-tz-4", "android", "Box", "1.0", "com.example.app", "Europe/Madrid")
 	if err != nil {
 		t.Fatalf("second register: %v", err)
 	}
@@ -199,7 +200,7 @@ func TestRegisterUpdatesLastSeen(t *testing.T) {
 	repo := NewRepository(db)
 
 	before := time.Now().Unix()
-	device, err := repo.Register(nil, "tok-5", "android", "Box", "1.0", "com.example.app", "")
+	device, err := repo.Register(context.Background(), nil, "tok-5", "android", "Box", "1.0", "com.example.app", "")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}

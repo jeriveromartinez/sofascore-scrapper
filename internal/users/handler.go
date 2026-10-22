@@ -2,6 +2,7 @@ package users
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -66,7 +67,7 @@ func (h *Handler) handleGetUsersPage(c *gin.Context) {
 
 	users, hasMore, err := h.repo.ListPage(c.Request.Context(), email, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list users page failed", err)
 		return
 	}
 
@@ -92,7 +93,7 @@ func (h *Handler) handleGetUsersPage(c *gin.Context) {
 func (h *Handler) handleGetUsers(c *gin.Context) {
 	users, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list users failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.UserList{Users: UsersToProto(users)})
@@ -225,7 +226,7 @@ func (h *Handler) handleDelete(c *gin.Context) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
 			return
 		}
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "delete user failed", err)
 		return
 	}
 
@@ -258,7 +259,7 @@ func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 	if callerID != id {
 		caller, err := h.repo.GetByID(c.Request.Context(), callerID)
 		if err != nil {
-			server.RespondError(c, http.StatusInternalServerError, err.Error())
+			respondInternalError(c, "load caller failed", err)
 			return
 		}
 		if caller == nil || !caller.IsAdmin() {
@@ -279,7 +280,7 @@ func (h *Handler) handleSetNotificationsEnabled(c *gin.Context) {
 			server.RespondError(c, http.StatusNotFound, "user not found")
 			return
 		}
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "set notifications failed", err)
 		return
 	}
 	if user == nil {
@@ -301,4 +302,11 @@ func callerUserID(c *gin.Context) (uint, bool) {
 	}
 	id, ok := v.(uint)
 	return id, ok
+}
+
+// respondInternalError logs the cause server-side and keeps driver and
+// schema details out of the response body.
+func respondInternalError(c *gin.Context, msg string, err error) {
+	slog.ErrorContext(c.Request.Context(), msg, slog.String("error", err.Error()))
+	server.RespondError(c, http.StatusInternalServerError, "internal server error")
 }

@@ -1,6 +1,8 @@
 package tournaments
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -102,7 +104,7 @@ func (h *Handler) handleGetTournamentsPage(c *gin.Context) {
 
 	tournaments, hasMore, err := h.repo.ListPage(c.Request.Context(), slug, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list tournaments page failed", err)
 		return
 	}
 
@@ -126,9 +128,9 @@ func (h *Handler) handleGetTournamentsPage(c *gin.Context) {
 }
 
 func (h *Handler) handleGetTournaments(c *gin.Context) {
-	tournaments, err := h.repo.GetAll()
+	tournaments, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list tournaments failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.TournamentList{Tournaments: TournamentsToProto(tournaments)})
@@ -141,7 +143,7 @@ func (h *Handler) handleGetTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.GetByID(id)
+	tournament, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		server.RespondError(c, http.StatusNotFound, "tournament not found")
 		return
@@ -162,9 +164,9 @@ func (h *Handler) handleCreateTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.Create(req.Name, slug)
+	tournament, err := h.repo.Create(c.Request.Context(), req.Name, slug)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "create tournament failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusCreated, TournamentToProto(*tournament))
@@ -189,9 +191,9 @@ func (h *Handler) handleUpdateTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.Update(id, req.Name, slug)
+	tournament, err := h.repo.Update(c.Request.Context(), id, req.Name, slug)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "update tournament failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, TournamentToProto(*tournament))
@@ -204,9 +206,27 @@ func (h *Handler) handleDeleteTournament(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Delete(id); err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
+		respondInternalError(c, "delete tournament failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament deleted"})
+}
+
+// respondInternalError logs the cause server-side and keeps driver and
+// schema details out of the response body.
+func respondInternalError(c *gin.Context, msg string, err error) {
+	slog.ErrorContext(c.Request.Context(), msg, slog.String("error", err.Error()))
+	server.RespondError(c, http.StatusInternalServerError, "internal server error")
+}
+
+// notifyChange runs the post-write hook. The write is already committed,
+// so a hook failure is logged instead of failing the request.
+func notifyChange(c *gin.Context, onChange func(context.Context) error) {
+	if onChange == nil {
+		return
+	}
+	if err := onChange(c.Request.Context()); err != nil {
+		slog.ErrorContext(c.Request.Context(), "tournament change hook failed", slog.String("error", err.Error()))
+	}
 }

@@ -17,9 +17,9 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) GetAll() ([]Tournament, error) {
+func (r *Repository) GetAll(ctx context.Context) ([]Tournament, error) {
 	var tournaments []Tournament
-	result := r.db.Order("slug ASC").Find(&tournaments)
+	result := r.db.WithContext(ctx).Order("slug ASC").Find(&tournaments)
 	return tournaments, result.Error
 }
 
@@ -40,9 +40,9 @@ func (r *Repository) ListPage(ctx context.Context, slug string, id uint, limit i
 	return rows, hasMore, nil
 }
 
-func (r *Repository) GetByID(id uint) (*Tournament, error) {
+func (r *Repository) GetByID(ctx context.Context, id uint) (*Tournament, error) {
 	var tournament Tournament
-	result := r.db.First(&tournament, id)
+	result := r.db.WithContext(ctx).First(&tournament, id)
 	return &tournament, result.Error
 }
 
@@ -56,14 +56,14 @@ const maxIDAllocationAttempts = 5
 // The primary key is allocated from the band reserved for admin rows
 // (see model.go) instead of the table's auto-increment counter, so an
 // admin tournament can never collide with an upstream league row.
-func (r *Repository) Create(name, slug string) (*Tournament, error) {
+func (r *Repository) Create(ctx context.Context, name, slug string) (*Tournament, error) {
 	for range maxIDAllocationAttempts {
-		id, err := r.nextAdminTournamentID()
+		id, err := r.nextAdminTournamentID(ctx)
 		if err != nil {
 			return nil, err
 		}
 		tournament := &Tournament{Model: gorm.Model{ID: id}, Name: name, Slug: slug}
-		result := r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(tournament)
+		result := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(tournament)
 		if result.Error != nil {
 			return nil, result.Error
 		}
@@ -80,9 +80,9 @@ func (r *Repository) Create(name, slug string) (*Tournament, error) {
 // The lookup is unscoped: a soft-deleted tournament still occupies its
 // primary key, so counting only the live rows would hand the same id
 // out again and the insert would collide with the deleted row.
-func (r *Repository) nextAdminTournamentID() (uint, error) {
+func (r *Repository) nextAdminTournamentID(ctx context.Context) (uint, error) {
 	var maxID sql.NullInt64
-	row := r.db.Unscoped().Model(&Tournament{}).
+	row := r.db.WithContext(ctx).Unscoped().Model(&Tournament{}).
 		Where("id >= ? AND id < ?", AdminTournamentIDBase, AdminTournamentIDCeiling).
 		Select("MAX(id)").
 		Row()
@@ -99,17 +99,17 @@ func (r *Repository) nextAdminTournamentID() (uint, error) {
 	return next, nil
 }
 
-func (r *Repository) Update(id uint, name, slug string) (*Tournament, error) {
+func (r *Repository) Update(ctx context.Context, id uint, name, slug string) (*Tournament, error) {
 	var tournament Tournament
-	if err := r.db.First(&tournament, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&tournament, id).Error; err != nil {
 		return nil, err
 	}
 	tournament.Name = name
 	tournament.Slug = slug
-	result := r.db.Save(&tournament)
+	result := r.db.WithContext(ctx).Save(&tournament)
 	return &tournament, result.Error
 }
 
-func (r *Repository) Delete(id uint) error {
-	return r.db.Delete(&Tournament{}, id).Error
+func (r *Repository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&Tournament{}, id).Error
 }
