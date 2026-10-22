@@ -114,7 +114,7 @@ func (c *downloadCounter) processPending(ctx context.Context, batchID, pendingKe
 		return fmt.Errorf("hgetall pending: %w", err)
 	}
 
-	err = c.db.Transaction(func(tx *gorm.DB) error {
+	err = c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&downloadCounterFlush{BatchID: batchID})
 		if result.Error != nil {
 			return fmt.Errorf("insert batch %s: %w", batchID, result.Error)
