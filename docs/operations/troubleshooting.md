@@ -99,7 +99,9 @@ returns `> 0`.
 *Fix options:*
 
 - **Log in as the existing admin** and use `/#/users` to invite
-  additional operators.
+  additional operators. On a `.deb` install the seeded `admin@local`
+  password is in `/etc/iptv/env`:
+  `sudo grep DEFAULT_ADMIN_PASSWORD /etc/iptv/env`.
 - **Reset to a fresh database** if you are sure no production users
   exist: `sudo systemctl stop iptv.service && sudo mariadb -uroot -e "DROP DATABASE iptv"`, then restart the service. The
   postinst does not run on a manual DB drop; you recreate the schema

@@ -190,10 +190,13 @@ default administrator:
 - **Role:** `admin`
 
 > **Set `DEFAULT_ADMIN_PASSWORD` before the first boot** if you want a
-> known credential — the seeder uses that value as-is. When the
-> variable is unset the generated password is not logged, so the seeded
-> account cannot be logged into; the way to register the first operator
-> is the bootstrap-invitation flow below.
+> known credential — the seeder uses that value as-is. The `.deb`
+> package does this for you: `postinst` writes a random
+> `DEFAULT_ADMIN_PASSWORD` into a newly created `/etc/iptv/env`
+> (read it with `sudo grep DEFAULT_ADMIN_PASSWORD /etc/iptv/env`). When
+> the variable is unset the generated password is not logged, so the
+> seeded account cannot be logged into; the way to register the first
+> operator is then the bootstrap-invitation flow below.
 
 To pre-apply schema and exit (no server), on a host where the binary
 lives at `/opt/iptv/iptv`:
