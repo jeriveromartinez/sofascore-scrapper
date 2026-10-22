@@ -2,7 +2,6 @@ package push
 
 import (
 	"errors"
-	"log/slog"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/prometheus/client_golang/prometheus"
@@ -213,9 +212,3 @@ func (m *Metrics) IncFailedError(err error) {
 	}
 	m.IncFailed(FromRealtimeFailureReason(err))
 }
-
-// logOnce is a tiny helper for the metrics package to emit a
-// debug log when an unexpected label value is encountered, so
-// the dashboard can flag it. Currently unused but kept as a
-// hook for the dashboard team's future request.
-var _ = slog.Default
