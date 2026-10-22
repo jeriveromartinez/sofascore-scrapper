@@ -11,6 +11,7 @@
           {{ s.name }} ({{ s.country }}) - {{ s.source_league_id }}
         </li>
       </ul>
+      <div v-if="searchError" class="alert alert-danger" role="alert">{{ searchError }}</div>
 
       <label>Name</label>
       <input v-model="form.name" />
@@ -63,6 +64,7 @@ const store = useScraperLeaguesStore()
 const search = ref('')
 const suggestions = ref<Array<{ source: string; source_league_id: string; name: string; country: string; sport: string }>>([])
 const error = ref('')
+const searchError = ref('')
 const saving = ref(false)
 
 const form = reactive({
@@ -104,6 +106,7 @@ watch(search, (q) => {
 async function runSearch(q: string): Promise<void> {
   if (q.length < 2) {
     suggestions.value = []
+    searchError.value = ''
     return
   }
   // F3 (PR #123): the backend FotMob source returns `nil` when nothing
@@ -113,11 +116,19 @@ async function runSearch(q: string): Promise<void> {
   // throw. The store is out of scope for this PR, so the defensive
   // normalization lives at the call site.
   const seq = ++searchSeq
-  const result = await store.searchLeagues(q)
-  // A newer search was started while this one was in flight: its result
-  // is the one the user is waiting for.
-  if (seq !== searchSeq) return
-  suggestions.value = Array.isArray(result) ? result : []
+  try {
+    const result = await store.searchLeagues(q)
+    // A newer search was started while this one was in flight: its result
+    // is the one the user is waiting for.
+    if (seq !== searchSeq) return
+    searchError.value = ''
+    suggestions.value = Array.isArray(result) ? result : []
+  } catch (err) {
+    if (seq !== searchSeq) return
+    suggestions.value = []
+    searchError.value =
+      err instanceof Error && err.message ? err.message : 'No se pudo buscar ligas'
+  }
 }
 
 onBeforeUnmount(() => {

@@ -209,4 +209,20 @@ describe('CreateOrEdit', () => {
     expect(wrapper.text()).toContain('duplicate league')
     expect(wrapper.emitted('saved')).toBeFalsy()
   })
+
+  it('shows the search error instead of leaving an unhandled rejection', async () => {
+    const store = useScraperLeaguesStore()
+    const svc = new ScraperLeagueService() as any
+    svc.search.mockRejectedValue(new Error('search down'))
+    store.setService(svc)
+
+    const wrapper = mount(CreateOrEdit, { props: { item: null } })
+    await wrapper.find('input.search').setValue('premier')
+    await flushPromises()
+    await new Promise(r => setTimeout(r, 300))  // debounce
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('search down')
+    expect(wrapper.findAll('.suggestion')).toHaveLength(0)
+  })
 })
