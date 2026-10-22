@@ -3,6 +3,8 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,7 +44,7 @@ func SlogLogger() gin.HandlerFunc {
 			slog.String("client_ip", c.ClientIP()),
 		}
 		if rawQuery != "" {
-			attrs = append(attrs, slog.String("query", rawQuery))
+			attrs = append(attrs, slog.String("query", redactQuery(rawQuery)))
 		}
 		if len(c.Errors) > 0 {
 			attrs = append(attrs, slog.String("errors", c.Errors.String()))
@@ -50,4 +52,35 @@ func SlogLogger() gin.HandlerFunc {
 
 		logger.LogAttrs(c.Request.Context(), slog.LevelInfo, "request completed", attrs...)
 	}
+}
+
+// sensitiveQueryParams lists the query string parameters whose value
+// must never reach the logs.
+var sensitiveQueryParams = map[string]bool{
+	"token":         true,
+	"access_token":  true,
+	"refresh_token": true,
+	"password":      true,
+	"secret":        true,
+	"api_key":       true,
+	"apikey":        true,
+	"code":          true,
+	"authorization": true,
+}
+
+// redactQuery replaces the value of every sensitive query parameter
+// with a placeholder. The WebSocket upgrade accepts the device
+// credential in ?token=, so the raw query string is a credential leak
+// in the access log.
+func redactQuery(raw string) string {
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "<unparseable>"
+	}
+	for key := range values {
+		if sensitiveQueryParams[strings.ToLower(key)] {
+			values.Set(key, "REDACTED")
+		}
+	}
+	return values.Encode()
 }
