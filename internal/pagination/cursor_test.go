@@ -63,13 +63,8 @@ func TestDecodeMalformedJSON(t *testing.T) {
 }
 
 func TestDecodeWrongVersion(t *testing.T) {
-	encoded, err := Encode("value")
-	if err != nil {
-		t.Fatalf("Encode failed: %v", err)
-	}
-
-	encoded = "eyJ2Ijo5OSwia"
-	_, err = Decode(encoded, 1)
+	encoded := "eyJ2Ijo5OSwia"
+	_, err := Decode(encoded, 1)
 	if err == nil {
 		t.Fatal("expected error for wrong version")
 	}
