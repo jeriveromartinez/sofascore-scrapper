@@ -87,8 +87,10 @@ func TeamLogoLocalPath(teamID int64) string {
 	return filepath.Join(StoragePath(), "teams", fmt.Sprintf("%d", teamID))
 }
 
+const teamLogoAPIPrefix = "/teams/logo/"
+
 func TeamLogoAPIPath(teamID int64) string {
-	return fmt.Sprintf("/teams/logo/%d", teamID)
+	return fmt.Sprintf("%s%d", teamLogoAPIPrefix, teamID)
 }
 
 // Source-ID namespaces in the shared `teams` table. IDs are prefixed

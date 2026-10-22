@@ -18,25 +18,25 @@ func NewAuthRepository(db *gorm.DB) *AuthRepository {
 	return &AuthRepository{db: db}
 }
 
-func (r *AuthRepository) SaveRefreshToken(userID uint, tokenID string, expiresAt time.Time) error {
+func (r *AuthRepository) SaveRefreshToken(ctx context.Context, userID uint, tokenID string, expiresAt time.Time) error {
 	token := &RefreshToken{
 		UserID:    userID,
 		TokenID:   tokenID,
 		ExpiresAt: expiresAt,
 	}
-	return r.db.Create(token).Error
+	return r.db.WithContext(ctx).Create(token).Error
 }
 
-func (r *AuthRepository) RevokeRefreshToken(userID uint, tokenID string) error {
+func (r *AuthRepository) RevokeRefreshToken(ctx context.Context, userID uint, tokenID string) error {
 	now := time.Now()
-	return r.db.Model(&RefreshToken{}).
+	return r.db.WithContext(ctx).Model(&RefreshToken{}).
 		Where("user_id = ? AND token_id = ? AND revoked_at IS NULL", userID, tokenID).
 		Update("revoked_at", &now).Error
 }
 
-func (r *AuthRepository) RevokeAllRefreshTokens(userID uint) error {
+func (r *AuthRepository) RevokeAllRefreshTokens(ctx context.Context, userID uint) error {
 	now := time.Now()
-	return r.db.Model(&RefreshToken{}).
+	return r.db.WithContext(ctx).Model(&RefreshToken{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
 		Update("revoked_at", &now).Error
 }

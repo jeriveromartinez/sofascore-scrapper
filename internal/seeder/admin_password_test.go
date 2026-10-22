@@ -89,3 +89,37 @@ func TestSeedDefaultAdmin_NeverUsesHardcodedPassword(t *testing.T) {
 		}
 	}
 }
+
+// TestSeedDefaultAdmin_ExistingAdminRowIsNotAnError reproduces the
+// first-boot race deterministically: the users count is zero (here
+// because the row is soft-deleted; on a multi-backend boot because a
+// sibling inserted it after this process counted) but admin@local
+// already holds the unique email. That used to fail with a duplicate
+// key error and stop the backend.
+func TestSeedDefaultAdmin_ExistingAdminRowIsNotAnError(t *testing.T) {
+	t.Setenv(DefaultAdminPasswordEnvVar, "operator-chosen-password")
+	db := newAdminSeedDB(t)
+	existing := users.User{Email: DefaultAdminEmail, Password: "existing-hash", Role: users.RoleAdmin}
+	if err := db.Create(&existing).Error; err != nil {
+		t.Fatalf("create existing admin: %v", err)
+	}
+	if err := db.Delete(&existing).Error; err != nil {
+		t.Fatalf("soft-delete existing admin: %v", err)
+	}
+	DefaultAdminPassword = ""
+
+	if err := SeedDefaultAdmin(context.Background(), db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var rows int64
+	if err := db.Unscoped().Model(&users.User{}).Where("email = ?", DefaultAdminEmail).Count(&rows).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("admin rows = %d, want 1", rows)
+	}
+	if DefaultAdminPassword != "" {
+		t.Error("DefaultAdminPassword is set although this call stored no password")
+	}
+}

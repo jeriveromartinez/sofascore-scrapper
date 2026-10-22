@@ -35,9 +35,6 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 		logger.Warn("scheduler: no aggregation repository available")
 	}
 
-	_ = gormDB
-	_ = agg
-
 	c := cron.New()
 
 	// Thread the parent ctx through every cron callback so SIGTERM
@@ -48,7 +45,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 	if agg != nil {
 		_, err := c.AddFunc("1 0 * * *", func() {
 			_ = runner.RunLocked(ctx, lockStatsDaily, ttlStatsDaily, func(jobCtx context.Context) error {
-				if err := agg.GenerateDaily(); err != nil {
+				if err := agg.GenerateDaily(jobCtx); err != nil {
 					logger.Error("failed to generate daily event stats", slog.String("error", err.Error()))
 					return err
 				}
@@ -61,7 +58,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 
 		_, err = c.AddFunc("10 0 1 * *", func() {
 			_ = runner.RunLocked(ctx, lockStatsMonthly, ttlStatsMonthly, func(jobCtx context.Context) error {
-				if err := agg.GenerateMonthly(); err != nil {
+				if err := agg.GenerateMonthly(jobCtx); err != nil {
 					logger.Error("failed to generate monthly event stats", slog.String("error", err.Error()))
 					return err
 				}

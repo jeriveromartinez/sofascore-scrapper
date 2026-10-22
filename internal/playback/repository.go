@@ -40,10 +40,10 @@ func (r *Repository) UpdateEnd(ctx context.Context, id uint, endedAt int64) erro
 	return r.db.WithContext(ctx).Model(&PlaybackLog{}).Where("id = ?", id).Update("ended_at", endedAt).Error
 }
 
-func (r *Repository) GetList(page, limit int) ([]*PlaybackLog, error) {
+func (r *Repository) GetList(ctx context.Context, page, limit int) ([]*PlaybackLog, error) {
 	offset := (page - 1) * limit
 	var logs []*PlaybackLog
-	result := r.db.Offset(offset).Limit(limit).Order("created_at DESC").Find(&logs)
+	result := r.db.WithContext(ctx).Offset(offset).Limit(limit).Order("created_at DESC").Find(&logs)
 	return logs, result.Error
 }
 

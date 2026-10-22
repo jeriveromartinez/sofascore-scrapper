@@ -1,6 +1,7 @@
 package apk
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,17 +232,17 @@ func TestUpdateURL_IptvUrlColumn(t *testing.T) {
 	db := setupTestDB(t)
 
 	repo := NewRepository(db)
-	apk, err := repo.Create("1.0.0", "test.apk", "/tmp/test.apk", "desc", "com.test.app", 1024, 1, 21, 31)
+	apk, err := repo.Create(context.Background(), "1.0.0", "test.apk", "/tmp/test.apk", "desc", "com.test.app", 1024, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
 	testURL := "http://test.example.com"
-	if err := repo.UpdateURL(apk.ID, testURL); err != nil {
+	if err := repo.UpdateURL(context.Background(), apk.ID, testURL); err != nil {
 		t.Fatalf("UpdateURL failed: %v", err)
 	}
 
-	updated, err := repo.GetByID(apk.ID)
+	updated, err := repo.GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -254,7 +255,7 @@ func TestUpdateURL_NotFound(t *testing.T) {
 	db := setupTestDB(t)
 
 	repo := NewRepository(db)
-	err := repo.UpdateURL(999999, "http://example.com")
+	err := repo.UpdateURL(context.Background(), 999999, "http://example.com")
 	if err == nil {
 		t.Fatal("UpdateURL for nonexistent ID should fail")
 	}
@@ -264,7 +265,7 @@ func TestUpdateURL_RowsAffectedZero(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewRepository(db)
 
-	err := repo.UpdateURL(0, "http://example.com")
+	err := repo.UpdateURL(context.Background(), 0, "http://example.com")
 	if err == nil {
 		t.Fatal("UpdateURL with id=0 should fail")
 	}

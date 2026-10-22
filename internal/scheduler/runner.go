@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 )
 
@@ -23,7 +24,7 @@ func NewRunner(locker redisplatform.Locker, logger *slog.Logger) *Runner {
 
 func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, job Job) error {
 	if r.locker == nil {
-		return job(ctx)
+		return runMeasured(ctx, name, job)
 	}
 
 	lease, acquired, err := r.locker.Acquire(ctx, name, ttl)
@@ -31,6 +32,7 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 		return fmt.Errorf("acquire lock %s: %w", name, err)
 	}
 	if !acquired {
+		observability.SchedulerLockContention.WithLabelValues(name).Inc()
 		return nil
 	}
 
@@ -69,7 +71,7 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		jobErr = job(jobCtx)
+		jobErr = runMeasured(jobCtx, name, job)
 		// The renewal goroutine only exits when jobCtx is cancelled,
 		// and jobCancel used to be deferred until after wg.Wait(),
 		// so the wait never returned and the lock was renewed
@@ -79,7 +81,7 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 
 	wg.Wait()
 
-	releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer releaseCancel()
 	if relErr := lease.Release(releaseCtx); relErr != nil && r.logger != nil {
 		r.logger.Warn("scheduler: lock release failed",
@@ -91,4 +93,12 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 		return fmt.Errorf("renew lock %s: %w", name, renewErr)
 	}
 	return jobErr
+}
+
+func runMeasured(ctx context.Context, name string, job Job) error {
+	start := time.Now()
+	err := job(ctx)
+	observability.SchedulerJobRuns.WithLabelValues(name).Inc()
+	observability.SchedulerJobDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
+	return err
 }

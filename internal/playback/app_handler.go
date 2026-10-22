@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -53,7 +54,8 @@ func (h *AppHandler) handleReportViewing(c *gin.Context) {
 
 	playbackLog, err := h.service.Start(c.Request.Context(), device, req.Content, startedAt)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

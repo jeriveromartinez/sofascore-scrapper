@@ -72,6 +72,11 @@ var DefaultSportSlugs = []string{
 // per-sport fan-out.
 const discoveryTimeout = 45 * time.Second
 
+// discoveryPersistTimeout bounds the EnsureLeague sweep over the
+// fetched catalog (one or two queries per row, ~2.7k rows). It is a
+// var only so tests can shrink it.
+var discoveryPersistTimeout = 2 * time.Minute
+
 // Discovery pulls the upstream 365scores competition catalog and
 // upserts every row into `scraper_leagues`. Idempotent: re-running
 // against the same catalog is a no-op (the unique key on
@@ -129,6 +134,9 @@ func DiscoverySports(
 		countries[c.ID] = c.Name
 	}
 
+	persistCtx, cancelPersist := context.WithTimeout(ctx, discoveryPersistTimeout)
+	defer cancelPersist()
+
 	for _, comp := range feed.Competitions {
 		// The API honours ?sports= but the response also carries the
 		// dictionaries it needed to build the rows, so filter again
@@ -157,8 +165,13 @@ func DiscoverySports(
 		// (possibly disabled by the operator). Trusting that bool
 		// saves two SELECT COUNT queries per league — ~5.4k queries
 		// per discovery sweep at the current 2.7k-league catalog size.
-		created, err := repo.EnsureLeague(ctx, ref.SourceLeagueId, ref)
+		created, err := repo.EnsureLeague(persistCtx, ref.SourceLeagueId, ref)
 		if err != nil {
+			// An expired or cancelled run must not be reported as a
+			// successful sweep with every remaining league skipped.
+			if ctxErr := persistCtx.Err(); ctxErr != nil {
+				return result, fmt.Errorf("catalog: discovery persist leagues: %w", ctxErr)
+			}
 			result.Skipped++
 			logger.WarnContext(ctx, "catalog: discovery skip league",
 				slog.String("source_league_id", ref.SourceLeagueId),

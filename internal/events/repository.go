@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -118,38 +118,51 @@ func NewRepositoryWithLogoScheduler(db *gorm.DB, scheduler TeamLogoScheduler) *R
 	return repository
 }
 
-func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
-	var teams []Team
-	if err := r.db.WithContext(ctx).Find(&teams).Error; err != nil {
-		return fmt.Errorf("load teams for logo reconciliation: %w", err)
-	}
+const reconcileTeamLogosBatchSize = 500
 
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, team := range teams {
-			localURL := TeamLogoAPIPath(team.TeamId)
-			if team.LogoUrl == localURL {
-				continue
-			}
-			if err := tx.Model(&Team{}).Where("team_id = ?", team.TeamId).Update("logo_url", localURL).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
+// teamLogoAPIPathSQL is the SQL equivalent of TeamLogoAPIPath for the
+// team_id column. sqlite has no CONCAT and MariaDB only treats || as
+// concatenation under PIPES_AS_CONCAT, so the expression is per dialect.
+func teamLogoAPIPathSQL(db *gorm.DB) clause.Expr {
+	if db.Dialector.Name() == "sqlite" {
+		return gorm.Expr("? || CAST(team_id AS TEXT)", teamLogoAPIPrefix)
+	}
+	return gorm.Expr("CONCAT(?, team_id)", teamLogoAPIPrefix)
+}
+
+func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
+	db := r.db.WithContext(ctx)
+	localURL := teamLogoAPIPathSQL(db)
+	if err := db.Model(&Team{}).
+		Where("logo_url IS NULL OR logo_url <> ?", localURL).
+		Update("logo_url", localURL).Error; err != nil {
 		return fmt.Errorf("normalize team logo URLs: %w", err)
 	}
 
-	for _, team := range teams {
-		if _, err := os.Stat(TeamLogoLocalPath(team.TeamId)); err == nil {
-			continue
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("inspect logo for team %d: %w", team.TeamId, err)
-		}
-		r.scheduleLogo(r.db, LogoJob{
-			TeamID:     team.TeamId,
-			TeamName:   team.Name,
-			PrimaryURL: TeamLogoSourceURL(team.TeamId),
-		})
+	var batch []Team
+	var inspectErr error
+	err := db.Select("id", "team_id", "name").
+		FindInBatches(&batch, reconcileTeamLogosBatchSize, func(_ *gorm.DB, _ int) error {
+			for _, team := range batch {
+				if _, err := os.Stat(TeamLogoLocalPath(team.TeamId)); err == nil {
+					continue
+				} else if !errors.Is(err, os.ErrNotExist) {
+					inspectErr = fmt.Errorf("inspect logo for team %d: %w", team.TeamId, err)
+					return inspectErr
+				}
+				r.scheduleLogo(r.db, LogoJob{
+					TeamID:     team.TeamId,
+					TeamName:   team.Name,
+					PrimaryURL: TeamLogoSourceURL(team.TeamId),
+				})
+			}
+			return nil
+		}).Error
+	if inspectErr != nil {
+		return inspectErr
+	}
+	if err != nil {
+		return fmt.Errorf("load teams for logo reconciliation: %w", err)
 	}
 	return nil
 }
@@ -285,7 +298,11 @@ func (r *Repository) DownloadAndPersistLogo(ctx context.Context, db *gorm.DB, jo
 	if r.logoLookup != nil && strings.TrimSpace(job.TeamName) != "" {
 		url, lookupErr := r.logoLookup.TeamLogoURL(ctx, job.TeamName)
 		if lookupErr != nil {
-			log.Printf("events: logo lookup for team %d (%q) failed: %v", job.TeamID, job.TeamName, lookupErr)
+			slog.Default().WarnContext(ctx, "events: logo lookup failed",
+				slog.Int64("team_id", job.TeamID),
+				slog.String("team_name", job.TeamName),
+				slog.String("err", lookupErr.Error()),
+			)
 		} else if url != "" && r.tryDownloadAndPersist(ctx, db, job.TeamID, url) {
 			return
 		}
@@ -293,7 +310,11 @@ func (r *Repository) DownloadAndPersistLogo(ctx context.Context, db *gorm.DB, jo
 	if r.tryDownloadAndPersist(ctx, db, job.TeamID, r.idSource(job.TeamID)) {
 		return
 	}
-	log.Printf("events: no logo source succeeded for team %d (name=%q, primary=%q)", job.TeamID, job.TeamName, job.PrimaryURL)
+	slog.Default().WarnContext(ctx, "events: no logo source succeeded",
+		slog.Int64("team_id", job.TeamID),
+		slog.String("team_name", job.TeamName),
+		slog.String("primary_url", job.PrimaryURL),
+	)
 }
 
 // tryDownloadAndPersist attempts one source URL: writes the image
@@ -306,7 +327,11 @@ func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, tea
 		return false
 	}
 	if _, err := DownloadTeamLogoWithContext(ctx, teamID, url); err != nil {
-		log.Printf("events: failed to download logo for team %d from %s: %v", teamID, url, err)
+		slog.Default().WarnContext(ctx, "events: failed to download logo",
+			slog.Int64("team_id", teamID),
+			slog.String("url", url),
+			slog.String("err", err.Error()),
+		)
 		return false
 	}
 	if ctx.Err() != nil {
@@ -320,7 +345,10 @@ func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, tea
 	}
 	apiPath := TeamLogoAPIPath(teamID)
 	if err := db.WithContext(ctx).Model(&Team{}).Where("team_id = ?", teamID).Update("logo_url", apiPath).Error; err != nil {
-		log.Printf("events: failed to update logo URL for team %d: %v", teamID, err)
+		slog.Default().WarnContext(ctx, "events: failed to update logo URL",
+			slog.Int64("team_id", teamID),
+			slog.String("err", err.Error()),
+		)
 	}
 	return true
 }
@@ -374,7 +402,11 @@ func truncateTournamentIDs(devID uint, ids []uint) []uint {
 	if len(ids) <= maxTournamentIDs {
 		return ids
 	}
-	log.Printf("events: device %d has %d tournament assignments, truncating to %d (cap to keep the IN-list query plan in index-scan range)", devID, len(ids), maxTournamentIDs)
+	slog.Default().Warn("events: truncating device tournament assignments to keep the IN-list query plan in index-scan range",
+		slog.Uint64("device_id", uint64(devID)),
+		slog.Int("assignments", len(ids)),
+		slog.Int("cap", maxTournamentIDs),
+	)
 	return ids[:maxTournamentIDs]
 }
 
@@ -453,9 +485,6 @@ func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event,
 	}
 
 	query := r.db.WithContext(ctx).
-		Joins("LEFT JOIN tournaments AS leagues ON leagues.id = events.league_id").
-		Joins("LEFT JOIN teams AS home_team_models ON home_team_models.team_id = events.home_team_id").
-		Joins("LEFT JOIN teams AS away_team_models ON away_team_models.team_id = events.away_team_id").
 		Order(order).
 		Preload("HomeTeamModel").
 		Preload("AwayTeamModel").
@@ -480,15 +509,22 @@ func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event,
 	if f.Status != "" {
 		query = query.Where("events.status_type = ?", f.Status)
 	}
+	// The soft-delete guard lives in the ON clause so the name filters
+	// agree with the Preloads, which never return deleted rows.
 	if f.LeagueName != "" {
-		query = query.Where("leagues.name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.LeagueName)+"%")
+		query = query.
+			Joins("LEFT JOIN tournaments AS leagues ON leagues.id = events.league_id AND leagues.deleted_at IS NULL").
+			Where("leagues.name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.LeagueName)+"%")
 	}
 	if f.TeamName != "" {
-		query = query.Where(
-			"(home_team_models.name LIKE ? ESCAPE '\\' OR away_team_models.name LIKE ? ESCAPE '\\')",
-			"%"+escapeLike(f.TeamName)+"%",
-			"%"+escapeLike(f.TeamName)+"%",
-		)
+		query = query.
+			Joins("LEFT JOIN teams AS home_team_models ON home_team_models.team_id = events.home_team_id AND home_team_models.deleted_at IS NULL").
+			Joins("LEFT JOIN teams AS away_team_models ON away_team_models.team_id = events.away_team_id AND away_team_models.deleted_at IS NULL").
+			Where(
+				"(home_team_models.name LIKE ? ESCAPE '\\' OR away_team_models.name LIKE ? ESCAPE '\\')",
+				"%"+escapeLike(f.TeamName)+"%",
+				"%"+escapeLike(f.TeamName)+"%",
+			)
 	}
 
 	var rows []Event

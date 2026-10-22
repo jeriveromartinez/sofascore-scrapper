@@ -112,25 +112,17 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 			return
 		}
 
-		conn := newConnection(uint64(dev.ID), userIDPtrToUint32(dev.UserID), 0, ws, cfg.AckHandler, func(conn *Connection, reason string) {
-			cfg.Hub.UnregisterConn(uint64(dev.ID), conn)
-			cfg.Logger.Info("realtime: connection closed",
-				slog.Uint64("device_id", uint64(dev.ID)),
-				slog.String("reason", reason))
-		}, cfg.Logger)
-		if dev.DomainID != nil {
-			conn.domainID = uint32(*dev.DomainID)
-		}
-
 		// Send the WsHello synchronously so the client knows the
 		// upgrade completed before its first read. If this write
 		// fails (network wedge, client tore down the socket right
 		// after the upgrade handshake, etc.) the connection is
 		// useless: register nothing, log the failure so it shows
-		// up in dashboards, and let the socket be garbage-collected
-		// by the underlying server. (Bug fix: B2 — previously the
+		// up in dashboards, and close the socket. (Bug fix: B2 — previously the
 		// error was discarded and a doomed connection was still
 		// registered, which silently stranded every subsequent push.)
+		// The Connection is only built once the hello is out: its ack
+		// worker exits on Close, so creating it earlier leaked one
+		// goroutine per failed handshake.
 		hello := &pbWsHello{
 			DeviceId:   uint64(dev.ID),
 			ServerTime: time.Now().Unix(),
@@ -150,6 +142,16 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 				slog.String("error", werr.Error()))
 			_ = ws.Close()
 			return
+		}
+
+		conn := newConnection(uint64(dev.ID), userIDPtrToUint32(dev.UserID), 0, ws, cfg.AckHandler, func(conn *Connection, reason string) {
+			cfg.Hub.UnregisterConn(uint64(dev.ID), conn)
+			cfg.Logger.Info("realtime: connection closed",
+				slog.Uint64("device_id", uint64(dev.ID)),
+				slog.String("reason", reason))
+		}, cfg.Logger)
+		if dev.DomainID != nil {
+			conn.domainID = uint32(*dev.DomainID)
 		}
 
 		cfg.Hub.Register(uint64(dev.ID), conn)

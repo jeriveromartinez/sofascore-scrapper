@@ -4,6 +4,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -102,7 +103,7 @@ func TestHandleLogout_WithMatchingRefreshHeader_RevokesOnlyThatToken(t *testing.
 		t.Fatalf("mint refresh: %v", err)
 	}
 	// Persist it so RevokeRefreshToken has a row to update.
-	if err := repo.SaveRefreshToken(7, tokenID, time.Now().Add(24*time.Hour)); err != nil {
+	if err := repo.SaveRefreshToken(context.Background(), 7, tokenID, time.Now().Add(24*time.Hour)); err != nil {
 		t.Fatalf("save refresh: %v", err)
 	}
 
@@ -175,7 +176,7 @@ func TestHandleLogout_RefreshHeaderFromDifferentUser_FallsThroughTo400(t *testin
 	if err != nil {
 		t.Fatalf("mint foreign: %v", err)
 	}
-	if err := repo.SaveRefreshToken(99, foreignID, time.Now().Add(24*time.Hour)); err != nil {
+	if err := repo.SaveRefreshToken(context.Background(), 99, foreignID, time.Now().Add(24*time.Hour)); err != nil {
 		t.Fatalf("save foreign: %v", err)
 	}
 

@@ -76,6 +76,7 @@ func TestReconcilePublications_InvalidUUIDAssemblingAlsoSafe(t *testing.T) {
 	if err := db.Create(&pub).Error; err != nil {
 		t.Fatal(err)
 	}
+	ageAssembling(t, db, pub.ID)
 
 	s := &UploadService{db: db, store: nil, chunkStore: nil}
 

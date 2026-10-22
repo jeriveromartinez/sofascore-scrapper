@@ -16,6 +16,9 @@ func New(ctx context.Context, cfg config.Redis) (*goredis.Client, error) {
 	options.DialTimeout = cfg.DialTimeout
 	options.ReadTimeout = cfg.ReadTimeout
 	options.WriteTimeout = cfg.WriteTimeout
+	// Without this go-redis swaps every caller ctx for context.Background(),
+	// so request cancellation and shutdown deadlines never reach Redis.
+	options.ContextTimeoutEnabled = true
 	client := goredis.NewClient(options)
 	if cfg.KeyPrefix != "" {
 		client.AddHook(keyPrefixHook{prefix: cfg.KeyPrefix})
