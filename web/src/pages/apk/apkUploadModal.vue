@@ -39,20 +39,28 @@ function openUploadModal(): void {
   upload.error = "";
   modal.open = true;
 
-  apkApiService.resumeSession().then((resumed) => {
-    if (resumed) {
-      upload.resuming = true;
-      upload.sessionResumed = true;
-      const done = resumed.status.chunksReceived;
-      const total = resumed.status.totalChunks;
-      upload.pendingChunks = total - done;
-      upload.progress = Math.round((done / total) * 90);
-      upload.uploadId = resumed.session.uploadId;
-      if (resumed.session.version) upload.version = resumed.session.version;
-      if (resumed.session.description)
-        upload.description = resumed.session.description;
-    }
-  });
+  apkApiService
+    .resumeSession()
+    .then((resumed) => {
+      if (resumed) {
+        upload.resuming = true;
+        upload.sessionResumed = true;
+        const done = resumed.status.chunksReceived;
+        const total = resumed.status.totalChunks;
+        upload.pendingChunks = total - done;
+        upload.progress = Math.round((done / total) * 90);
+        upload.uploadId = resumed.session.uploadId;
+        if (resumed.session.version) upload.version = resumed.session.version;
+        if (resumed.session.description)
+          upload.description = resumed.session.description;
+      }
+    })
+    .catch((error: unknown) => {
+      upload.error =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recuperar la subida pendiente";
+    });
 }
 
 function closeUploadModal(): void {
