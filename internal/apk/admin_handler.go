@@ -26,10 +26,16 @@ import (
 
 var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
-func randomSuffix() uint64 {
+// randRead is a seam so the failure of the random source can be
+// exercised in the tests.
+var randRead = rand.Read
+
+func randomSuffix() (uint64, error) {
 	var b [8]byte
-	_, _ = rand.Read(b[:])
-	return binary.LittleEndian.Uint64(b[:])
+	if _, err := randRead(b[:]); err != nil {
+		return 0, fmt.Errorf("read random bytes: %w", err)
+	}
+	return binary.LittleEndian.Uint64(b[:]), nil
 }
 
 type AdminHandlerDeps struct {
@@ -132,7 +138,12 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 		return
 	}
 
-	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", randomSuffix()))
+	suffix, err := randomSuffix()
+	if err != nil {
+		server.RespondError(c, http.StatusInternalServerError, "could not generate a temporary file name")
+		return
+	}
+	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", suffix))
 	if err := c.SaveUploadedFile(fileHeader, tmpPath); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "could not save file")
 		return
@@ -344,7 +355,12 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 		return
 	}
 
-	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", randomSuffix()))
+	suffix, err := randomSuffix()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not generate a temporary file name"})
+		return
+	}
+	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-tmp-%d.apk", suffix))
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]string{"error": "could not create temporary file"})

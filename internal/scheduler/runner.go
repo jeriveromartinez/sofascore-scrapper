@@ -95,6 +95,24 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 	return jobErr
 }
 
+// runScheduledJob runs a job under the named lease and reports a
+// failure through slog. The cron callbacks use it because RunLocked
+// reports lease failures (Redis down, lease lost) that the jobs
+// themselves cannot see.
+func runScheduledJob(ctx context.Context, runner *Runner, logger *slog.Logger, job, lock string, ttl time.Duration, fn Job) {
+	err := runner.RunLocked(ctx, lock, ttl, fn)
+	if err == nil {
+		return
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Error("scheduler: job failed",
+		slog.String("job", job),
+		slog.String("lock", lock),
+		slog.String("error", err.Error()))
+}
+
 func runMeasured(ctx context.Context, name string, job Job) error {
 	start := time.Now()
 	err := job(ctx)

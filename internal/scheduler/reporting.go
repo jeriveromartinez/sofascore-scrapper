@@ -44,12 +44,8 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 	// in-flight could stall shutdown by its full lock TTL.
 	if agg != nil {
 		_, err := c.AddFunc("1 0 * * *", func() {
-			_ = runner.RunLocked(ctx, lockStatsDaily, ttlStatsDaily, func(jobCtx context.Context) error {
-				if err := agg.GenerateDaily(jobCtx); err != nil {
-					logger.Error("failed to generate daily event stats", slog.String("error", err.Error()))
-					return err
-				}
-				return nil
+			runScheduledJob(ctx, runner, logger, "daily stats", lockStatsDaily, ttlStatsDaily, func(jobCtx context.Context) error {
+				return agg.GenerateDaily(jobCtx)
 			})
 		})
 		if err != nil {
@@ -57,12 +53,8 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 		}
 
 		_, err = c.AddFunc("10 0 1 * *", func() {
-			_ = runner.RunLocked(ctx, lockStatsMonthly, ttlStatsMonthly, func(jobCtx context.Context) error {
-				if err := agg.GenerateMonthly(jobCtx); err != nil {
-					logger.Error("failed to generate monthly event stats", slog.String("error", err.Error()))
-					return err
-				}
-				return nil
+			runScheduledJob(ctx, runner, logger, "monthly stats", lockStatsMonthly, ttlStatsMonthly, func(jobCtx context.Context) error {
+				return agg.GenerateMonthly(jobCtx)
 			})
 		})
 		if err != nil {
@@ -72,7 +64,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 
 	if cleanupJob != nil && redisClient != nil {
 		_, err := c.AddFunc("*/15 * * * *", func() {
-			_ = runner.RunLocked(ctx, lockUploadsCleanup, ttlUploadsCleanup, func(jobCtx context.Context) error {
+			runScheduledJob(ctx, runner, logger, "uploads cleanup", lockUploadsCleanup, ttlUploadsCleanup, func(jobCtx context.Context) error {
 				return cleanupJob.Run(jobCtx, redisClient)
 			})
 		})

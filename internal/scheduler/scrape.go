@@ -53,7 +53,7 @@ func startScrape(ctx context.Context, svc scraperService, runner *Runner, wg *sy
 	// happens to be in-flight can stall shutdown by the full lease TTL
 	// per backend instance.
 	if _, err := c.AddFunc(scrapeTodaySpec, func() {
-		_ = runner.RunLocked(ctx, lockScrapeToday, ttlScrapeToday, func(jobCtx context.Context) error {
+		runScheduledJob(ctx, runner, logger, "scrape today", lockScrapeToday, ttlScrapeToday, func(jobCtx context.Context) error {
 			svc.ScrapeToday(jobCtx, time.Now())
 			return nil
 		})
@@ -67,7 +67,7 @@ func startScrape(ctx context.Context, svc scraperService, runner *Runner, wg *sy
 	}
 
 	if _, err := c.AddFunc(scrapeFutureSpec, func() {
-		_ = runner.RunLocked(ctx, lockScrapeFuture, ttlScrapeFuture, func(jobCtx context.Context) error {
+		runScheduledJob(ctx, runner, logger, "scrape future", lockScrapeFuture, ttlScrapeFuture, func(jobCtx context.Context) error {
 			svc.ScrapeNext7Days(jobCtx)
 			return nil
 		})

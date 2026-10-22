@@ -34,7 +34,7 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 	out := &pb.PushMetricsAggregate{}
 
 	// Total counters (no time window).
-	var sent, delivered, notDelivered int64
+	var sent, delivered int64
 	if err := db.WithContext(ctx).Model(&DeliveryAttempt{}).
 		Joins("JOIN push_messages ON push_messages.id = delivery_attempts.push_message_id").
 		Where("push_messages.user_id = ?", userID).
@@ -52,7 +52,6 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 	if sent > 0 {
 		out.DeliveryRateTotal = float64(delivered) / float64(sent)
 	}
-	_ = notDelivered // available for a future "not_delivered_total" field
 
 	// Active schedules: count of is_active rows for the user.
 	var activeSchedules int64
