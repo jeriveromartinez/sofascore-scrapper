@@ -281,6 +281,13 @@ async function createSchedule(): Promise<void> {
     return;
   }
   if (
+    scheduleForm.scheduleType === PushScheduleType.PUSH_SCHEDULE_TYPE_ONE_SHOT &&
+    Number.isNaN(Date.parse(scheduleForm.runAt))
+  ) {
+    scheduleForm.error = "runAt is not a valid date";
+    return;
+  }
+  if (
     scheduleForm.scheduleType === PushScheduleType.PUSH_SCHEDULE_TYPE_RECURRING &&
     scheduleForm.cronExpr.trim() === ""
   ) {

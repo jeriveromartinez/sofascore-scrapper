@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { createPinia, setActivePinia } from "pinia";
 import { useAuthStore } from "../store/pinia/authStore";
 import pushes from "./pushes.vue";
+import { pushesApiService } from "../store/services";
 
 /**
  * pushes.vue pulls the user id from the auth store, drives four
@@ -292,6 +293,54 @@ describe("pushes.vue", () => {
     expect(setSpy).toHaveBeenCalledTimes(1);
     expect(setSpy.mock.calls[0]?.[0]).toBe(7);
     expect(setSpy.mock.calls[0]?.[1]).toEqual({ enabled: true });
+    wrapper.unmount();
+  });
+});
+
+describe("pushes.vue error recovery", () => {
+  type PushesVm = {
+    scheduleForm: {
+      domainIds: number[];
+      title: string;
+      body: string;
+      runAt: string;
+      loading: boolean;
+      error: string;
+    };
+    createSchedule: () => Promise<void>;
+  };
+
+  async function mountPushes() {
+    const router = buildRouter();
+    await router.push("/pushes");
+    await router.isReady();
+    const wrapper = mount(pushes, { global: { plugins: [router] } });
+    await flushPromises();
+    return wrapper;
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it("resets loading and reports an invalid one-shot runAt instead of throwing", async () => {
+    const wrapper = await mountPushes();
+    const vm = wrapper.vm as unknown as PushesVm;
+    Object.assign(vm.scheduleForm, {
+      domainIds: [1],
+      title: "t",
+      body: "b",
+      runAt: "not-a-date",
+    });
+
+    await expect(vm.createSchedule()).resolves.toBeUndefined();
+
+    expect(vm.scheduleForm.loading).toBe(false);
+    expect(vm.scheduleForm.error).not.toBe("");
+    expect(pushesApiService.createSchedule).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });
