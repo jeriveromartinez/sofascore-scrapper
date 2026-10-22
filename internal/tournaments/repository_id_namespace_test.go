@@ -2,18 +2,34 @@ package tournaments
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
+// tournamentsNamespaceDBCounter hands out the name of the in-memory
+// database each call gets. A shared-cache database survives until its last
+// connection closes, so the name has to be unique per call.
+var tournamentsNamespaceDBCounter atomic.Int64
+
 func newNamespaceTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:tournaments-namespace?mode=memory&cache=shared"), &gorm.Config{})
+	// The name is unique per call so a database left behind by an earlier
+	// run cannot be picked up again, and the pool is closed so the database
+	// does not outlive the test.
+	dsn := fmt.Sprintf("file:tournaments-namespace-%d?mode=memory&cache=shared", tournamentsNamespaceDBCounter.Add(1))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.Migrator().DropTable(&Tournament{}); err != nil {
 		t.Fatalf("drop table: %v", err)
 	}
@@ -21,6 +37,22 @@ func newNamespaceTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
+}
+
+// TestNewNamespaceTestDBUsesAFreshDatabasePerCall pins the hermeticity of the
+// in-memory database: a shared-cache database survives until its last
+// connection closes, so a second call must not attach to the database the
+// first one wrote to.
+func TestNewNamespaceTestDBUsesAFreshDatabasePerCall(t *testing.T) {
+	first := newNamespaceTestDB(t)
+	if err := first.Exec("CREATE TABLE marker (id INTEGER)").Error; err != nil {
+		t.Fatalf("create marker table: %v", err)
+	}
+
+	second := newNamespaceTestDB(t)
+	if second.Migrator().HasTable("marker") {
+		t.Fatal("the second call reused the database of the first one")
+	}
 }
 
 // TestRepository_Create_AllocatesIDOutsideUpstreamNamespaces is the

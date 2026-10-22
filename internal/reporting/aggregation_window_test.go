@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,13 +13,24 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// reportingWindowDBCounter hands out the name of the in-memory database
+// each call gets. A shared-cache database survives until its last connection
+// closes, so the name has to be unique per call.
+var reportingWindowDBCounter atomic.Int64
+
 func newWindowTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	dsn := fmt.Sprintf("file:reporting-window-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	dsn := fmt.Sprintf("file:reporting-window-%d?mode=memory&cache=shared", reportingWindowDBCounter.Add(1))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	// The pool is closed so the named database does not outlive the test.
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&playback.PlaybackLog{}, &ContentStat{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

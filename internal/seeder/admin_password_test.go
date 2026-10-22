@@ -2,6 +2,8 @@ package seeder
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -10,16 +12,50 @@ import (
 	"gorm.io/gorm"
 )
 
+// seedDBCounter hands out the name of the in-memory database each call
+// gets. A shared-cache database survives until its last connection closes,
+// so the name has to be unique per call.
+var seedDBCounter atomic.Int64
+
 func newAdminSeedDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:seed_"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	// The name is unique per call so a database left behind by an earlier
+	// run cannot be picked up again, and the pool is closed so the database
+	// does not outlive the test.
+	dsn := fmt.Sprintf("file:seed-%d?mode=memory&cache=shared", seedDBCounter.Add(1))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&users.User{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
 	return db
+}
+
+// TestNewAdminSeedDBUsesAFreshDatabasePerCall pins the hermeticity of the
+// in-memory database: a shared-cache database survives until its last
+// connection closes, so a second call must not attach to the database the
+// first one seeded.
+func TestNewAdminSeedDBUsesAFreshDatabasePerCall(t *testing.T) {
+	first := newAdminSeedDB(t)
+	if err := SeedDefaultAdmin(context.Background(), first); err != nil {
+		t.Fatalf("seed first database: %v", err)
+	}
+
+	second := newAdminSeedDB(t)
+	var count int64
+	if err := second.Model(&users.User{}).Count(&count).Error; err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("the second database holds %d users of the first one", count)
+	}
 }
 
 func seededAdmin(t *testing.T, db *gorm.DB) users.User {

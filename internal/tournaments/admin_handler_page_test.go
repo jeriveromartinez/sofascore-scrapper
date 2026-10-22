@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -19,6 +20,52 @@ import (
 // dependencies to the domain it covers.
 const scores365LeagueIDPrefix = 6_000_000_000
 
+// tournamentsPageDBCounter hands out the name of the in-memory database
+// each call gets. A shared-cache database survives until its last
+// connection closes, so the name has to be unique per call.
+var tournamentsPageDBCounter atomic.Int64
+
+// newPageTestDB opens an in-memory DB holding the tournaments table.
+func newPageTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	// The name is unique per call so a database left behind by an earlier
+	// run cannot be picked up again, and the pool is closed so the database
+	// does not outlive the test.
+	dsn := fmt.Sprintf("file:tournaments-page-%d?mode=memory&cache=shared", tournamentsPageDBCounter.Add(1))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.Migrator().DropTable(&Tournament{}); err != nil {
+		t.Fatalf("drop table: %v", err)
+	}
+	if err := db.AutoMigrate(&Tournament{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return db
+}
+
+// TestNewPageTestDBUsesAFreshDatabasePerCall pins the hermeticity of the
+// in-memory database: a shared-cache database survives until its last
+// connection closes, so a second call must not attach to the database the
+// first one wrote to.
+func TestNewPageTestDBUsesAFreshDatabasePerCall(t *testing.T) {
+	first := newPageTestDB(t)
+	if err := first.Exec("CREATE TABLE marker (id INTEGER)").Error; err != nil {
+		t.Fatalf("create marker table: %v", err)
+	}
+
+	second := newPageTestDB(t)
+	if second.Migrator().HasTable("marker") {
+		t.Fatal("the second call reused the database of the first one")
+	}
+}
+
 // newPageTestRouter builds a tournaments router backed by an in-memory
 // SQLite DB holding n tournaments whose primary keys sit in the
 // 365scores league namespace (6e9+), i.e. above math.MaxUint32.
@@ -26,16 +73,7 @@ func newPageTestRouter(t *testing.T, n int) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.Migrator().DropTable(&Tournament{}); err != nil {
-		t.Fatalf("drop table: %v", err)
-	}
-	if err := db.AutoMigrate(&Tournament{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := newPageTestDB(t)
 
 	for i := 0; i < n; i++ {
 		row := Tournament{

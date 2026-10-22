@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -16,18 +17,28 @@ import (
 	"gorm.io/gorm"
 )
 
-// newGlobalConfigTestRouter wires the tournaments list endpoint and the
-// global-config endpoints against one in-memory DB, so a test can walk
-// the exact path the admin page takes: read the tournaments, then post
-// back the ids it read.
-func newGlobalConfigTestRouter(t *testing.T, ids []uint) *gin.Engine {
-	t.Helper()
-	gin.SetMode(gin.TestMode)
+// globalConfigDBCounter hands out the name of the in-memory database each
+// call gets. A shared-cache database survives until its last connection
+// closes, so the name has to be unique per call.
+var globalConfigDBCounter atomic.Int64
 
-	db, err := gorm.Open(sqlite.Open("file:gcfg?mode=memory&cache=shared"), &gorm.Config{})
+// newGlobalConfigTestDB opens an in-memory DB holding the tournaments and
+// the global-config rows the admin page works with.
+func newGlobalConfigTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	// The name is unique per call so a database left behind by an earlier
+	// run cannot be picked up again, and the pool is closed so the database
+	// does not outlive the test.
+	dsn := fmt.Sprintf("file:gcfg-%d?mode=memory&cache=shared", globalConfigDBCounter.Add(1))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	for _, m := range []any{&GlobalTournamentConfig{}, &Tournament{}} {
 		if err := db.Migrator().DropTable(m); err != nil {
 			t.Fatalf("drop table: %v", err)
@@ -36,6 +47,34 @@ func newGlobalConfigTestRouter(t *testing.T, ids []uint) *gin.Engine {
 	if err := db.AutoMigrate(&Tournament{}, &GlobalTournamentConfig{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	return db
+}
+
+// TestNewGlobalConfigTestDBUsesAFreshDatabasePerCall pins the hermeticity of
+// the in-memory database: a shared-cache database survives until its last
+// connection closes, so a second call must not attach to the database the
+// first one wrote to.
+func TestNewGlobalConfigTestDBUsesAFreshDatabasePerCall(t *testing.T) {
+	first := newGlobalConfigTestDB(t)
+	if err := first.Exec("CREATE TABLE marker (id INTEGER)").Error; err != nil {
+		t.Fatalf("create marker table: %v", err)
+	}
+
+	second := newGlobalConfigTestDB(t)
+	if second.Migrator().HasTable("marker") {
+		t.Fatal("the second call reused the database of the first one")
+	}
+}
+
+// newGlobalConfigTestRouter wires the tournaments list endpoint and the
+// global-config endpoints against one in-memory DB, so a test can walk
+// the exact path the admin page takes: read the tournaments, then post
+// back the ids it read.
+func newGlobalConfigTestRouter(t *testing.T, ids []uint) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	db := newGlobalConfigTestDB(t)
 
 	for i, id := range ids {
 		row := Tournament{

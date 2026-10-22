@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -128,14 +129,28 @@ func newCachedService(t *testing.T) (*Service, *mapCache, string) {
 	return svc, cache, key
 }
 
+// eventsSlogDBCounter hands out the name of the in-memory database each
+// call gets. A shared-cache database survives until its last connection
+// closes, so the name has to be unique per call.
+var eventsSlogDBCounter atomic.Int64
+
 // newCachedServiceWithCache wires a Service over sqlite and a miniredis
 // epoch store holding a live epoch, so requests take the cached path.
 func newCachedServiceWithCache(t *testing.T, cache CurrentEventsCache) (*Service, string) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))), &gorm.Config{})
+	// The name is unique per call so a database left behind by an earlier
+	// run cannot be picked up again, and the pool is closed so the database
+	// does not outlive the test.
+	dsn := fmt.Sprintf("file:events-slog-%d?mode=memory&cache=shared", eventsSlogDBCounter.Add(1))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&Event{}, &Team{}, &tournaments.Tournament{}, &tournaments.DeviceTournament{}, &tournaments.GlobalTournamentConfig{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -156,6 +171,15 @@ func newCachedServiceWithCache(t *testing.T, cache CurrentEventsCache) (*Service
 	}
 
 	return NewService(NewRepository(db), cache, NewEpochStore(client)), BuildCacheKey(epoch, []uint{1}, 6)
+}
+
+// TestCachedServiceUsesAFreshDatabasePerCall pins the hermeticity of the
+// in-memory database: a shared-cache database survives until its last
+// connection closes, so a second call must not attach to the database the
+// first one seeded.
+func TestCachedServiceUsesAFreshDatabasePerCall(t *testing.T) {
+	newCachedService(t)
+	newCachedService(t)
 }
 
 func TestServiceCorruptCacheLogsThroughSlog(t *testing.T) {

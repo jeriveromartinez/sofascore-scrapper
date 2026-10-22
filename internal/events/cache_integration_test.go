@@ -80,9 +80,14 @@ func newTestEpochStore(t *testing.T) (*EpochStore, int64) {
 	return NewEpochStore(client), epoch
 }
 
+// eventsCacheDBCounter hands out the name of the in-memory database each
+// call gets. A shared-cache database survives until its last connection
+// closes, so the name has to be unique per call.
+var eventsCacheDBCounter atomic.Int64
+
 func setupCacheTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	dsn := fmt.Sprintf("file:events-cache-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	dsn := fmt.Sprintf("file:events-cache-%d?mode=memory&cache=shared", eventsCacheDBCounter.Add(1))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
@@ -92,6 +97,7 @@ func setupCacheTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("get sql database: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(16)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&Event{}, &Team{}, &tournaments.Tournament{}, &tournaments.DeviceTournament{}, &tournaments.GlobalTournamentConfig{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}

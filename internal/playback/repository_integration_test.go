@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -13,22 +13,54 @@ import (
 	"gorm.io/gorm"
 )
 
+// playbackDBCounter hands out the name of the in-memory database each call
+// gets. A shared-cache database survives until its last connection closes,
+// so the name has to be unique per call.
+var playbackDBCounter atomic.Int64
+
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	// A bare ":memory:" DSN gives every pooled connection its own private
 	// database, so concurrent goroutines (used by the lock tests) hit a
 	// connection without the migrated tables ("no such table: devices").
 	// A named shared-cache in-memory DSN keeps one database shared across the
-	// pool, while the unique per-test name preserves isolation between tests.
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	// pool, while a name unique per call keeps the calls isolated from each
+	// other and from the databases of earlier runs.
+	dsn := fmt.Sprintf("file:playback-%d?mode=memory&cache=shared", playbackDBCounter.Add(1))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open test db: %v", err)
 	}
+	// The pool is closed so the named database does not outlive the test.
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&PlaybackLog{}, &devices.Device{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 	return db
+}
+
+// TestSetupTestDBUsesAFreshDatabasePerCall pins the hermeticity of the
+// in-memory database: a shared-cache database survives until its last
+// connection closes, so a second call must not attach to the database the
+// first one wrote to.
+func TestSetupTestDBUsesAFreshDatabasePerCall(t *testing.T) {
+	first := setupTestDB(t)
+	if err := first.Create(&devices.Device{Token: "first"}).Error; err != nil {
+		t.Fatalf("failed to seed device: %v", err)
+	}
+
+	second := setupTestDB(t)
+	var count int64
+	if err := second.Model(&devices.Device{}).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count devices: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("the second database holds %d devices of the first one", count)
+	}
 }
 
 func TestStartConcurrentOnlyOneOpenLog(t *testing.T) {
