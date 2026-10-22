@@ -3,7 +3,7 @@
 Entry point for **operators, sysadmins, and SREs** running the
 scores365-scrapper platform.
 
-## Two deployment paths
+## Three deployment paths
 
 | Path | Use when | Doc |
 |---|---|---|
@@ -24,11 +24,13 @@ Three compose files live in `deployments/docker/`:
 | `compose.test.yml` | CI / integration tests | tmpfs; one backend + bootstrap-invitation one-shot |
 | `compose.multi.yml` | Staging / load testing | Three backends behind nginx + Prometheus |
 
-The env file you need is `deployments/docker/.env.example`, **not** at
-the repo root. Local dev workflow:
+The env file you need is `deployments/docker/.env.example`. Compose
+resolves `.env` from the project directory — the folder that holds the
+compose file — so the copy has to land next to it, **not** at the repo
+root. Local dev workflow:
 
 ```bash
-cp deployments/docker/.env.example .env       # set DB_PASSWORD and JWT_SECRET
+cp deployments/docker/.env.example deployments/docker/.env   # set DB_PASSWORD and JWT_SECRET
 docker compose -f deployments/docker/compose.dev.yml up --build
 curl http://localhost:8080/health/live
 ```
@@ -75,11 +77,11 @@ the value is empty (no default), the variable is required.
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
-| `DB_HOST` | `localhost` | Yes | MariaDB hostname |
+| `DB_HOST` | `localhost` | No | MariaDB hostname |
 | `DB_PORT` | `3306` | No | MariaDB port |
 | `DB_USER` | `root` | No | MariaDB user |
 | `DB_PASSWORD` | *(empty)* | Yes (prod) | MariaDB password |
-| `DB_NAME` | `scores365` | No | Database name |
+| `DB_NAME` | `scores365` | No | Database name. This is the binary's default; the `.deb` postinst writes `DB_NAME=iptv`, so a packaged install creates the `iptv` database. |
 | `DB_MAX_OPEN_CONNS` | `25` | No | Max open DB connections |
 | `DB_MAX_IDLE_CONNS` | `10` | No | Max idle DB connections |
 | `DB_CONN_MAX_LIFETIME` | `30m` | No | Max connection lifetime |
@@ -100,7 +102,7 @@ the value is empty (no default), the variable is required.
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `HTTP_READ_HEADER_TIMEOUT` | `5s` | No | HTTP read-header timeout |
-| `HTTP_WRITE_TIMEOUT` | `10s` | No | HTTP write timeout |
+| `HTTP_WRITE_TIMEOUT` | `15m` | No | HTTP write timeout. Must be at least as long as the server's 15m read timeout: the deadline starts when the request header is read, so a shorter value truncates large APK downloads and 10 MiB chunk uploads. |
 | `HTTP_IDLE_TIMEOUT` | `120s` | No | HTTP idle timeout |
 | `TRUSTED_PROXIES` | *(empty)* | No | Comma-separated list of trusted proxy IPs / CIDRs. Empty = Gin's defaults; populate when fronted by nginx so client-IP and rate-limit logic survive the hop. |
 

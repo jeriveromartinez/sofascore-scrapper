@@ -82,8 +82,9 @@ Operators are expected to:
   Because the application signs and verifies JWTs with the
   current secret, rotating forces every session to re-issue —
   expected behaviour. Rotation procedure:
-  [`runbook.md` → DB or Redis unreachable / credential
-  rotation](docs/operations/runbook.md).
+  [`troubleshooting.md` → Service restart-loops every 5s](docs/operations/troubleshooting.md#service-restart-loops-every-5s)
+  — `ALTER USER` on MariaDB plus an edit of `/etc/iptv/env`, then a
+  restart.
 - Run behind a reverse proxy that terminates TLS; the application
   does not serve TLS directly.
 - Either leave `PPROF_ADDR` empty (the default) or set

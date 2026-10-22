@@ -80,9 +80,9 @@ Two scrapers run concurrently:
   UTC, daily, for the lookahead fixture pull.
 
 Both jobs are guarded by a Redis distributed lock so multiple backend
-instances coordinate cleanly. The HTTP client caches each `/data/games`
-day-feed response for 60s so concurrent per-league lookups inside the
-same tick coalesce.
+instances coordinate cleanly. The HTTP client caches each
+`/web/games/allscores/` day-feed response for 60s so concurrent
+per-league lookups inside the same tick coalesce.
 
 The catalog of leagues is discovered **once at boot**; re-discovery is not
 scheduled. Restart the backend to pick up leagues added upstream since the

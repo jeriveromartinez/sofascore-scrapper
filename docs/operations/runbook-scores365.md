@@ -65,9 +65,11 @@ production:
 5. Hit the public events endpoint. `compose.dev.yml` maps host `8080` to
    container `8080` (`"${API_PORT:-8080}:8080"` on line 45):
    ```bash
-   curl -i 'http://localhost:8080/api/app/v1/current-events?limit=10'
+   curl -i 'http://localhost:8080/api/app/v1/current-events?limit=6'
    ```
-   Expect HTTP 200 with team names populated.
+   Expect HTTP 200 with team names populated. `limit` is capped at 6
+   (`currentEventsMaxLimit` in `internal/events/app_handler.go`); a
+   larger value is answered with `400 limit must be between 1 and 6`.
 6. Verify a team logo URL serves correctly:
    ```bash
    TEAM_ID=$(docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -Nse "SELECT team_id FROM teams ORDER BY team_id DESC LIMIT 1;")
@@ -80,8 +82,9 @@ production:
 The 365scores source is a thin adapter over
 `https://webws.365scores.com`, calling two endpoints:
 
-- **`/web/games/allscores/`** — every fixture for a given UTC calendar
-  day, across every sport. This is the "today" feed.
+- **`/web/games/allscores/`** — every fixture for a given calendar day,
+  across every sport. The day is passed explicitly as a
+  `startDate`/`endDate` pair and is bucketed in `SCORES365_TIMEZONE`.
 - **`/web/competitions/`** — the full competition catalog, with a
   `?sports=id1,id2,...` filter. Discovery uses this to enroll leagues
   into the catalog table.
@@ -178,10 +181,13 @@ Each tick:
 
 1. From the backend host, sanity-check the upstream:
    ```bash
-   curl -i 'https://webws.365scores.com/web/games/allscores/?lang=29&timezone=UTC&userCountry=116'
+   DAY=$(date -u +%d/%m/%Y)
+   curl -i -H 'Referer: https://www.365scores.com/' \
+     "https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=$DAY&endDate=$DAY&onlyMajorGames=false&withTop=true"
    ```
    `200` = upstream OK; `503`/`429` = rate-limited or upstream degraded;
-   `404` = endpoint moved (escalate).
+   `404` = endpoint moved (escalate). The upstream rejects requests
+   without the `Referer` header, so always send it.
 2. `docker logs docker-backend-1 --since 5m | grep -i 365scores` (or
    `journalctl -u iptv -n 200`). Look for `fetch error`, `decode error`,
    `429`.
@@ -235,23 +241,28 @@ per-match lookup, which is slower than 365scores' single bulk fetch. Use
 this override only if 365scores' NBA coverage is degraded for a sustained
 period.
 
-## Limitations (and the workaround we accepted)
+## Date coverage and current limitations
 
-`/web/games/allscores/` (and its legacy alias `/data/games`) returns only
-the **current UTC day** — past and future days are NOT retrievable through
-this endpoint. In practice:
+`/web/games/allscores/` takes an explicit `startDate`/`endDate` pair
+(`DD/MM/YYYY`), so **arbitrary past and future days are retrievable**.
+This is the difference from the legacy `/data/games` feed it replaced:
+that one only ever served the current day. The current client
+(`FetchGames` in `internal/scores365/client.go`) therefore works for any
+date, and `ScrapeNext7Days` gets real data for all seven days.
 
-- **Yesterday's matches**: present until roughly midnight UTC, then gone.
-- **Tomorrow's matches**: appear at midnight UTC on the day-of (the
-  per-minute today cron picks them up as "today" then).
-- **`ScrapeNext7Days` is effectively a no-op for 365scores.** It asks
-  the client for day N+1, but the upstream returns day N regardless.
-  The future cron (06:00 / 18:00 UTC) still runs, but only today's
-  matches actually land in `events`. The today cron at 1-minute
-  granularity is what carries coverage.
-- If a date-capable endpoint becomes available, this runbook should be
-  updated; today, document this and rely on the per-minute today cron for
-  full coverage.
+In practice:
+
+- **One day per request.** The API returns an empty payload when
+  `startDate` and `endDate` span more than one day, so the client asks
+  for a single day and the scrape loop iterates day by day
+  (`ScrapeNext7Days` fetches days +1 … +7 individually).
+- **The day boundary follows `SCORES365_TIMEZONE`,** not UTC. The date
+  string is derived from the requested timestamp in the client's
+  configured zone (`SCORES365_TIMEZONE`, default `UTC`), and the
+  upstream stamps each `startTime` with that zone's offset.
+- **The future cron (06:00 / 18:00 UTC) does land future fixtures** for
+  365scores — a league's next seven days are written to `events` by
+  the lookahead job, not only by the per-minute today cron.
 
 If a fuller history is ever needed, the fallback is to scrape HTML
 calendars at `https://www.365scores.com/<sport>/<country>/<league>/calendar`
@@ -271,13 +282,15 @@ the new language's status vocabulary is added to the keyword table.
 
 ## Key endpoints
 
-- **Feed (today):** `GET https://webws.365scores.com/web/games/allscores/?lang=29&timezone=UTC&userCountry=116`
+- **Feed (one day):** `GET https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=DD/MM/YYYY&endDate=DD/MM/YYYY&onlyMajorGames=false&withTop=true`
   Required headers:
   ```
   Referer: https://www.365scores.com/
   User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
   Accept: application/json
   ```
+  `startDate` and `endDate` must be the same day — the API returns an
+  empty payload for a multi-day range.
 - **Catalog (discovery):** `GET https://webws.365scores.com/web/competitions/?sports=2,3,4,5,6,7,8,9`
 - **Static assets:** `https://imagecache.365scores.com/image/upload/...`
   Team-logo URLs follow `…/WebSite/team/<CID>/<TeamID>.png`.

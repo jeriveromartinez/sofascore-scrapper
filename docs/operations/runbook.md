@@ -16,9 +16,66 @@ Their alert-rule names are the canonical keys.
 | Alert | First action |
 |---|---|
 | `scores365_health_probe_failure` | The `/health/ready` probe has been failing for 2 minutes. `curl -fs http://127.0.0.1:8080/health/ready` from the host. If 503, jump to [Troubleshooting → DB or Redis unreachable](troubleshooting.md#db-or-redis-unreachable). |
-| `scores365_scrape_failure_rate` | `>5%` error ratio over 5 minutes. `curl 'https://webws.365scores.com/data/games?lang=en' \| head -c 200` from the host. 200 = upstream OK; 503/429 = upstream degraded; 404 = endpoint removed (escalate). |
+| `scores365_scrape_failure_rate` | `>5%` error ratio over 5 minutes. `curl -fs -H 'Referer: https://www.365scores.com/' 'https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=21/10/2026&endDate=21/10/2026&onlyMajorGames=false&withTop=true' \| head -c 200` from the host. 200 = upstream OK; 503/429 = upstream degraded; 404 = endpoint removed (escalate). |
 | `scores365_goroutine_leak_high` | `go_goroutines` trending up by >5/10m and currently >200. Restart the service to recover: `sudo systemctl restart iptv.service`. Then look for recent code changes that opened goroutines without canceling them. |
 | `scores365_db_connection_pool_exhausted` | `sql_in_use_connections == sql_open_connections` and waiters accumulating. `SHOW FULL PROCESSLIST` to find blocking queries; `KILL <id>` to clear them. If chronic, lower `DB_MAX_OPEN_CONNS` per backend or raise MariaDB's `max_connections`. |
+
+### Alert: scores365_health_probe_failure
+
+`/health/ready` has been failing for 2 minutes. The readiness probe
+(`internal/server/health.go`) checks both MariaDB and Redis.
+
+```bash
+curl -fs http://127.0.0.1:8080/health/ready
+sudo journalctl -u iptv.service -n 50 --no-pager
+```
+
+A 503 means a dependency is unreachable — jump to
+[Troubleshooting → DB or Redis unreachable](troubleshooting.md#db-or-redis-unreachable).
+A 200 means the probe target itself is stale; check the blackbox
+scrape configuration.
+
+### Alert: scores365_scrape_failure_rate
+
+More than 5% of scrape requests failed over 5 minutes. Check the
+upstream from the host:
+
+```bash
+curl -fs -H 'Referer: https://www.365scores.com/' \
+  'https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=21/10/2026&endDate=21/10/2026&onlyMajorGames=false&withTop=true' | head -c 200
+```
+
+`200` = upstream OK; `503`/`429` = upstream degraded; `404` = the
+endpoint moved (escalate). The client retries with exponential
+backoff (1s, 2s, 4s, 8s, 16s) and absorbs short 429 bursts with its
+60-second in-memory cache.
+
+### Alert: scores365_goroutine_leak_high
+
+`go_goroutines` is trending up by more than 5 per 10 minutes and is
+now above 200. Restart to recover:
+
+```bash
+sudo systemctl restart iptv.service
+```
+
+Then look for recent code changes that opened goroutines without
+cancelling them. A goroutine leak in the scraper or the realtime
+hub shows up here before it shows up anywhere else.
+
+### Alert: scores365_db_connection_pool_exhausted
+
+All SQL connections are in use and at least one waiter has
+accumulated in the last 2 minutes.
+
+```bash
+sudo mariadb -uroot -e "SHOW FULL PROCESSLIST"
+sudo mariadb -uroot -e "SHOW STATUS LIKE 'Max_used_connections'"
+```
+
+`KILL <id>` clears a blocking query. If it recurs under normal
+load, lower `DB_MAX_OPEN_CONNS` per backend or raise MariaDB's
+`max_connections`.
 
 ## Redis outage behavior
 
@@ -41,31 +98,39 @@ prefix collisions, see
 
 Old APK upload chunks accumulate in `APK_STORAGE_PATH` if clients
 abort uploads mid-way. The cleanup job runs every 15 minutes and
-removes chunks from aborted uploads older than 1 hour. If the job
+removes the chunks of upload sessions that have expired — the session
+TTL is 24 hours (`uploadSessionTTL` in
+`internal/apk/upload_state.go`). Chunks live in
+`<APK_STORAGE_PATH>/chunks/<upload_id>/chunk-<n>`. If the job
 itself fails, the next tick retries; nothing else to do unless the
 disk is full.
 
 ## Counter recovery
 
-APK download counters are flushed every 15 minutes. If the backend
-is killed mid-flush, the `download_counter_flushes` table may
-contain a `dirty=true` row. On the next start the counter is
-re-inserted (`ReprocessOrphans`) and the flush resumes.
+APK download counters are flushed every 15 minutes. The flush is
+idempotent: `download_counter_flushes` holds only the `batch_id`
+primary key, and a batch that is already recorded is skipped
+(`ON CONFLICT DO NOTHING`). If the backend is killed mid-flush, the
+pending counter batch is still in Redis under
+`apk:downloads:pending:<batch_id>`; on the next start
+`ReprocessOrphans` scans for those keys and re-applies the deltas.
 
 Manual check:
 
 ```bash
-sudo mariadb -uroot iptv -e "SELECT * FROM download_counter_flushes ORDER BY id DESC LIMIT 5"
+sudo mariadb -uroot iptv -e "SELECT * FROM download_counter_flushes LIMIT 5"
+redis-cli KEYS 'apk:downloads:pending:*'
 ```
 
-If a row is stuck, the next automatic flush will pick it up.
+If a pending batch is still in Redis, the next automatic flush
+picks it up.
 
 ## Cache invalidation
 
 There is no application cache to invalidate manually. Static assets
-are served from the binary's embedded `web/dist`; the cache headers
-are `Cache-Control: public, max-age=...` based on file hashes, so
-clients pick up new builds automatically.
+are served from `web/dist` on disk, relative to the service's working
+directory; the cache headers are `Cache-Control: public, max-age=...`
+based on file hashes, so clients pick up new builds automatically.
 
 For dashboard layout issues that survive a hard refresh, force-reload
 the page (`Ctrl+Shift+R` / `Cmd+Shift+R`).
@@ -108,13 +173,16 @@ On a fresh database (where `users` is empty), the server auto-seeds a
 default administrator:
 
 - **Email:** `admin@local`
-- **Password:** `admin1234`
+- **Password:** the value of `DEFAULT_ADMIN_PASSWORD`; when that
+  variable is unset the seeder generates a random password and never
+  prints it
 - **Role:** `admin`
 
-> **WARNING:** The default password is hardcoded and known. **Change
-> it on first login.** Operators who want a different password must
-> `DELETE FROM users WHERE email = 'admin@local'` after the first
-> boot and re-invoke the bootstrap flow.
+> **Set `DEFAULT_ADMIN_PASSWORD` before the first boot** if you want a
+> known credential — the seeder uses that value as-is. When the
+> variable is unset the generated password is not logged, so the seeded
+> account cannot be logged into; the way to register the first operator
+> is the bootstrap-invitation flow below.
 
 To pre-apply schema and exit (no server), on a host where the binary
 lives at `/opt/iptv/iptv`:

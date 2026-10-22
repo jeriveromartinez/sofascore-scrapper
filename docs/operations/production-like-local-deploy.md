@@ -141,8 +141,9 @@ For the edit-restart loop, skip the packaging entirely:
 
 ```bash
 # compose.dev.yml fails fast unless DB_PASSWORD and JWT_SECRET are set.
+# Compose reads .env from the project directory, i.e. next to the compose file.
 printf 'DB_PASSWORD=%s\nJWT_SECRET=%s\n' \
-    "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" > .env
+    "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" > deployments/docker/.env
 
 docker compose -f deployments/docker/compose.dev.yml up --build
 curl http://localhost:8080/health/live

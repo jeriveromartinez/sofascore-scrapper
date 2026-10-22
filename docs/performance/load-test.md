@@ -60,7 +60,8 @@ register and promote its first admin against a fresh stack.
 Ramps a controlled arrival rate against the admin read endpoints
 (`/api/web/v1/devices`, `/api/web/v1/events`, `/api/web/v1/apk/versions`,
 `/api/web/v1/stats/top-events`). Admin endpoints are rate-limited to
-300 / minute per user, so the scenario seeds a small pool of admin
+600 / minute per user (`RateLimitAdmin` in
+`internal/server/rate_limit.go`), so the scenario seeds a small pool of admin
 accounts (one bootstrap admin plus promoted invites) and spreads load
 across them so the aggregate stays under the per-user budget. This is
 the scenario the `load.yml` workflow runs with `suite=smoke`.
