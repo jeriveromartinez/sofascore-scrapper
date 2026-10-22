@@ -160,7 +160,7 @@ func (h *AdminHandler) handleUpdateDevice(c *gin.Context) {
 		return
 	}
 
-	updatedDevice, err := h.repo.Update(req.Token, req.Platform, req.Name, req.PackageId, req.Timezone)
+	updatedDevice, err := h.repo.Update(c.Request.Context(), req.Token, req.Platform, req.Name, req.PackageId, req.Timezone)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		server.RespondError(c, http.StatusNotFound, "device not found")
 		return

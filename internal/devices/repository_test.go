@@ -3,8 +3,11 @@ package devices
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
@@ -65,5 +68,46 @@ func TestGetAllHonoursCancelledContext(t *testing.T) {
 
 	if _, err := repo.GetAll(cancelledContext()); !errors.Is(err, context.Canceled) {
 		t.Fatalf("GetAll with cancelled ctx: want context.Canceled, got %v", err)
+	}
+}
+
+func TestFindByTokenAndUpdateHonourCancelledContext(t *testing.T) {
+	db := newDevicesTestDB(t)
+	if err := db.Create(&Device{Token: "tok"}).Error; err != nil {
+		t.Fatalf("seed device: %v", err)
+	}
+	repo := NewRepository(db)
+	ctx := cancelledContext()
+
+	if _, err := repo.FindByToken(ctx, "tok"); !errors.Is(err, context.Canceled) {
+		t.Errorf("FindByToken with cancelled ctx: want context.Canceled, got %v", err)
+	}
+	if _, err := repo.Update(ctx, "tok", "android", "Box", "com.example.app", ""); !errors.Is(err, context.Canceled) {
+		t.Errorf("Update with cancelled ctx: want context.Canceled, got %v", err)
+	}
+}
+
+func TestAppMiddlewareUsesRequestContext(t *testing.T) {
+	db := newDevicesTestDB(t)
+	if err := db.Create(&Device{Token: "tok"}).Error; err != nil {
+		t.Fatalf("seed device: %v", err)
+	}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/ping", AppMiddleware(db), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	live := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	live.Header.Set("APP-XIPTV", "tok")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, live)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("known token with live ctx = %d, want 204", w.Code)
+	}
+
+	cancelled := live.Clone(cancelledContext())
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, cancelled)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("known token with cancelled request ctx = %d, want 401 (lookup must run on the request context)", w.Code)
 	}
 }

@@ -143,17 +143,17 @@ func (r *Repository) ListPage(ctx context.Context, id uint, limit int) ([]Device
 	return rows, hasMore, nil
 }
 
-func (r *Repository) FindByToken(token string) (*Device, error) {
+func (r *Repository) FindByToken(ctx context.Context, token string) (*Device, error) {
 	var device Device
-	if err := r.db.Where("token = ?", token).First(&device).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("token = ?", token).First(&device).Error; err != nil {
 		return nil, err
 	}
 	return &device, nil
 }
 
-func (r *Repository) Update(token, platform, name, packageId, timezone string) (*Device, error) {
+func (r *Repository) Update(ctx context.Context, token, platform, name, packageId, timezone string) (*Device, error) {
 	var device Device
-	if err := r.db.Where("token = ?", token).First(&device).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("token = ?", token).First(&device).Error; err != nil {
 		return nil, err
 	}
 
@@ -161,7 +161,7 @@ func (r *Repository) Update(token, platform, name, packageId, timezone string) (
 	device.Name = name
 	device.PackageId = packageId
 	device.Timezone = timezone
-	if err := r.db.Save(&device).Error; err != nil {
+	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
 		return nil, err
 	}
 

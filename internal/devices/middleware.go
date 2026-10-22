@@ -11,7 +11,7 @@ import (
 func AppMiddleware(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var device Device
-		if err := db.Where("token = ?", c.GetHeader("APP-XIPTV")).First(&device).Error; err != nil {
+		if err := db.WithContext(c.Request.Context()).Where("token = ?", c.GetHeader("APP-XIPTV")).First(&device).Error; err != nil {
 			server.RespondError(c, http.StatusUnauthorized, "you are lost")
 			c.Abort()
 			return
