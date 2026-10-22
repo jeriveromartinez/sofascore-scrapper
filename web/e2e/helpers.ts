@@ -26,6 +26,21 @@ const AUTH_PATH = "/api/web/v1/users";
 
 export const E2E_ADMIN_TOKEN_PATH = join(tmpdir(), "scores365-e2e-admin-token");
 
+// The API rejects registrations whose password is shorter than 12
+// characters, so the fixtures below have to satisfy that policy.
+export const E2E_ADMIN_EMAIL = "e2e-admin@test.local";
+export const E2E_ADMIN_PASSWORD = "E2eAdminPass1!";
+export const E2E_TEST_PASSWORD = "E2eUserPass1!";
+
+// The seeded administrator (internal/seeder) is the only account with
+// admin rights on a fresh stack, so the suite logs in as that one. The
+// password comes from DEFAULT_ADMIN_PASSWORD, which the test stack sets;
+// E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD override it for other targets.
+export const E2E_SEEDED_ADMIN_EMAIL =
+  process.env.E2E_SEEDED_ADMIN_EMAIL ?? "admin@local";
+export const E2E_SEEDED_ADMIN_PASSWORD =
+  process.env.E2E_SEEDED_ADMIN_PASSWORD ?? "E2eStackAdminPass1!";
+
 let cachedAdminToken = "";
 
 interface ProtoCodec<T> {

@@ -5,6 +5,8 @@ import {
   AuthResponse,
   createTestInvitation,
   getE2EAdminToken,
+  E2E_ADMIN_EMAIL,
+  E2E_TEST_PASSWORD,
 } from "./helpers";
 import { SetUserRoleRequest, UserList } from "../src/proto/api";
 
@@ -13,13 +15,13 @@ const USERS_PATH = "/api/web/v1/users";
 const USER_INFO_KEY = "user_info";
 
 const TEST_EMAIL = `e2e-role-${Date.now()}@test.local`;
-const TEST_PASSWORD = "Password1!";
+const TEST_PASSWORD = E2E_TEST_PASSWORD;
 
 async function injectAdminSession(page: import("@playwright/test").Page): Promise<void> {
   const token = getE2EAdminToken();
   const user = {
     id: 0,
-    email: "e2e-admin@test.local",
+    email: E2E_ADMIN_EMAIL,
     token,
     refreshToken: token,
   };

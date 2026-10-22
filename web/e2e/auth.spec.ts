@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { api, AuthRequest, AuthResponse, createTestInvitation, CreateInvitationRequest, InvitationResponse } from "./helpers";
+import { api, AuthRequest, AuthResponse, createTestInvitation, CreateInvitationRequest, InvitationResponse, E2E_TEST_PASSWORD } from "./helpers";
 
 const INVITE_PATH = "/api/web/v1/users/invitations";
 const REGISTER_PATH = "/api/web/v1/users/register";
@@ -7,7 +7,7 @@ const LOGIN_PATH = "/api/web/v1/users/login";
 const REFRESH_PATH = "/api/web/v1/users/refresh";
 
 const TEST_EMAIL = `e2e-auth-${Date.now()}@test.local`;
-const TEST_PASSWORD = "Password1!";
+const TEST_PASSWORD = E2E_TEST_PASSWORD;
 const TEST_EMAIL2 = `e2e-auth2-${Date.now()}@test.local`;
 
 let bootstrapToken: string;
