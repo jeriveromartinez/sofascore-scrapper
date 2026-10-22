@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -59,7 +61,33 @@ func NewDownloadCounter(client *goredis.Client, db *gorm.DB) DownloadCounter {
 }
 
 func (c *downloadCounter) Increment(ctx context.Context, apkID uint) error {
-	return c.client.HIncrBy(ctx, activeDownloadsKey, strconv.FormatUint(uint64(apkID), 10), 1).Err()
+	if err := c.client.HIncrBy(ctx, activeDownloadsKey, strconv.FormatUint(uint64(apkID), 10), 1).Err(); err != nil {
+		return err
+	}
+	c.refreshBufferedGauge(ctx)
+	return nil
+}
+
+// refreshBufferedGauge reads the shared Redis buffer rather than
+// counting locally, so every replica reports the same value and a
+// flush by another replica is reflected on the next refresh.
+func (c *downloadCounter) refreshBufferedGauge(ctx context.Context) {
+	counts, err := c.client.HVals(ctx, activeDownloadsKey).Result()
+	if err != nil {
+		slog.Default().WarnContext(ctx, "apk: read buffered download counts", slog.String("err", err.Error()))
+		return
+	}
+	var total int64
+	for _, raw := range counts {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			slog.Default().WarnContext(ctx, "apk: invalid buffered download count",
+				slog.String("value", raw), slog.String("err", err.Error()))
+			continue
+		}
+		total += n
+	}
+	observability.APKDownloadsBuffered.Set(float64(total))
 }
 
 func (c *downloadCounter) Flush(ctx context.Context) error {
@@ -100,6 +128,7 @@ func (c *downloadCounter) flushUnderLease(ctx context.Context, afterRename func(
 	if !renamed {
 		return nil
 	}
+	c.refreshBufferedGauge(ctx)
 
 	if afterRename != nil {
 		afterRename()

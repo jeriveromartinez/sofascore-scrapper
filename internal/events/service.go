@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -70,6 +71,7 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 			if data, hit, _ := s.cache.Get(flightCtx, key); hit {
 				events, deserErr := deserializeEvents(data)
 				if deserErr == nil {
+					observability.EventCacheHits.Inc()
 					return events, nil
 				}
 				slog.Default().WarnContext(flightCtx, "events: corrupt cache entry, repopulating",
@@ -77,6 +79,7 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 					slog.String("err", deserErr.Error()),
 				)
 			}
+			observability.EventCacheMisses.Inc()
 
 			events, dbErr := s.repo.getCurrentAndUpcoming(flightCtx, tournamentIDs, limit)
 			if dbErr != nil {

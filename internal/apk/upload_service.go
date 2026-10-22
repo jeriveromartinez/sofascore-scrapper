@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 	"gorm.io/gorm"
 )
 
@@ -103,6 +104,9 @@ func (s *UploadService) Status(ctx context.Context, uploadID uuid.UUID, userID u
 }
 
 func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkIndex int, userID uint, reader io.Reader) (*pb.UploadChunkResponse, error) {
+	observability.UploadActive.Inc()
+	defer observability.UploadActive.Dec()
+
 	session, err := s.store.Get(ctx, uploadID)
 	if err != nil {
 		return nil, err
@@ -146,6 +150,7 @@ func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkI
 	if !verified {
 		return nil, fmt.Errorf("published chunk does not match the recorded hash")
 	}
+	observability.UploadBytes.Add(float64(staged.ByteSize))
 
 	return &pb.UploadChunkResponse{
 		UploadId:   uploadID.String(),
@@ -155,6 +160,9 @@ func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkI
 }
 
 func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID uint) (*pb.UploadCompleteResponse, error) {
+	observability.UploadActive.Inc()
+	defer observability.UploadActive.Dec()
+
 	session, err := s.store.Get(ctx, uploadID)
 	if err != nil {
 		return nil, err
@@ -348,6 +356,7 @@ func (s *UploadService) Abort(ctx context.Context, uploadID uuid.UUID, userID ui
 // markPublicationFailed detaches from cancellation because a cancelled
 // request is exactly when the failure must still be recorded.
 func (s *UploadService) markPublicationFailed(ctx context.Context, pubID uint) {
+	observability.UploadFailures.Inc()
 	markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := s.db.WithContext(markCtx).Model(&UploadPublication{}).Where("id = ?", pubID).Update("status", "failed").Error; err != nil {
@@ -427,6 +436,7 @@ func (s *UploadService) reconcilePublicationBatch(ctx context.Context, pubs []Up
 			Update("status", "failed").Error; err != nil {
 			return fmt.Errorf("mark stale publications failed: %w", err)
 		}
+		observability.UploadFailures.Add(float64(len(failedIDs)))
 	}
 
 	for _, uploadID := range toComplete {
