@@ -5,150 +5,58 @@ import (
 	"time"
 )
 
-func TestToEvent_TimestampConversionToMs(t *testing.T) {
-	t.Skip("legacy; removed by Task 6/7")
-	/*
-		source := APIEvent{
-			ID:             123456,
-			Slug:           "test-match",
-			StartTimestamp: 1710000000,
-			Status: struct {
-				Code        int    `json:"code"`
-				Description string `json:"description"`
-				Type        string `json:"type"`
-			}{Type: "inprogress"},
-		}
-		source.Time.CurrentPeriodStartTimestamp = 1710000000
-		source.HomeTeam = TeamApi{ID: 10, Name: "Home"}
-		source.AwayTeam = TeamApi{ID: 20, Name: "Away"}
-		source.Tournament.UniqueTournament.ID = 1
-		source.Tournament.UniqueTournament.Name = "Test League"
-		source.Tournament.UniqueTournament.Slug = "test-league"
-		source.Tournament.UniqueTournament.Category.Name = "category"
-		source.Tournament.UniqueTournament.Category.Slug = "category-slug"
-
-		event := ToEvent(source, "football")
-
-		if event.StartTimestamp != 1710000000000 {
-			t.Errorf("StartTimestamp: want 1710000000000, got %d", event.StartTimestamp)
-		}
-		if event.CurrentPeriodStartTimestamp != 1710000000000 {
-			t.Errorf("CurrentPeriodStartTimestamp: want 1710000000000, got %d", event.CurrentPeriodStartTimestamp)
-		}
-		if event.StatusType != "inprogress" {
-			t.Errorf("StatusType: want inprogress, got %s", event.StatusType)
-		}
-	*/
+func timestampMatch(start time.Time) Match {
+	return Match{
+		Source:         "fotmob",
+		SourceMatchId:  "4193492",
+		Slug:           "chelsea-vs-arsenal",
+		StartTimestamp: start,
+		HomeTeam:       Team{SourceId: 1, Name: "H"},
+		AwayTeam:       Team{SourceId: 2, Name: "A"},
+		League:         LeagueRef{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "England", Sport: "football"},
+	}
 }
 
-func TestToEvent_ZeroTimestampsGuarded(t *testing.T) {
-	t.Skip("legacy; removed by Task 6/7")
-	/*
-		source := APIEvent{
-			ID:             1,
-			Slug:           "zero-test",
-			StartTimestamp: 0,
-			Status: struct {
-				Code        int    `json:"code"`
-				Description string `json:"description"`
-				Type        string `json:"type"`
-			}{Type: "notstarted"},
-		}
-		source.Time.CurrentPeriodStartTimestamp = 0
-		source.HomeTeam = TeamApi{ID: 1, Name: "H"}
-		source.AwayTeam = TeamApi{ID: 2, Name: "A"}
-		source.Tournament.UniqueTournament.ID = 1
-		source.Tournament.UniqueTournament.Name = "L"
-		source.Tournament.UniqueTournament.Slug = "l"
-		source.Tournament.UniqueTournament.Category.Name = "c"
-		source.Tournament.UniqueTournament.Category.Slug = "c"
-
-		event := ToEvent(source, "football")
-
-		if event.StartTimestamp != 0 {
-			t.Errorf("StartTimestamp: want 0, got %d", event.StartTimestamp)
-		}
-		if event.CurrentPeriodStartTimestamp != 0 {
-			t.Errorf("CurrentPeriodStartTimestamp: want 0, got %d", event.CurrentPeriodStartTimestamp)
-		}
-	*/
+func TestToEvent_ConvertsTimestampToMilliseconds(t *testing.T) {
+	event, err := ToEvent(timestampMatch(time.Unix(1710000000, 0)), "football")
+	if err != nil {
+		t.Fatalf("ToEvent: %v", err)
+	}
+	if event.StartTimestamp != 1710000000000 {
+		t.Errorf("StartTimestamp: want 1710000000000, got %d", event.StartTimestamp)
+	}
 }
 
-func TestToEvent_OverflowGuarded(t *testing.T) {
-	t.Skip("legacy; removed by Task 6/7")
-	/*
-		source := APIEvent{
-			ID:             1,
-			Slug:           "overflow-test",
-			StartTimestamp: 1<<62 + 1,
-			Status: struct {
-				Code        int    `json:"code"`
-				Description string `json:"description"`
-				Type        string `json:"type"`
-			}{Type: "finished"},
-		}
-		source.Time.CurrentPeriodStartTimestamp = 1 << 62
-		source.HomeTeam = TeamApi{ID: 1, Name: "H"}
-		source.AwayTeam = TeamApi{ID: 2, Name: "A"}
-		source.Tournament.UniqueTournament.ID = 1
-		source.Tournament.UniqueTournament.Name = "L"
-		source.Tournament.UniqueTournament.Slug = "l"
-		source.Tournament.UniqueTournament.Category.Name = "c"
-		source.Tournament.UniqueTournament.Category.Slug = "c"
+func TestToEvent_GuardsUnusableTimestamps(t *testing.T) {
+	cases := []struct {
+		name  string
+		start time.Time
+	}{
+		{"zero time", time.Time{}},
+		{"before the epoch", time.Unix(-1, 0)},
+	}
 
-		event := ToEvent(source, "football")
-
-		if event.StartTimestamp != 0 {
-			t.Errorf("StartTimestamp: want 0 (overflow guarded), got %d", event.StartTimestamp)
-		}
-		if event.CurrentPeriodStartTimestamp != 0 {
-			t.Errorf("CurrentPeriodStartTimestamp: want 0 (overflow guarded), got %d", event.CurrentPeriodStartTimestamp)
-		}
-	*/
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			event, err := ToEvent(timestampMatch(tc.start), "football")
+			if err != nil {
+				t.Fatalf("ToEvent: %v", err)
+			}
+			if event.StartTimestamp != 0 {
+				t.Errorf("StartTimestamp: want 0, got %d", event.StartTimestamp)
+			}
+		})
+	}
 }
 
-func TestToEvent_StatusTypeMapping(t *testing.T) {
-	t.Skip("legacy; removed by Task 6/7")
-	/*
-		tests := []struct {
-			name       string
-			statusType string
-		}{
-			{"inprogress", "inprogress"},
-			{"notstarted", "notstarted"},
-			{"finished", "finished"},
-			{"postponed", "postponed"},
-			{"canceled", "canceled"},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				source := APIEvent{
-					ID:             1,
-					Slug:           tt.name,
-					StartTimestamp: 1,
-					Status: struct {
-						Code        int    `json:"code"`
-						Description string `json:"description"`
-						Type        string `json:"type"`
-					}{Type: tt.statusType},
-				}
-				source.Time.CurrentPeriodStartTimestamp = 1
-				source.HomeTeam = TeamApi{ID: 1, Name: "H"}
-				source.AwayTeam = TeamApi{ID: 2, Name: "A"}
-				source.Tournament.UniqueTournament.ID = 1
-				source.Tournament.UniqueTournament.Name = "L"
-				source.Tournament.UniqueTournament.Slug = "l"
-				source.Tournament.UniqueTournament.Category.Name = "c"
-				source.Tournament.UniqueTournament.Category.Slug = "c"
-
-				event := ToEvent(source, "football")
-				if event.StatusType != tt.statusType {
-					t.Errorf("StatusType: want %s, got %s", tt.statusType, event.StatusType)
-				}
-			})
-		}
-	*/
+func TestToEvent_GuardsOverflowingTimestamp(t *testing.T) {
+	event, err := ToEvent(timestampMatch(time.Unix(5e15, 0)), "football")
+	if err != nil {
+		t.Fatalf("ToEvent: %v", err)
+	}
+	if event.StartTimestamp != 0 {
+		t.Errorf("StartTimestamp: want 0 (overflow guarded), got %d", event.StartTimestamp)
+	}
 }
 
 func TestToEvent_FromMatch(t *testing.T) {
