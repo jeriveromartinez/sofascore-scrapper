@@ -173,20 +173,20 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 		Status:   "assembling",
 		UserID:   userID,
 	}
-	if err := s.db.Create(pub).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(pub).Error; err != nil {
 		return nil, fmt.Errorf("create publication record: %w", err)
 	}
 
 	storagePath := StoragePath()
 	if err := os.MkdirAll(storagePath, 0o755); err != nil {
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		return nil, fmt.Errorf("create storage dir: %w", err)
 	}
 
 	tmpPath := filepath.Join(storagePath, fmt.Sprintf("upload-asm-%s.apk", uploadID.String()))
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		return nil, fmt.Errorf("create assembled temp: %w", err)
 	}
 
@@ -196,7 +196,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 		if err != nil {
 			outFile.Close()
 			os.Remove(tmpPath)
-			s.markPublicationFailed(pub.ID)
+			s.markPublicationFailed(ctx, pub.ID)
 			return nil, fmt.Errorf("read chunk %d: %w", i, err)
 		}
 		written, copyErr := io.Copy(outFile, chunkFile)
@@ -204,7 +204,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 		if copyErr != nil {
 			outFile.Close()
 			os.Remove(tmpPath)
-			s.markPublicationFailed(pub.ID)
+			s.markPublicationFailed(ctx, pub.ID)
 			return nil, fmt.Errorf("copy chunk %d: %w", i, copyErr)
 		}
 		totalSize += written
@@ -214,13 +214,13 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	apkInfo, parseErr := ParseAPKInfo(tmpPath)
 	if parseErr != nil {
 		os.Remove(tmpPath)
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		return nil, fmt.Errorf("parse APK: %w", parseErr)
 	}
 
 	if err := ValidatePackageName(apkInfo.PackageName); err != nil {
 		os.Remove(tmpPath)
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		return nil, fmt.Errorf("invalid package: %w", err)
 	}
 
@@ -230,7 +230,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	}
 	if version == "" || !semverPattern.MatchString(version) {
 		os.Remove(tmpPath)
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		return nil, fmt.Errorf("invalid version format")
 	}
 
@@ -238,13 +238,13 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	destPath, err := SafeDestination(storagePath, fileName)
 	if err != nil {
 		os.Remove(tmpPath)
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		return nil, fmt.Errorf("invalid destination: %w", err)
 	}
 
 	if err := PublishNoReplace(tmpPath, destPath); err != nil {
 		os.Remove(tmpPath)
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		if errors.Is(err, os.ErrExist) {
 			return nil, fmt.Errorf("APK version already exists")
 		}
@@ -265,7 +265,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	// assembling→failed branch.
 	description := session.Description
 	var apkV *ApkVersion
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		pub.FinalPath = destPath
 		pub.Status = "published"
 		if err := tx.Save(pub).Error; err != nil {
@@ -286,7 +286,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 		return nil
 	})
 	if err != nil {
-		s.markPublicationFailed(pub.ID)
+		s.markPublicationFailed(ctx, pub.ID)
 		return nil, fmt.Errorf("persist publication: %w", err)
 	}
 
@@ -325,26 +325,70 @@ func (s *UploadService) Abort(ctx context.Context, uploadID uuid.UUID, userID ui
 	s.chunkStore.RemoveChunks(session.ID)
 
 	var pub UploadPublication
-	if err := s.db.Where("upload_id = ?", uploadID.String()).First(&pub).Error; err == nil {
-		if pub.TempPath != "" {
-			os.Remove(pub.TempPath)
+	err = s.db.WithContext(ctx).Where("upload_id = ?", uploadID.String()).First(&pub).Error
+	switch {
+	case err == nil:
+		removeUploadTemp(pub.TempPath)
+		if err := s.db.WithContext(ctx).Model(&pub).Update("status", "failed").Error; err != nil {
+			slog.Default().Error("abort: mark publication failed",
+				slog.Uint64("publication_id", uint64(pub.ID)),
+				slog.String("err", err.Error()),
+			)
 		}
-		pub.Status = "failed"
-		s.db.Save(&pub)
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		slog.Default().Error("abort: load publication",
+			slog.String("upload_id", uploadID.String()),
+			slog.String("err", err.Error()),
+		)
 	}
 
 	return s.store.Abort(ctx, uploadID)
 }
 
-func (s *UploadService) markPublicationFailed(pubID uint) {
-	s.db.Model(&UploadPublication{}).Where("id = ?", pubID).Update("status", "failed")
+// markPublicationFailed detaches from cancellation because a cancelled
+// request is exactly when the failure must still be recorded.
+func (s *UploadService) markPublicationFailed(ctx context.Context, pubID uint) {
+	markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.db.WithContext(markCtx).Model(&UploadPublication{}).Where("id = ?", pubID).Update("status", "failed").Error; err != nil {
+		slog.Default().Error("mark publication failed",
+			slog.Uint64("publication_id", uint64(pubID)),
+			slog.String("err", err.Error()),
+		)
+	}
 }
 
-func (s *UploadService) ReconcilePublications(ctx context.Context) error {
-	var pubs []UploadPublication
-	if err := s.db.Where("status IN ?", []string{"assembling", "published"}).Find(&pubs).Error; err != nil {
-		return err
+func removeUploadTemp(path string) {
+	if path == "" {
+		return
 	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Default().Warn("remove upload temp file",
+			slog.String("path", path),
+			slog.String("err", err.Error()),
+		)
+	}
+}
+
+const reconcilePublicationsBatchSize = 100
+
+func (s *UploadService) ReconcilePublications(ctx context.Context) error {
+	var batch []UploadPublication
+	return s.db.WithContext(ctx).
+		Where("status IN ?", []string{"assembling", "published"}).
+		FindInBatches(&batch, reconcilePublicationsBatchSize, func(_ *gorm.DB, _ int) error {
+			return s.reconcilePublicationBatch(ctx, batch)
+		}).Error
+}
+
+func (s *UploadService) reconcilePublicationBatch(ctx context.Context, pubs []UploadPublication) error {
+	type staleUpload struct {
+		id       uuid.UUID
+		tempPath string
+	}
+	var failedIDs []uint
+	var toComplete []uuid.UUID
+	var toAbort []staleUpload
 
 	for _, pub := range pubs {
 		// Parse once. A malformed upload_id (corrupted row, partial
@@ -358,7 +402,7 @@ func (s *UploadService) ReconcilePublications(ctx context.Context) error {
 				slog.String("status", pub.Status),
 				slog.String("err", err.Error()),
 			)
-			s.db.Model(&pub).Update("status", "failed")
+			failedIDs = append(failedIDs, pub.ID)
 			continue
 		}
 
@@ -366,32 +410,55 @@ func (s *UploadService) ReconcilePublications(ctx context.Context) error {
 		case "published":
 			if pub.FinalPath != "" {
 				if _, statErr := os.Stat(pub.FinalPath); os.IsNotExist(statErr) {
-					s.db.Model(&pub).Update("status", "failed")
+					failedIDs = append(failedIDs, pub.ID)
 					continue
 				}
 			}
-			if _, err := s.store.Get(ctx, uploadID); err != nil {
-				continue
-			}
-			// Use a derived ctx with a short timeout rather than
-			// context.Background(): the reconciler ctx may already be
-			// cancelled (process shutdown) but we still want the
-			// finalizer to either complete or give up in bounded
-			// time, not hang forever.
-			finCtx, finCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			s.store.Complete(finCtx, uploadID)
-			finCancel()
+			toComplete = append(toComplete, uploadID)
 		case "assembling":
-			s.db.Model(&pub).Update("status", "failed")
-			if pub.TempPath != "" {
-				os.Remove(pub.TempPath)
-			}
-			finCtx, finCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			s.store.Abort(finCtx, uploadID)
-			finCancel()
-			s.chunkStore.RemoveChunks(pub.UploadID)
+			failedIDs = append(failedIDs, pub.ID)
+			toAbort = append(toAbort, staleUpload{id: uploadID, tempPath: pub.TempPath})
 		}
 	}
 
+	if len(failedIDs) > 0 {
+		if err := s.db.WithContext(ctx).Model(&UploadPublication{}).
+			Where("id IN ?", failedIDs).
+			Update("status", "failed").Error; err != nil {
+			return fmt.Errorf("mark stale publications failed: %w", err)
+		}
+	}
+
+	for _, uploadID := range toComplete {
+		if _, err := s.store.Get(ctx, uploadID); err != nil {
+			continue
+		}
+		// Use a derived ctx with a short timeout rather than
+		// context.Background(): the reconciler ctx may already be
+		// cancelled (process shutdown) but we still want the
+		// finalizer to either complete or give up in bounded
+		// time, not hang forever.
+		finCtx, finCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		if err := s.store.Complete(finCtx, uploadID); err != nil {
+			slog.Default().Warn("reconcile: complete upload state",
+				slog.String("upload_id", uploadID.String()),
+				slog.String("err", err.Error()),
+			)
+		}
+		finCancel()
+	}
+
+	for _, stale := range toAbort {
+		removeUploadTemp(stale.tempPath)
+		finCtx, finCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		if err := s.store.Abort(finCtx, stale.id); err != nil {
+			slog.Default().Warn("reconcile: abort upload state",
+				slog.String("upload_id", stale.id.String()),
+				slog.String("err", err.Error()),
+			)
+		}
+		finCancel()
+		s.chunkStore.RemoveChunks(stale.id.String())
+	}
 	return nil
 }
