@@ -116,16 +116,27 @@ func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string
 	return latencyMS, nil
 }
 
-// MarkDeliveryFailed flips the row to FAILED and records the
-// reason. Used for timeouts, ws_disconnected, domain_mismatch, and
-// device_offline. No ack_at is set. Lookup is by message_id.
+// MarkDeliveryFailed flips a single SENT row to FAILED and records
+// the reason. No ack_at is set. Lookup is by message_id.
 func (r *Repository) MarkDeliveryFailed(ctx context.Context, messageID string, reason FailureReason) error {
-	return r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
-		Where("message_id = ?", messageID).
+	_, err := r.MarkDeliveriesFailed(ctx, []string{messageID}, reason)
+	return err
+}
+
+// MarkDeliveriesFailed flips every listed row still in SENT to FAILED
+// with the given reason in one UPDATE. Rows that already reached a
+// terminal state are left alone. Returns the number of rows flipped.
+func (r *Repository) MarkDeliveriesFailed(ctx context.Context, messageIDs []string, reason FailureReason) (int64, error) {
+	if len(messageIDs) == 0 {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
+		Where("message_id IN ? AND state = ?", messageIDs, StateSent).
 		Updates(map[string]any{
 			"state":          StateFailed,
 			"failure_reason": reason,
-		}).Error
+		})
+	return res.RowsAffected, res.Error
 }
 
 // ListAudienceDevicesForDomains returns every device whose

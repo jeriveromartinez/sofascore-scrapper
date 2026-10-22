@@ -151,11 +151,11 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 	// socket write happens immediately below for the ones that
 	// are connected). We build the push frames first to capture
 	// the transport message_id (stored as a string on each row).
-	pushFrames := make(map[uint]*pb.WsPush, len(audience))
+	frames := make([]deviceFrame, 0, len(audience))
 	attempts := make([]DeliveryAttempt, 0, len(audience))
 	for _, dev := range audience {
 		frame := buildWsPush(uint64(msg.ID), payload)
-		pushFrames[dev.ID] = frame
+		frames = append(frames, deviceFrame{deviceID: dev.ID, frame: frame})
 		attempts = append(attempts, DeliveryAttempt{
 			PushMessageID: msg.ID,
 			DeviceID:      dev.ID,
@@ -169,42 +169,62 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 		return nil, nil, fmt.Errorf("insert delivery attempts: %w", err)
 	}
 
-	// Dispatch to the hub. The hub returns ErrDeviceNotConnected
-	// for siblings; we record that as the failure_reason on the
-	// attempt row so the metric snapshot is accurate.
-	for _, dev := range audience {
-		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), pushFrames[dev.ID]); err != nil {
-			if errors.Is(err, realtime.ErrDeviceNotConnected) {
-				if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureDeviceOffline); markErr != nil {
-					s.logger.Warn("push: mark offline failed",
-						slog.String("message_id", pushFrames[dev.ID].MessageId),
-						slog.String("error", markErr.Error()))
-				}
-				s.metrics.IncFailed(FailureDeviceOffline)
-				s.logger.Info("push: ws delivery skipped",
-					slog.Uint64("push_id", uint64(msg.ID)),
-					slog.Uint64("device_id", uint64(dev.ID)),
-					slog.String("reason", string(FailureDeviceOffline)))
-				continue
-			}
-			s.logger.Warn("push: ws publish failed",
-				slog.Uint64("push_id", uint64(msg.ID)),
-				slog.Uint64("device_id", uint64(dev.ID)),
-				slog.String("error", err.Error()))
-			if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureInternalError); markErr != nil {
-				s.logger.Warn("push: mark internal-error failed",
-					slog.String("message_id", pushFrames[dev.ID].MessageId),
-					slog.String("error", markErr.Error()))
-			}
-			s.metrics.IncFailed(FailureInternalError)
-		} else {
+	_ = s.publishFrames(ctx, msg.ID, frames)
+	return msg, deviceIDs, nil
+}
+
+// deviceFrame pairs a WsPush frame with the device it is addressed to.
+type deviceFrame struct {
+	deviceID uint
+	frame    *pb.WsPush
+}
+
+// publishFrames publishes every frame and records the failed
+// deliveries with one bulk UPDATE per failure reason. A device that
+// is not connected is a normal outcome (failure_reason
+// device_offline); any other publish error is recorded as
+// internal_error and the first one is returned so single-device
+// callers can surface it.
+func (s *Service) publishFrames(ctx context.Context, pushID uint, frames []deviceFrame) error {
+	failed := make(map[FailureReason][]string)
+	var firstErr error
+	for _, f := range frames {
+		err := s.pusher.PublishPush(ctx, uint64(f.deviceID), f.frame)
+		switch {
+		case err == nil:
 			s.logger.Info("push: ws publish queued",
-				slog.Uint64("push_id", uint64(msg.ID)),
-				slog.Uint64("device_id", uint64(dev.ID)),
-				slog.String("message_id", pushFrames[dev.ID].MessageId))
+				slog.Uint64("push_id", uint64(pushID)),
+				slog.Uint64("device_id", uint64(f.deviceID)),
+				slog.String("message_id", f.frame.MessageId))
+		case errors.Is(err, realtime.ErrDeviceNotConnected):
+			failed[FailureDeviceOffline] = append(failed[FailureDeviceOffline], f.frame.MessageId)
+			s.metrics.IncFailed(FailureDeviceOffline)
+			s.logger.Info("push: ws delivery skipped",
+				slog.Uint64("push_id", uint64(pushID)),
+				slog.Uint64("device_id", uint64(f.deviceID)),
+				slog.String("reason", string(FailureDeviceOffline)))
+		default:
+			failed[FailureInternalError] = append(failed[FailureInternalError], f.frame.MessageId)
+			s.metrics.IncFailed(FailureInternalError)
+			s.logger.Warn("push: ws publish failed",
+				slog.Uint64("push_id", uint64(pushID)),
+				slog.Uint64("device_id", uint64(f.deviceID)),
+				slog.String("error", err.Error()))
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
-	return msg, deviceIDs, nil
+	for reason, messageIDs := range failed {
+		if _, err := s.repo.MarkDeliveriesFailed(ctx, messageIDs, reason); err != nil {
+			s.logger.Warn("push: mark deliveries failed",
+				slog.Uint64("push_id", uint64(pushID)),
+				slog.String("reason", string(reason)),
+				slog.Int("count", len(messageIDs)),
+				slog.String("error", err.Error()))
+		}
+	}
+	return firstErr
 }
 
 // CreateSchedule validates and persists a scheduled_push along
@@ -573,37 +593,7 @@ func (s *Service) dispatchToOneDevice(ctx context.Context, msg *PushMessage, dev
 		return fmt.Errorf("insert delivery attempt: %w", err)
 	}
 	s.metrics.IncDispatched(string(msg.Source))
-	if err := s.pusher.PublishPush(ctx, uint64(dev.ID), frame); err != nil {
-		if errors.Is(err, realtime.ErrDeviceNotConnected) {
-			if markErr := s.repo.MarkDeliveryFailed(ctx, frame.MessageId, FailureDeviceOffline); markErr != nil {
-				s.logger.Warn("push: mark offline failed",
-					slog.String("message_id", frame.MessageId),
-					slog.String("error", markErr.Error()))
-			}
-			s.metrics.IncFailed(FailureDeviceOffline)
-			s.logger.Info("push: ws delivery skipped",
-				slog.Uint64("push_id", uint64(msg.ID)),
-				slog.Uint64("device_id", uint64(dev.ID)),
-				slog.String("reason", string(FailureDeviceOffline)))
-			return nil
-		}
-		s.logger.Warn("push: ws publish failed",
-			slog.Uint64("push_id", uint64(msg.ID)),
-			slog.Uint64("device_id", uint64(dev.ID)),
-			slog.String("error", err.Error()))
-		if markErr := s.repo.MarkDeliveryFailed(ctx, frame.MessageId, FailureInternalError); markErr != nil {
-			s.logger.Warn("push: mark internal-error failed",
-				slog.String("message_id", frame.MessageId),
-				slog.String("error", markErr.Error()))
-		}
-		s.metrics.IncFailed(FailureInternalError)
-		return err
-	}
-	s.logger.Info("push: ws publish queued",
-		slog.Uint64("push_id", uint64(msg.ID)),
-		slog.Uint64("device_id", uint64(dev.ID)),
-		slog.String("message_id", frame.MessageId))
-	return nil
+	return s.publishFrames(ctx, msg.ID, []deviceFrame{{deviceID: dev.ID, frame: frame}})
 }
 
 // audienceFilter is a small helper struct for the audience filter
@@ -625,11 +615,11 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 	now := time.Now()
 	// Build push frames first so we can capture the transport
 	// message_id (stored as a string on each delivery_attempt row).
-	pushFrames := make(map[uint]*pb.WsPush, len(audience))
+	frames := make([]deviceFrame, 0, len(audience))
 	attempts := make([]DeliveryAttempt, 0, len(audience))
 	for _, dev := range audience {
 		frame := buildWsPush(uint64(msg.ID), payload)
-		pushFrames[dev.ID] = frame
+		frames = append(frames, deviceFrame{deviceID: dev.ID, frame: frame})
 		attempts = append(attempts, DeliveryAttempt{
 			PushMessageID: msg.ID,
 			DeviceID:      dev.ID,
@@ -642,38 +632,7 @@ func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filt
 	if err := s.repo.InsertDeliveryAttempts(ctx, attempts); err != nil {
 		return fmt.Errorf("insert delivery attempts: %w", err)
 	}
-	for _, dev := range audience {
-		if err := s.pusher.PublishPush(ctx, uint64(dev.ID), pushFrames[dev.ID]); err != nil {
-			if errors.Is(err, realtime.ErrDeviceNotConnected) {
-				if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureDeviceOffline); markErr != nil {
-					s.logger.Warn("push: mark offline failed",
-						slog.String("message_id", pushFrames[dev.ID].MessageId),
-						slog.String("error", markErr.Error()))
-				}
-				s.metrics.IncFailed(FailureDeviceOffline)
-				s.logger.Info("push: ws delivery skipped",
-					slog.Uint64("push_id", uint64(msg.ID)),
-					slog.Uint64("device_id", uint64(dev.ID)),
-					slog.String("reason", string(FailureDeviceOffline)))
-				continue
-			}
-			s.logger.Warn("push: ws publish failed",
-				slog.Uint64("push_id", uint64(msg.ID)),
-				slog.Uint64("device_id", uint64(dev.ID)),
-				slog.String("error", err.Error()))
-			if markErr := s.repo.MarkDeliveryFailed(ctx, pushFrames[dev.ID].MessageId, FailureInternalError); markErr != nil {
-				s.logger.Warn("push: mark internal-error failed",
-					slog.String("message_id", pushFrames[dev.ID].MessageId),
-					slog.String("error", markErr.Error()))
-			}
-			s.metrics.IncFailed(FailureInternalError)
-		} else {
-			s.logger.Info("push: ws publish queued",
-				slog.Uint64("push_id", uint64(msg.ID)),
-				slog.Uint64("device_id", uint64(dev.ID)),
-				slog.String("message_id", pushFrames[dev.ID].MessageId))
-		}
-	}
+	_ = s.publishFrames(ctx, msg.ID, frames)
 	return nil
 }
 
