@@ -27,7 +27,7 @@ func (h *CrashHandler) handle(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.SaveCrash(report); err != nil {
+	if err := h.repo.SaveCrash(c.Request.Context(), report); err != nil {
 		c.JSON(500, gin.H{"error": "Failed to save crash report"})
 		return
 	}
