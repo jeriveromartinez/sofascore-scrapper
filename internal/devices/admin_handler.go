@@ -1,6 +1,7 @@
 package devices
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/pagination"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
+	"gorm.io/gorm"
 )
 
 type AdminHandlerDeps struct {
@@ -159,6 +161,10 @@ func (h *AdminHandler) handleUpdateDevice(c *gin.Context) {
 	}
 
 	updatedDevice, err := h.repo.Update(req.Token, req.Platform, req.Name, req.PackageId, req.Timezone)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		server.RespondError(c, http.StatusNotFound, "device not found")
+		return
+	}
 	if err != nil {
 		respondInternalError(c, "update device failed", err)
 		return
