@@ -56,7 +56,7 @@ func (r *DeviceAssignmentsRepository) Assign(deviceID, tournamentID uint) (*Devi
 }
 
 func (r *DeviceAssignmentsRepository) Remove(deviceID, tournamentID uint) error {
-	return r.db.Where("device_id = ? AND tournament_id = ?", deviceID, tournamentID).Delete(&DeviceTournament{}).Error
+	return r.db.Unscoped().Where("device_id = ? AND tournament_id = ?", deviceID, tournamentID).Delete(&DeviceTournament{}).Error
 }
 
 func (r *DeviceAssignmentsRepository) Set(deviceID uint, tournamentIDs []uint) error {
