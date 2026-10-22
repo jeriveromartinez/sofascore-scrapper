@@ -217,8 +217,8 @@ func TestDownloadCounter_ReprocessBatchIdempotent(t *testing.T) {
 		t.Fatalf("Rename: %v", err)
 	}
 
-	if err := counter.(*downloadCounter).reprocessBatch(ctx, batchID, pendingKey); err != nil {
-		t.Fatalf("first reprocessBatch: %v", err)
+	if err := counter.(*downloadCounter).processPending(ctx, batchID, pendingKey); err != nil {
+		t.Fatalf("first processPending: %v", err)
 	}
 
 	updatedApk, err := NewRepository(db).GetByID(context.Background(), apk.ID)
@@ -229,8 +229,8 @@ func TestDownloadCounter_ReprocessBatchIdempotent(t *testing.T) {
 		t.Fatalf("expected TotalDownloads=10 after first reprocess, got %d", updatedApk.TotalDownloads)
 	}
 
-	if err := counter.(*downloadCounter).reprocessBatch(ctx, batchID, pendingKey); err != nil {
-		t.Fatalf("second reprocessBatch: %v", err)
+	if err := counter.(*downloadCounter).processPending(ctx, batchID, pendingKey); err != nil {
+		t.Fatalf("second processPending: %v", err)
 	}
 
 	updatedApk2, err := NewRepository(db).GetByID(context.Background(), apk.ID)
@@ -267,7 +267,7 @@ func TestDownloadCounter_ProcessedPendingIsDeletedWithoutReapplying(t *testing.T
 		t.Fatalf("create poison pending: %v", err)
 	}
 
-	if err := counter.(*downloadCounter).reprocessBatch(ctx, batchID, pendingKey); err != nil {
+	if err := counter.(*downloadCounter).processPending(ctx, batchID, pendingKey); err != nil {
 		t.Fatalf("reprocess processed pending: %v", err)
 	}
 
