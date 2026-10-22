@@ -25,13 +25,17 @@ const (
 	// the underlying TCP socket is wedged, this fires and the
 	// connection is closed with a write timeout error.
 	writeWait = 5 * time.Second
-	// pongWait is the read deadline after a successful pong. If
-	// the client misses two keepalives (ping every 30s), the
-	// connection is dropped.
+	// pongWait is the read deadline after a successful keepalive
+	// ack. A client that stops answering the keepalive is dropped.
 	pongWait = 60 * time.Second
-	// pingPeriod must be smaller than pongWait; recommended 0.5x
-	// or 0.6x. 30s gives two chances to pong before the deadline.
-	pingPeriod = (pongWait * 9) / 10
+	// pingPeriod is the server keepalive cadence. It must stay well
+	// below pongWait so the client has a full pongWait window to
+	// answer before the connection is reaped.
+	pingPeriod = 30 * time.Second
+	// maxFrameBytes caps the size of a single inbound WebSocket
+	// frame. The protocol only carries small control and push
+	// envelopes, so anything bigger is a client bug or an attack.
+	maxFrameBytes = 1 << 20
 )
 
 // HandlerConfig wires a Gin upgrade endpoint to the realtime stack.
@@ -49,6 +53,12 @@ type HandlerConfig struct {
 	// Upgrader defaults to gorilla's defaults. Tests may tighten
 	// CheckOrigin or replace the dialer.
 	Upgrader websocket.Upgrader
+	// PingInterval overrides the keepalive cadence. Zero uses
+	// pingPeriod.
+	PingInterval time.Duration
+	// PongTimeout overrides the read deadline applied after a
+	// keepalive ack. Zero uses pongWait.
+	PongTimeout time.Duration
 }
 
 // Handler returns a Gin handler that upgrades the request to a
@@ -66,6 +76,14 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 	}
 	if cfg.AckHandler == nil {
 		cfg.AckHandler = func(context.Context, string) {}
+	}
+	pingInterval := cfg.PingInterval
+	if pingInterval <= 0 {
+		pingInterval = pingPeriod
+	}
+	pongTimeout := cfg.PongTimeout
+	if pongTimeout <= 0 {
+		pongTimeout = pongWait
 	}
 
 	return func(c *gin.Context) {
@@ -94,8 +112,8 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 			return
 		}
 
-		conn := newConnection(uint64(dev.ID), userIDPtrToUint32(dev.UserID), 0, ws, cfg.AckHandler, func(reason string) {
-			cfg.Hub.Unregister(uint64(dev.ID))
+		conn := newConnection(uint64(dev.ID), userIDPtrToUint32(dev.UserID), 0, ws, cfg.AckHandler, func(conn *Connection, reason string) {
+			cfg.Hub.UnregisterConn(uint64(dev.ID), conn)
 			cfg.Logger.Info("realtime: connection closed",
 				slog.Uint64("device_id", uint64(dev.ID)),
 				slog.String("reason", reason))
@@ -139,16 +157,16 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 			slog.Uint64("device_id", uint64(dev.ID)),
 			slog.String("platform", dev.Platform))
 
-		go writeLoop(conn, cfg.Logger)
-		go readLoop(conn, cfg.Logger)
+		go writeLoop(conn, cfg.Logger, pingInterval)
+		go readLoop(conn, cfg.Logger, pongTimeout)
 	}
 }
 
 // writeLoop drains conn.send into the underlying socket. It exits
 // when the send channel is closed (the connection's Close method
 // does this) or when the socket fails.
-func writeLoop(conn *Connection, logger *slog.Logger) {
-	ticker := time.NewTicker(pingPeriod)
+func writeLoop(conn *Connection, logger *slog.Logger, pingInterval time.Duration) {
+	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 
 	for {
@@ -196,14 +214,12 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 				conn.Close(1011, "ping write error")
 				return
 			}
-			// The ping has been written. Bump the read deadline so the
-			// client has a fresh pongWait window to reply with a WsPong
-			// frame. Without this bump, an idle socket whose only
-			// traffic is server-initiated pings would close when the
-			// original pongWait elapses, even though the connection
-			// is healthy — the server's read deadline ignores that the
-			// *server* is the one driving the traffic.
-			_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
+			// The read deadline is deliberately NOT extended here. It is
+			// the client's answer that proves the connection is alive:
+			// extending it on our own writes would keep half-open
+			// connections (client vanished without a FIN) registered
+			// forever, and every push routed to them would be lost
+			// silently.
 		}
 	}
 }
@@ -212,12 +228,13 @@ func writeLoop(conn *Connection, logger *slog.Logger) {
 // only the WsPushAck is meaningful for the server (the rest are
 // ping/pong/keepalive which gorilla handles via the control
 // channel). Any read error closes the connection.
-func readLoop(conn *Connection, logger *slog.Logger) {
+func readLoop(conn *Connection, logger *slog.Logger, pongTimeout time.Duration) {
 	defer conn.Close(1000, "read loop exit")
 
-	_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
+	conn.ws.SetReadLimit(maxFrameBytes)
+	_ = conn.ws.SetReadDeadline(time.Now().Add(pongTimeout))
 	conn.ws.SetPongHandler(func(string) error {
-		_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
+		_ = conn.ws.SetReadDeadline(time.Now().Add(pongTimeout))
 		return nil
 	})
 
@@ -254,7 +271,7 @@ func readLoop(conn *Connection, logger *slog.Logger) {
 		// web_socket_channel in IO mode). Reset the read deadline so
 		// the connection stays open.
 		if frame.GetPong() != nil {
-			_ = conn.ws.SetReadDeadline(time.Now().Add(pongWait))
+			_ = conn.ws.SetReadDeadline(time.Now().Add(pongTimeout))
 		}
 		// Other inbound frames (Hello/Push/Error) are not expected
 		// from the client and are silently dropped.

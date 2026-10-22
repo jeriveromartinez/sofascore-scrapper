@@ -46,8 +46,10 @@ until that audit completes.
   into `internal/gen/api/`.
 - The Flutter mirror (`flutter-apptv/lib/api/`, in a separate repo)
   must mirror `proto/api.proto` verbatim. Verify with
-  `make proto-verify-flutter`. If the Flutter proto drifts, copy the
-  Go file into the Flutter repo and regenerate the Dart bindings there.
+  `make proto-verify-flutter`. If the Flutter proto drifts, copy
+  `proto/api.proto` into the Flutter repo
+  (`../flutter-apptv/proto/api.proto`) and regenerate the Dart bindings
+  there.
 
 ### Followups
 

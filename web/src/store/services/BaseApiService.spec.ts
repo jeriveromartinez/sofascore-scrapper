@@ -1,10 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import axios from "axios";
 import { setActivePinia, createPinia } from "pinia";
 import { useAuthStore } from "../pinia/authStore";
 import { writeAuthStorage, clearAuthStorage } from "../authStorage";
 import { KEY_USER_LOGIN } from "../../constants";
-import { headerString, ApiError, refreshAuth } from "./BaseApiService";
+import {
+  headerString,
+  ApiError,
+  refreshAuth,
+  BaseApiService,
+} from "./BaseApiService";
+import { StatusMessage } from "../../proto/api";
 
 // The refreshAuth() helper decodes the protobuf AuthResponse with the real codec.
 // We override `decode` to a JSON parser so we can return a known AuthResponse
@@ -214,5 +220,38 @@ describe("refreshAuth", () => {
     // silently clear the store.
     const store = useAuthStore();
     expect(store.userData.token).toBe("old");
+  });
+});
+
+describe("BaseApiService empty protobuf body", () => {
+  class TestService extends BaseApiService {
+    constructor() {
+      super("/test");
+    }
+
+    fetchStatus(): Promise<StatusMessage> {
+      return this.get("", StatusMessage);
+    }
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("decodes an empty body into the message defaults instead of undefined", async () => {
+    const get = vi.fn(async () => ({
+      data: new ArrayBuffer(0),
+      status: 200,
+      headers: {},
+    }));
+    vi.spyOn(axios, "create").mockReturnValue({
+      get,
+      interceptors: { response: { use: vi.fn() } },
+    } as never);
+
+    const result = await new TestService().fetchStatus();
+
+    expect(result).toEqual({ message: "" });
+    expect(result).not.toBeUndefined();
   });
 });

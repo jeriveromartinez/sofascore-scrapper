@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"crypto/rand"
+	"sync"
+
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -31,6 +34,33 @@ func ValidatePassword(password string) error {
 // length — the cost of the hash dominates.
 func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+var (
+	dummyHashOnce sync.Once
+	dummyHash     []byte
+)
+
+// VerifyDummy runs a bcrypt comparison against a throwaway hash of a
+// random value. The login path calls it when the account does not
+// exist, so the response time does not reveal whether an email
+// address is registered. The result is discarded on purpose.
+func VerifyDummy(password string) {
+	dummyHashOnce.Do(func() {
+		secret := make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			secret = []byte("auth-dummy-hash-fallback")
+		}
+		hash, err := bcrypt.GenerateFromPassword(secret, BcryptCost)
+		if err != nil {
+			return
+		}
+		dummyHash = hash
+	})
+	if len(dummyHash) == 0 {
+		return
+	}
+	_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 }
 
 // HashPassword returns a bcrypt hash of the plaintext at the

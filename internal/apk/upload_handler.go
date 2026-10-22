@@ -1,8 +1,10 @@
 package apk
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -21,11 +23,26 @@ func NewUploadHandler(service *UploadService, store *UploadStateStore) *UploadHa
 }
 
 func (h *UploadHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerDeps) {
-	group.POST("/apk/uploads", deps.AuthMiddleware, h.handleBegin)
-	group.GET("/apk/uploads/:id", deps.AuthMiddleware, h.handleStatus)
-	group.PUT("/apk/uploads/:id/chunks/:index", deps.AuthMiddleware, h.handlePutChunk)
-	group.POST("/apk/uploads/:id/complete", deps.AuthMiddleware, h.handleComplete)
-	group.DELETE("/apk/uploads/:id", deps.AuthMiddleware, h.handleAbort)
+	group.POST("/apk/uploads", deps.AuthMiddleware, clearWriteDeadline, h.handleBegin)
+	group.GET("/apk/uploads/:id", deps.AuthMiddleware, clearWriteDeadline, h.handleStatus)
+	group.PUT("/apk/uploads/:id/chunks/:index", deps.AuthMiddleware, clearWriteDeadline, h.handlePutChunk)
+	group.POST("/apk/uploads/:id/complete", deps.AuthMiddleware, clearWriteDeadline, h.handleComplete)
+	group.DELETE("/apk/uploads/:id", deps.AuthMiddleware, clearWriteDeadline, h.handleAbort)
+}
+
+// clearWriteDeadline removes the response write deadline for the
+// streaming endpoints.
+//
+// Go sets that deadline when the request headers are read, so it also
+// covers the time the handler spends reading the body and assembling
+// the file. A chunk upload or an APK assembly that outlasts the server
+// write timeout would then fail to deliver its response even though
+// the work itself succeeded.
+func clearWriteDeadline(c *gin.Context) {
+	if err := http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{}); err != nil {
+		slog.Default().Warn("apk: failed to clear the response write deadline",
+			slog.String("err", err.Error()))
+	}
 }
 
 func (h *UploadHandler) handleBegin(c *gin.Context) {

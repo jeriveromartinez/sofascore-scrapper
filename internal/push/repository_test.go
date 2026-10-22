@@ -198,8 +198,8 @@ func TestRepository_MarkDeliverySent_Delivered_Failed(t *testing.T) {
 	}
 	attempts := []DeliveryAttempt{{
 		PushMessageID: msg.ID, DeviceID: devs[0],
-		MessageID:     "test-msg-1",
-		State:         StateSent, SentAt: &now,
+		MessageID: "test-msg-1",
+		State:     StateSent, SentAt: &now,
 	}}
 	if err := repo.InsertDeliveryAttempts(ctx, attempts); err != nil {
 		t.Fatalf("insert attempts: %v", err)
@@ -236,8 +236,8 @@ func TestRepository_MarkDeliverySent_Delivered_Failed(t *testing.T) {
 	}
 	if err := repo.InsertDeliveryAttempts(ctx, []DeliveryAttempt{{
 		PushMessageID: msg2.ID, DeviceID: devs[0],
-		MessageID:     "test-msg-2",
-		State:         StateSent, SentAt: &now,
+		MessageID: "test-msg-2",
+		State:     StateSent, SentAt: &now,
 	}}); err != nil {
 		t.Fatalf("insert attempts2: %v", err)
 	}

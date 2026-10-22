@@ -10,7 +10,6 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
-	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"github.com/robfig/cron/v3"
@@ -25,6 +24,12 @@ var (
 	ErrInvalidPayload  = errors.New("push: invalid payload")
 	ErrDisabledFeature = errors.New("push: notifications disabled for user")
 	ErrInvalidSchedule = errors.New("push: invalid schedule")
+
+	// ErrInvalidDeliveryState is returned when a delivery transition
+	// is requested on an attempt that is not in the state the
+	// transition expects (e.g. an ack for an attempt already marked
+	// as failed).
+	ErrInvalidDeliveryState = errors.New("push: delivery attempt is not in the expected state")
 )
 
 // Pusher is the interface the service uses to deliver a push to
@@ -209,11 +214,8 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 // schedule's Timezone when timezoneMode == SHARED (all devices fire
 // at the same UTC moment).
 //
-// The caller (handler) is responsible for enqueuing the returned
-// timers into the TimerStore so the worker can pick them up. We
-// split this because the handler is the boundary that knows whether
-// Redis is available; falling back to a DB scan is the worker's
-// job, not the service's.
+// The timer rows are the durable record the worker scans; the
+// returned slice is the set of rows that were just inserted.
 func (s *Service) CreateSchedule(ctx context.Context, callerID, ownerID uint, domainIDs []uint, payload *pb.PushPayload, scheduleType pb.PushScheduleType, runAt *time.Time, cronExpr string, tzMode TimezoneMode, timezone string) (*ScheduledPush, []ScheduledPushTimer, error) {
 	if err := s.authorize(ctx, callerID, ownerID); err != nil {
 		return nil, nil, err
@@ -401,17 +403,33 @@ func (s *Service) OnAck(ctx context.Context, messageID string) error {
 // delivery_attempts snapshot and publishes a WsPush. The schedule's
 // user-facing fields are unchanged.
 //
-// Two workers racing on the same row is harmless: the DB-side
-// dispatched_at guard in MarkTimerDispatched ensures only one
-// dispatch goes through. The losing worker just sees RowsAffected=0
-// and exits silently.
+// The timer is claimed (dispatched_at + claimed_at stamped) BEFORE
+// the push is published, so the fire is idempotent across workers:
+// only the first claimer publishes. A dispatch that fails cleanly
+// releases the claim so the next tick retries it. A dispatch that
+// completes closes the claim (claimed_at cleared, dispatched_at
+// kept) so the reaper never re-fires it.
+//
+// A crash between the claim and the completion leaves claimed_at
+// set; the reaper releases such rows once the stale window passes.
 func (s *Service) DispatchTimer(ctx context.Context, schedule *ScheduledPush, timer ScheduledPushTimer) error {
 	now := time.Now()
+
+	claimed, err := s.repo.MarkTimerDispatched(ctx, timer.ID, now)
+	if err != nil {
+		return fmt.Errorf("claim timer: %w", err)
+	}
+	if !claimed {
+		s.logger.Info("push: timer already dispatched, skipping",
+			slog.Uint64("timer_id", uint64(timer.ID)))
+		return nil
+	}
 
 	// Load the device. We need its TZ to compute the next fire
 	// time when the schedule is recurring.
 	dev, err := s.repo.FindDeviceByID(ctx, timer.DeviceID)
 	if err != nil {
+		s.releaseTimer(ctx, timer.ID)
 		return fmt.Errorf("load device: %w", err)
 	}
 
@@ -429,27 +447,26 @@ func (s *Service) DispatchTimer(ctx context.Context, schedule *ScheduledPush, ti
 	}
 	domainIDs, err := s.repo.GetScheduledPushDomainIDs(ctx, schedule.ID)
 	if err != nil {
+		s.releaseTimer(ctx, timer.ID)
 		return fmt.Errorf("load domains: %w", err)
 	}
 	if err := s.repo.InsertPushMessageWithTargets(ctx, msg, domainIDs, &now); err != nil {
+		s.releaseTimer(ctx, timer.ID)
 		return fmt.Errorf("insert scheduled push: %w", err)
 	}
 
 	payload := payloadFromSchedule(schedule)
 	if err := s.dispatchToOneDevice(ctx, msg, dev, payload); err != nil {
+		s.releaseTimer(ctx, timer.ID)
 		return fmt.Errorf("dispatch to device: %w", err)
 	}
 
-	// Stamp dispatched_at. Idempotent under worker races.
-	stamped, err := s.repo.MarkTimerDispatched(ctx, timer.ID, now)
-	if err != nil {
-		s.logger.Warn("push: mark timer dispatched failed",
+	// The push went out: close the claim. dispatched_at stays set so
+	// the pending-timer query never returns this row again.
+	if err := s.completeTimer(ctx, timer.ID); err != nil {
+		s.logger.Warn("push: close timer claim failed",
 			slog.Uint64("timer_id", uint64(timer.ID)),
 			slog.String("error", err.Error()))
-	} else if !stamped {
-		s.logger.Info("push: timer already dispatched by another worker, skipping post-fire work",
-			slog.Uint64("timer_id", uint64(timer.ID)))
-		return nil
 	}
 
 	// For recurring, compute and insert the next per-device timer.
@@ -462,6 +479,50 @@ func (s *Service) DispatchTimer(ctx context.Context, schedule *ScheduledPush, ti
 		}
 	}
 	return nil
+}
+
+// ReleaseStaleTimerClaims re-arms timers whose claim is still open
+// past the cutoff — the worker that claimed them died before the
+// dispatch completed, so the push would otherwise be lost forever.
+// Rows whose dispatch completed are untouched.
+//
+// Exposed so the scheduler runner can reap on every tick.
+func (s *Service) ReleaseStaleTimerClaims(ctx context.Context, cutoff time.Time) (int64, error) {
+	return s.repo.ReleaseStaleTimerClaims(ctx, cutoff)
+}
+
+// completeTimer closes the claim on a timer whose dispatch
+// completed. A failure to close it leaves the claim open, which the
+// reaper would later release — the push may then be delivered twice,
+// which is the safe side of the trade-off versus losing it.
+func (s *Service) completeTimer(ctx context.Context, timerID uint) error {
+	closed, err := s.repo.CompleteTimerDispatch(ctx, timerID)
+	if err != nil {
+		return err
+	}
+	if !closed {
+		s.logger.Warn("push: timer claim was already closed",
+			slog.Uint64("timer_id", uint64(timerID)))
+	}
+	return nil
+}
+
+// releaseTimer clears the claim this worker took on a timer whose
+// dispatch failed, so the next tick retries it. Failures to release
+// are logged: the timer keeps its claim and the reaper releases it
+// once it goes stale, which is the safe side of the trade-off.
+func (s *Service) releaseTimer(ctx context.Context, timerID uint) {
+	released, err := s.repo.ReleaseTimerDispatch(ctx, timerID)
+	if err != nil {
+		s.logger.Warn("push: release timer claim failed",
+			slog.Uint64("timer_id", uint64(timerID)),
+			slog.String("error", err.Error()))
+		return
+	}
+	if !released {
+		s.logger.Warn("push: timer claim was already gone, nothing to release",
+			slog.Uint64("timer_id", uint64(timerID)))
+	}
 }
 
 // scheduleNextRecurringFire computes the next per-device fire
@@ -652,22 +713,6 @@ func (s *Service) LoadSchedule(ctx context.Context, id uint) (*ScheduledPush, er
 // recurring fire.
 func (s *Service) EarliestPendingTimer(ctx context.Context, scheduleID uint) (time.Time, error) {
 	return s.repo.EarliestPendingTimer(ctx, scheduleID)
-}
-
-// PendingTimersAfter returns every undispatched timer at or after
-// the given moment, projected as the canonical Redis TimerEntry
-// shape. The runner uses it to re-enqueue the schedule into Redis
-// after a fire.
-func (s *Service) PendingTimersAfter(ctx context.Context, scheduleID uint, min time.Time) ([]redisplatform.TimerEntry, error) {
-	rows, err := s.repo.PendingTimersAtOrAfter(ctx, scheduleID, min)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]redisplatform.TimerEntry, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, redisplatform.TimerEntry{DeviceID: r.DeviceID, FireAt: r.FireAt})
-	}
-	return out, nil
 }
 
 // authorize checks that the caller is either the user themselves

@@ -1,0 +1,8 @@
+{
+  "name": "scores365-load-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test common.test.mjs"
+  }
+}

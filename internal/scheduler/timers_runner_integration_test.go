@@ -52,13 +52,12 @@ func (f *fixtureUserRepo) GetByID(_ context.Context, id uint) (*users.User, erro
 }
 
 // timersRunnerFixture wires together the SQLite-backed repo,
-// miniredis-backed timerstore, recordingPusher and timersRunner
+// miniredis-backed locker, recordingPusher and timersRunner
 // needed to exercise the worker without booting the full app.
 type timersRunnerFixture struct {
 	db      *gorm.DB
 	rdb     *goredis.Client
 	mr      *miniredis.Miniredis
-	store   *redisplatform.RedisTimerStore
 	repo    *push.Repository
 	svc     *push.Service
 	pusher  *recordingPusher
@@ -113,7 +112,6 @@ func newTimersRunnerFixture(t *testing.T) *timersRunnerFixture {
 	}
 
 	repo := push.NewRepository(db)
-	store := redisplatform.NewTimerStore(rdb)
 	pusher := &recordingPusher{}
 	dom := &fixtureDomainRepo{owned: map[uint][]domains.Domain{
 		u.ID: {{Model: gorm.Model{ID: d.ID}, UserID: u.ID, Domain: d.Domain}},
@@ -125,13 +123,12 @@ func newTimersRunnerFixture(t *testing.T) *timersRunnerFixture {
 
 	runner := &timersRunner{
 		svc:        svc,
-		store:      store,
 		locker:     redisplatform.NewLocker(rdb),
 		logger:     slog.New(slog.NewTextHandler(timerRunnerLog{t}, nil)),
 		batchLimit: 100,
 	}
 	return &timersRunnerFixture{
-		db: db, rdb: rdb, mr: mr, store: store, repo: repo, svc: svc,
+		db: db, rdb: rdb, mr: mr, repo: repo, svc: svc,
 		pusher: pusher, runner: runner,
 		uid: u.ID, domain: d.ID,
 	}
@@ -160,7 +157,7 @@ func (f *timersRunnerFixture) addDevice(token, tz string) devices.Device {
 	return d
 }
 
-func TestTimersRunner_DispatchesDueTimersFromRedis(t *testing.T) {
+func TestTimersRunner_DispatchesDueTimers(t *testing.T) {
 	f := newTimersRunnerFixture(t)
 	f.addDevice("d-1", "UTC")
 	f.addDevice("d-2", "UTC")
@@ -176,15 +173,7 @@ func TestTimersRunner_DispatchesDueTimersFromRedis(t *testing.T) {
 		t.Fatalf("want 2 timers, got %d", len(timers))
 	}
 
-	// Push the timers into Redis and backdate them in DB so the
-	// runner treats them as due.
-	entries := make([]redisplatform.TimerEntry, 0, len(timers))
-	for _, tm := range timers {
-		entries = append(entries, redisplatform.TimerEntry{DeviceID: tm.DeviceID, FireAt: tm.FireAt})
-	}
-	if err := f.store.Enqueue(context.Background(), sched.ID, entries); err != nil {
-		t.Fatalf("enqueue: %v", err)
-	}
+	// Backdate the timers in DB so the runner treats them as due.
 	if err := f.db.Model(&push.ScheduledPushTimer{}).Where("scheduled_push_id = ?", sched.ID).Update("fire_at", time.Now().Add(-time.Minute)).Error; err != nil {
 		t.Fatalf("backdate: %v", err)
 	}
@@ -203,20 +192,11 @@ func TestTimersRunner_DispatchesDueTimersFromRedis(t *testing.T) {
 	}
 
 	// For recurring schedules the runner should have created
-	// one next-fire row per device and re-enqueued them in Redis.
+	// one next-fire row per device.
 	var next int64
 	f.db.Model(&push.ScheduledPushTimer{}).Where("scheduled_push_id = ? AND dispatched_at IS NULL", sched.ID).Count(&next)
 	if next != int64(len(originalIDs)) {
 		t.Errorf("want %d next-fire rows, got %d", len(originalIDs), next)
-	}
-
-	// RunOnce has already moved them into Redis (reEnqueueNext).
-	got, err := f.store.PopDue(context.Background(), sched.ID, time.Now().Add(time.Hour), 10)
-	if err != nil {
-		t.Fatalf("scan redis: %v", err)
-	}
-	if len(got) != len(originalIDs) {
-		t.Errorf("Redis ZSET has %d next-fire entries, want %d", len(got), len(originalIDs))
 	}
 }
 

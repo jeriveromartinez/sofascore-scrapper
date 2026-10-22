@@ -33,7 +33,7 @@ The per-match fact table is **`events`** (`internal/events/model.go`):
 | `external_match_id` | Unique across sources; legacy rows backfilled as `legacy-<id>` during `PreMigrateLegacyEvents`. |
 | `source` | `varchar(32)`, not NULL. The upstream that produced this event. |
 | `sport` | Canonical sport slug (matches `scraper_leagues.sport`). |
-| `league_id` | Foreign key into `tournaments.id` — i.e. the **namespaced** league id. |
+| `league_id` | Foreign key into `tournaments.id` — the **namespaced** league id for 365scores rows, the natural upstream id for FotMob rows. |
 | `home_score`, `away_score` | Zero for fixtures that haven't kicked off yet, or that the upstream reports as finished with no scoring events. |
 | `start_timestamp` | Unix seconds. Zero if extraction failed. |
 | `scraped_at` | Unix milliseconds; the per-tick timestamp the scraper assigned. |
@@ -99,11 +99,13 @@ in `events` is a matching problem (sport mismatch, stale catalog row,
 upstream dropped the comp), which needs different debugging than "the
 catalog never enrolled this sport".
 
-`scraper_leagues.source_league_id` is stored as the namespaced string
-(e.g. `"6000000047"` for 365scores NBA), and `events.league_id` is an
-unsigned integer. Treat them as the same numeric space by casting the
-catalog side to unsigned; this works because the seeded catalog rows are
-always the namespaced form:
+`scraper_leagues.source_league_id` is a string and `events.league_id` is
+an unsigned integer. Only the **365scores** rows are namespaced (e.g.
+`"6000000047"` for NBA, `LeagueIDPrefix + comp id`); the FotMob rows
+keep their natural upstream id (`"47"` for the Premier League). Casting
+the catalog side to unsigned therefore lines up both sources: for
+FotMob it is a no-op, and for 365scores it turns the namespaced string
+into the same integer the events table stores.
 
 ```sql
 SELECT

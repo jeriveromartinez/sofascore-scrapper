@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getE2EAdminToken } from "./helpers";
+import { api, getE2EAdminToken, E2E_SEEDED_ADMIN_EMAIL, TournamentRequest, Tournament } from "./helpers";
 
 const USER_INFO_KEY = "user_info";
 
@@ -7,7 +7,7 @@ async function injectAdminSession(page: import("@playwright/test").Page): Promis
   const token = getE2EAdminToken();
   const user = {
     id: 0,
-    email: "e2e-admin@test.local",
+    email: E2E_SEEDED_ADMIN_EMAIL,
     token,
     refreshToken: token,
   };
@@ -19,7 +19,32 @@ async function injectAdminSession(page: import("@playwright/test").Page): Promis
   );
 }
 
+// The admin table shows 20 rows per page, so a second page only exists
+// once more than 20 tournaments are stored. How many the scraper has
+// written by the time the suite runs depends on the clock, so the
+// rows the pagination needs are seeded here instead of being waited
+// for.
+const SEEDED_TOURNAMENTS = 25;
+
 test.describe("Pagination URL sync", () => {
+  test.beforeAll(async ({ request }) => {
+    const accessToken = getE2EAdminToken();
+    for (let i = 0; i < SEEDED_TOURNAMENTS; i++) {
+      const slug = `e2e-page-${String(i).padStart(3, "0")}`;
+      const resp = await api.post<Tournament, TournamentRequest>(
+        request,
+        "/api/web/v1/tournaments",
+        { name: `E2E Page ${String(i).padStart(3, "0")}`, slug },
+        TournamentRequest,
+        Tournament,
+        { Authorization: `Bearer ${accessToken}` },
+      );
+      if (resp.status !== 201) {
+        throw new Error(`could not seed tournament ${slug}: ${resp.error ?? resp.status}`);
+      }
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     await injectAdminSession(page);
   });

@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,10 +18,17 @@ type AuthHandler struct {
 	userRepo   *users.Repository
 	tokens     *TokenService
 	invitation *InvitationStore
+	cleanup    *RefreshTokenCleanup
 }
 
 func NewAuthHandler(authRepo *AuthRepository, userRepo *users.Repository, tokens *TokenService, invitation *InvitationStore) *AuthHandler {
-	return &AuthHandler{authRepo: authRepo, userRepo: userRepo, tokens: tokens, invitation: invitation}
+	return &AuthHandler{
+		authRepo:   authRepo,
+		userRepo:   userRepo,
+		tokens:     tokens,
+		invitation: invitation,
+		cleanup:    NewRefreshTokenCleanup(authRepo),
+	}
 }
 
 func (h *AuthHandler) RegisterAuthRoutes(group *gin.RouterGroup, rateLimitMw, adminMw gin.HandlerFunc) {
@@ -46,7 +53,10 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 		server.RespondError(c, http.StatusBadRequest, "invitation token is required")
 		return
 	}
-	if err := h.invitation.Consume(c.Request.Context(), req.InvitationToken); err != nil {
+	// The invitation is reserved, not consumed: a failure while the
+	// user is created releases the reservation so the token stays
+	// usable instead of being burned by a transient error.
+	if err := h.invitation.Reserve(c.Request.Context(), req.InvitationToken); err != nil {
 		if errors.Is(err, ErrInvalidInvitation) || errors.Is(err, ErrInvitationExpired) {
 			server.RespondError(c, http.StatusBadRequest, "invalid invitation token")
 			return
@@ -54,11 +64,13 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 		server.RespondError(c, http.StatusServiceUnavailable, "invitation service unavailable")
 		return
 	}
-	user, promoted, err := h.userRepo.CreateAndMaybeBootstrapAdmin(c.Request.Context(), req.Email, req.Password)
+	user, promoted, err := h.userRepo.CreateAndMaybeBootstrapAdmin(c.Request.Context(), users.NormalizeEmail(req.Email), req.Password)
 	if err != nil {
+		h.releaseInvitation(c.Request.Context(), req.InvitationToken)
 		server.RespondError(c, http.StatusConflict, "could not create user")
 		return
 	}
+	h.commitInvitation(c.Request.Context(), req.InvitationToken)
 	// The very first account bootstraps as admin so a fresh install
 	// has an operator who can invite and manage others; subsequent
 	// users default to the least-privileged role. The promotion is
@@ -114,13 +126,16 @@ func (h *AuthHandler) handleLogin(c *gin.Context) {
 	// Normalize: trim surrounding whitespace from the email before
 	// lookup. Password normalization is handled inside bcrypt and
 	// the validator (which already trims).
-	email := strings.TrimSpace(req.Email)
+	email := users.NormalizeEmail(req.Email)
 	user, err := h.userRepo.GetByEmail(c.Request.Context(), email)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "lookup failed")
 		return
 	}
 	if user == nil {
+		// Run a bcrypt comparison anyway: returning early here would
+		// make the response time depend on whether the account exists.
+		VerifyDummy(req.Password)
 		server.RespondError(c, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -257,10 +272,60 @@ func (h *AuthHandler) buildAuthResponse(userID uint, email string) (*pb.AuthResp
 		return nil, err
 	}
 
+	h.scheduleTokenCleanup()
+
 	return &pb.AuthResponse{
 		Id:           uint32(userID),
 		Email:        email,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 	}, nil
+}
+
+// invitationContext returns the context used for the invitation
+// bookkeeping. It is deliberately detached from the request: a client
+// that disconnects mid-registration cancels the request context, and
+// the reservation would then stay stranded in the reserved key — the
+// invitation would become unusable even though the registration never
+// happened.
+func invitationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+}
+
+// releaseInvitation returns an invitation to the pool of usable
+// tokens after a failed registration.
+func (h *AuthHandler) releaseInvitation(ctx context.Context, token string) {
+	ctx, cancel := invitationContext(ctx)
+	defer cancel()
+	if err := h.invitation.Release(ctx, token); err != nil {
+		slog.Default().Warn("auth: failed to release invitation",
+			slog.String("err", err.Error()))
+	}
+}
+
+// commitInvitation consumes an invitation once the user exists.
+func (h *AuthHandler) commitInvitation(ctx context.Context, token string) {
+	ctx, cancel := invitationContext(ctx)
+	defer cancel()
+	if err := h.invitation.Commit(ctx, token); err != nil {
+		slog.Default().Warn("auth: failed to commit invitation",
+			slog.String("err", err.Error()))
+	}
+}
+
+// scheduleTokenCleanup triggers the periodic purge of expired
+// refresh tokens. It runs in the background so the request is not
+// delayed by the delete.
+func (h *AuthHandler) scheduleTokenCleanup() {
+	if h.cleanup == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := h.cleanup.RunIfDue(ctx); err != nil {
+			slog.Default().Warn("auth: refresh token cleanup failed",
+				slog.String("err", err.Error()))
+		}
+	}()
 }

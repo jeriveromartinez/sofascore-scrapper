@@ -34,13 +34,14 @@ export class DevicesApiService extends BaseApiService {
   async getDevicePage(
     cursor?: string,
     limit?: number,
+    signal?: AbortSignal,
   ): Promise<DevicePageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
-    return this.get(url, DevicePage);
+    return this.get(url, DevicePage, signal);
   }
 
   async getAllDevices(): Promise<DeviceResponse> {

@@ -110,9 +110,9 @@ aborts on unmet dependencies until you install them by hand.
 2. Creates `/opt/iptv/apk_storage` and `/opt/iptv/image_storage`, then
    `chown -R iptv:iptv /opt/iptv`.
 3. If `/etc/iptv/env` does **not** exist, generates it:
-   - `DB_PASSWORD` — 24 random alphanumeric characters from
+   - `DB_PASSWORD` — 24 random hexadecimal characters from
      `/dev/urandom`.
-   - `JWT_SECRET` — 48 random alphanumeric characters.
+   - `JWT_SECRET` — 48 random hexadecimal characters.
    - Defaults: `API_ADDR=0.0.0.0:8080`, `DB_HOST=127.0.0.1`,
      `DB_PORT=3306`, `DB_USER=iptv`, `DB_NAME=iptv`,
      `REDIS_URL=redis://127.0.0.1:6379/0`,
@@ -144,10 +144,12 @@ Steps 1, 2, 4, 5, and 6 are safe to repeat. Step 3 is guarded by
 
 ### First login: bootstrap invitation
 
-The seeder creates a default `admin@local` / `admin1234` on an empty
-`users` table. To skip that hardcoded credential and register the first
-account through the invitation flow instead, mint a token **before**
-anyone logs in:
+The seeder creates a default `admin@local` on an empty `users` table.
+Its password comes from the `DEFAULT_ADMIN_PASSWORD` environment
+variable; when that variable is unset the seeder generates a random
+password and never prints it, so the seeded account cannot be logged
+into. To register the first account through the invitation flow
+instead, mint a token **before** anyone logs in:
 
 ```bash
 sudo -u iptv bash -c 'set -a; . /etc/iptv/env; set +a; /opt/iptv/iptv bootstrap-invitation'

@@ -52,6 +52,32 @@ func TestLoadSecurityDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadHTTPWriteTimeoutDefault(t *testing.T) {
+	// The write deadline must be at least as long as the server's
+	// 15m read timeout: the APK endpoints stream large files and
+	// accept 10 MiB chunks, and a shorter deadline truncates both.
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HTTP.WriteTimeout != 15*time.Minute {
+		t.Fatalf("WriteTimeout=%v, want 15m", cfg.HTTP.WriteTimeout)
+	}
+}
+
+func TestLoadHTTPWriteTimeoutEnvOverride(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("HTTP_WRITE_TIMEOUT", "2m")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HTTP.WriteTimeout != 2*time.Minute {
+		t.Fatalf("WriteTimeout=%v, want 2m", cfg.HTTP.WriteTimeout)
+	}
+}
+
 func TestLoadTrustedProxiesCSV(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("TRUSTED_PROXIES", " 10.0.0.10, 192.168.1.0/24, ,")
@@ -335,6 +361,16 @@ func TestValidatePoolRejectsNonpositiveIdleTime(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error for ConnMaxIdleTime=0")
+	}
+}
+
+func TestLoadRejectsInvalidPoolConfig(t *testing.T) {
+	// Load used to return a config without ever calling Validate, so
+	// a pool that can never open a connection booted successfully.
+	setRequiredEnv(t)
+	t.Setenv("DB_MAX_OPEN_CONNS", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected Load to reject DB_MAX_OPEN_CONNS=0")
 	}
 }
 

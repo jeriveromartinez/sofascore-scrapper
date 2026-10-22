@@ -1,11 +1,8 @@
 import { request as playwrightRequest } from "@playwright/test";
-import { execSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { api, AuthRequest, AuthResponse, E2E_ADMIN_TOKEN_PATH } from "./helpers";
+import { api, AuthRequest, AuthResponse, E2E_ADMIN_TOKEN_PATH, E2E_SEEDED_ADMIN_EMAIL, E2E_SEEDED_ADMIN_PASSWORD } from "./helpers";
 
 const AUTH_PATH = "/api/web/v1/users";
-const ADMIN_EMAIL = "e2e-admin@test.local";
-const ADMIN_PASSWORD = "Password1!";
 
 export default async function globalSetup(): Promise<void> {
   const request = await playwrightRequest.newContext({
@@ -13,33 +10,23 @@ export default async function globalSetup(): Promise<void> {
   });
 
   try {
+    // The seeded administrator is the only account with admin rights on a
+    // fresh stack; accounts registered with an invitation are regular users.
     const login = await api.post<AuthResponse, AuthRequest>(
       request,
       `${AUTH_PATH}/login`,
-      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, invitationToken: "" },
+      { email: E2E_SEEDED_ADMIN_EMAIL, password: E2E_SEEDED_ADMIN_PASSWORD, invitationToken: "" },
       AuthRequest,
       AuthResponse,
     );
-    if (login.status === 200 && login.data?.token) {
-      writeFileSync(E2E_ADMIN_TOKEN_PATH, login.data.token, { mode: 0o600 });
-      return;
+    if (login.status !== 200 || !login.data?.token) {
+      throw new Error(
+        `Could not log in as ${E2E_SEEDED_ADMIN_EMAIL}: ${login.error ?? login.status}. ` +
+          "The stack seeds that account on first boot; set E2E_SEEDED_ADMIN_EMAIL and " +
+          "E2E_SEEDED_ADMIN_PASSWORD for a different target.",
+      );
     }
-
-    const invitationToken = execSync(
-      "docker compose -f ../deployments/docker/compose.test.yml exec -T backend cat /shared/invite.txt",
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-    ).trim();
-    const registration = await api.post<AuthResponse, AuthRequest>(
-      request,
-      `${AUTH_PATH}/register`,
-      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, invitationToken },
-      AuthRequest,
-      AuthResponse,
-    );
-    if (registration.status !== 201 || !registration.data?.token) {
-      throw new Error(`Could not register E2E admin: ${registration.error ?? registration.status}`);
-    }
-    writeFileSync(E2E_ADMIN_TOKEN_PATH, registration.data.token, { mode: 0o600 });
+    writeFileSync(E2E_ADMIN_TOKEN_PATH, login.data.token, { mode: 0o600 });
   } finally {
     await request.dispose();
   }

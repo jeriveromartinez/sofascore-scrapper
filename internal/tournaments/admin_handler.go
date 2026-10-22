@@ -48,16 +48,29 @@ var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,190}$`)
 // one user-visible message.
 const slugInvalidMsg = "slug must match ^[a-z0-9][a-z0-9-]{0,190}$ (lowercase letters, digits and dashes; must start with a letter or digit)"
 
-// normalizeSlug lower-cases + trims and validates the slug. Empty
-// is rejected: scraper.ToTournament always derives a non-empty
-// slug from the league name, so an empty admin-typed slug would
-// silently lose its identity on the next scraper tick.
+// normalizeSlug lower-cases + trims and validates the slug.
 func normalizeSlug(raw string) (string, bool) {
 	slug := strings.ToLower(strings.TrimSpace(raw))
 	if !slugRE.MatchString(slug) {
 		return "", false
 	}
 	return slug, true
+}
+
+// resolveSlug returns the slug to persist. A caller that leaves the
+// slug empty gets one derived from the name with the same rule the
+// scraper uses (internal/scraper.ToTournament), so the two paths
+// agree and a later upsert cannot fork the row.
+//
+// The derived slug still has to satisfy slugRE: a name whose
+// derivation is not slug-shaped ("B. League" -> "b.-league") is
+// rejected, and the operator has to type a slug themselves.
+func resolveSlug(name, raw string) (string, bool) {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		candidate = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
+	}
+	return normalizeSlug(candidate)
 }
 
 func (h *Handler) handleGetTournamentsPage(c *gin.Context) {
@@ -143,7 +156,7 @@ func (h *Handler) handleCreateTournament(c *gin.Context) {
 		return
 	}
 
-	slug, ok := normalizeSlug(req.Slug)
+	slug, ok := resolveSlug(req.Name, req.Slug)
 	if !ok {
 		server.RespondError(c, http.StatusBadRequest, slugInvalidMsg)
 		return
@@ -170,7 +183,7 @@ func (h *Handler) handleUpdateTournament(c *gin.Context) {
 		return
 	}
 
-	slug, ok := normalizeSlug(req.Slug)
+	slug, ok := resolveSlug(req.Name, req.Slug)
 	if !ok {
 		server.RespondError(c, http.StatusBadRequest, slugInvalidMsg)
 		return

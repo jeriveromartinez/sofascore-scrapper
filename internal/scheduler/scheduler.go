@@ -27,7 +27,6 @@ type Scheduler struct {
 	downloadCounter apk.DownloadCounter
 	pushService     *push.Service
 	pushLocker      redisplatform.Locker
-	pushStore       redisplatform.TimerStore
 	tickInterval    time.Duration
 	batchLimit      int
 	logger          *slog.Logger
@@ -63,19 +62,13 @@ func (s *Scheduler) SetPushService(svc *push.Service, locker redisplatform.Locke
 	s.batchLimit = batchLimit
 }
 
-// SetPushTimerStore wires the Redis-backed timer index. The
-// scheduler falls back to a DB scan if the store is nil.
-func (s *Scheduler) SetPushTimerStore(store redisplatform.TimerStore) {
-	s.pushStore = store
-}
-
 func (s *Scheduler) Run(ctx context.Context) error {
 	localCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg, s.logger)
 	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg, s.logger)
-	startTimersRunner(localCtx, s.pushService, s.pushStore, s.tickInterval, s.batchLimit, s.pushLocker, s.logger, &s.wg)
+	startTimersRunner(localCtx, s.pushService, s.tickInterval, s.batchLimit, s.pushLocker, s.logger, &s.wg)
 
 	<-localCtx.Done()
 	s.wg.Wait()

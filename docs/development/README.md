@@ -108,8 +108,9 @@ npm ci
 npm run build
 ```
 
-Output lands in `web/dist/`. The Docker build's `build-vue` stage embeds
-it into the binary.
+Output lands in `web/dist/`. The Docker build's `build-vue` stage copies
+it into the image as `web/dist`; the backend serves those files from
+disk (there is no `go:embed`), relative to its working directory.
 
 ### Ubuntu `.deb` package
 
@@ -164,10 +165,12 @@ docker run --rm -p 8080:8080 -v "$PWD/dist:/tmp/dist:ro" iptv-chain-test
 ### Docker Compose for local dev
 
 The example environment file lives at `deployments/docker/.env.example`
-— copy it to the repo root as `.env` first:
+— copy it next to the compose file as `deployments/docker/.env` first
+(compose resolves `.env` from the project directory, i.e. the folder
+holding the compose file):
 
 ```bash
-cp deployments/docker/.env.example .env
+cp deployments/docker/.env.example deployments/docker/.env
 docker compose -f deployments/docker/compose.dev.yml up --build
 ```
 
@@ -243,8 +246,9 @@ Verify the mirror is in sync before tagging a release:
 make proto-verify-flutter
 ```
 
-If the Flutter proto is out of sync, copy the Go file into the Flutter
-repo and regenerate the Dart bindings there (see
+If the Flutter proto is out of sync, copy `proto/api.proto` into the
+Flutter repo (`../flutter-apptv/proto/api.proto`) and regenerate the
+Dart bindings there (see
 [`../integration-audit-roadmap.md`](../integration-audit-roadmap.md) for
 the rollover plan that depends on this sync).
 

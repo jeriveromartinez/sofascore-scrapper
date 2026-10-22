@@ -29,8 +29,11 @@ responses), [`troubleshooting.md`](docs/operations/troubleshooting.md)
   `internal/gen/api/`.
 
 On first boot the server creates the schema with GORM AutoMigrate and
-seeds a default admin (`admin@local` / `admin1234`). Change the password
-on first login.
+seeds a default admin (`admin@local`). Its password comes from the
+`DEFAULT_ADMIN_PASSWORD` environment variable; when that variable is
+unset the seeder generates a random password and never prints it, so
+either set `DEFAULT_ADMIN_PASSWORD` before the first boot or register
+the first account with the `bootstrap-invitation` command.
 
 The project layout, environment variables, local setup, build and test
 commands, protobuf contract, and scheduled jobs are detailed in

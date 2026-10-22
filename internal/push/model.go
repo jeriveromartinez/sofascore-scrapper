@@ -105,37 +105,40 @@ const (
 // "templates" table) because they never change after send and we want
 // zero joins at delivery time.
 //
-// CreatedAt/UpdatedAt are explicit columns (no auto-stamp tags) so
-// the caller's clock survives: the service stamps m.CreatedAt with
-// time.Now() before insert so audit logs can correlate the push
-// wall-clock against the originating HTTP request. Embedding
-// gorm.Model here would re-stamp CreatedAt from the DB clock at
-// insert time, silently drifting the audit by hundreds of ms under
-// load.
+// The timestamps are explicit columns so the service can stamp
+// CreatedAt with the request clock: GORM only fills a zero-valued
+// CreatedAt, so the stamped value survives the insert and the audit
+// log can correlate the push wall-clock with the originating HTTP
+// request.
+//
+// DeletedAt is a soft-delete marker, like on the other push tables:
+// a push is audit history and must not vanish from the database when
+// it is removed from the dashboard.
 type PushMessage struct {
-	ID          uint        `gorm:"primaryKey;autoIncrement;column:id"`
-	UserID      uint        `gorm:"column:user_id;not null;index:idx_push_messages_user_created,priority:1;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	User        *users.User `gorm:"foreignKey:UserID;references:ID"`
-	Category    Category    `gorm:"column:category;size:32;not null"`
-	Title       string      `gorm:"column:title;size:200;not null"`
-	Body        string      `gorm:"column:body;size:2000;not null"`
-	ImageURL    string      `gorm:"column:image_url;size:500"`
-	Priority    Priority    `gorm:"column:priority;size:16;not null;default:'normal'"`
-	TTLSeconds  int         `gorm:"column:ttl_seconds;not null;default:0"`
-	DataJSON    StringJSON  `gorm:"column:data_json;type:json"`
-	Source      Source      `gorm:"column:source;size:16;not null"`
-	ScheduledID *uint       `gorm:"column:scheduled_id;null;foreignKey:ScheduledID;references:ID;constraint:OnDelete:SET_NULL"`
-	CreatedAt   time.Time   `gorm:"column:created_at;not null;index:idx_push_messages_user_created,priority:2"`
-	UpdatedAt   time.Time   `gorm:"column:updated_at;not null"`
+	ID          uint           `gorm:"primaryKey;autoIncrement;column:id"`
+	UserID      uint           `gorm:"column:user_id;not null;index:idx_push_messages_user_created,priority:1;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	User        *users.User    `gorm:"foreignKey:UserID;references:ID"`
+	Category    Category       `gorm:"column:category;size:32;not null"`
+	Title       string         `gorm:"column:title;size:200;not null"`
+	Body        string         `gorm:"column:body;size:2000;not null"`
+	ImageURL    string         `gorm:"column:image_url;size:500"`
+	Priority    Priority       `gorm:"column:priority;size:16;not null;default:'normal'"`
+	TTLSeconds  int            `gorm:"column:ttl_seconds;not null;default:0"`
+	DataJSON    StringJSON     `gorm:"column:data_json;type:json"`
+	Source      Source         `gorm:"column:source;size:16;not null"`
+	ScheduledID *uint          `gorm:"column:scheduled_id;null;foreignKey:ScheduledID;references:ID;constraint:OnDelete:SET_NULL"`
+	CreatedAt   time.Time      `gorm:"column:created_at;not null;index:idx_push_messages_user_created,priority:2"`
+	UpdatedAt   time.Time      `gorm:"column:updated_at;not null"`
+	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index"`
 }
 
 // PushMessageTarget is the join table between a push and its
 // audience domains. Modeled explicitly so we can add metadata later
 // (e.g. "sent at" per target) without a migration.
 type PushMessageTarget struct {
-	PushMessageID uint          `gorm:"column:push_message_id;primaryKey;not null;foreignKey:PushMessageID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	DomainID      uint          `gorm:"column:domain_id;primaryKey;not null;foreignKey:DomainID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	PushMessage   *PushMessage  `gorm:"foreignKey:PushMessageID;references:ID"`
+	PushMessageID uint            `gorm:"column:push_message_id;primaryKey;not null;foreignKey:PushMessageID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	DomainID      uint            `gorm:"column:domain_id;primaryKey;not null;foreignKey:DomainID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	PushMessage   *PushMessage    `gorm:"foreignKey:PushMessageID;references:ID"`
 	Domain        *domains.Domain `gorm:"foreignKey:DomainID;references:ID"`
 }
 
@@ -149,7 +152,7 @@ type PushMessageTarget struct {
 type TimezoneMode string
 
 const (
-	TimezoneModeShared     TimezoneMode = "shared"
+	TimezoneModeShared      TimezoneMode = "shared"
 	TimezoneModeDeviceLocal TimezoneMode = "device_local"
 )
 
@@ -166,23 +169,23 @@ func (m TimezoneMode) Valid() bool {
 // and on fire, so the existing dashboard column keeps working.
 type ScheduledPush struct {
 	gorm.Model
-	UserID          uint         `gorm:"column:user_id;not null;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	User            *users.User  `gorm:"foreignKey:UserID;references:ID"`
-	ScheduleType    ScheduleType `gorm:"column:schedule_type;size:16;not null"`
-	RunAt           *time.Time   `gorm:"column:run_at;null"`
-	CronExpr        string       `gorm:"column:cron_expr;size:64"`
-	NextFireAt      time.Time    `gorm:"column:next_fire_at;not null;index:idx_schedules_active_next,priority:2"`
-	LastFiredAt     *time.Time   `gorm:"column:last_fired_at;null"`
-	IsActive        bool         `gorm:"column:is_active;not null;default:true;index:idx_schedules_active_next,priority:1"`
-	TimezoneMode    TimezoneMode `gorm:"column:timezone_mode;size:16;not null;default:'shared'"`
-	Timezone        string       `gorm:"column:timezone;size:64;not null;default:'UTC'"`
-	Category        Category     `gorm:"column:category;size:32;not null"`
-	Title           string       `gorm:"column:title;size:200;not null"`
-	Body            string       `gorm:"column:body;size:2000;not null"`
-	ImageURL        string       `gorm:"column:image_url;size:500"`
-	Priority        Priority     `gorm:"column:priority;size:16;not null;default:'normal'"`
-	TTLSeconds      int          `gorm:"column:ttl_seconds;not null;default:0"`
-	DataJSON        StringJSON   `gorm:"column:data_json;type:json"`
+	UserID       uint         `gorm:"column:user_id;not null;foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	User         *users.User  `gorm:"foreignKey:UserID;references:ID"`
+	ScheduleType ScheduleType `gorm:"column:schedule_type;size:16;not null"`
+	RunAt        *time.Time   `gorm:"column:run_at;null"`
+	CronExpr     string       `gorm:"column:cron_expr;size:64"`
+	NextFireAt   time.Time    `gorm:"column:next_fire_at;not null;index:idx_schedules_active_next,priority:2"`
+	LastFiredAt  *time.Time   `gorm:"column:last_fired_at;null"`
+	IsActive     bool         `gorm:"column:is_active;not null;default:true;index:idx_schedules_active_next,priority:1"`
+	TimezoneMode TimezoneMode `gorm:"column:timezone_mode;size:16;not null;default:'shared'"`
+	Timezone     string       `gorm:"column:timezone;size:64;not null;default:'UTC'"`
+	Category     Category     `gorm:"column:category;size:32;not null"`
+	Title        string       `gorm:"column:title;size:200;not null"`
+	Body         string       `gorm:"column:body;size:2000;not null"`
+	ImageURL     string       `gorm:"column:image_url;size:500"`
+	Priority     Priority     `gorm:"column:priority;size:16;not null;default:'normal'"`
+	TTLSeconds   int          `gorm:"column:ttl_seconds;not null;default:0"`
+	DataJSON     StringJSON   `gorm:"column:data_json;type:json"`
 }
 
 // ScheduledPushTimer is the per-device fire row for a scheduled
@@ -194,13 +197,21 @@ type ScheduledPush struct {
 // This is the durable source of truth for "when does each device
 // receive this schedule". Redis ZSETs cache the index but are
 // rebuilt from this table on startup.
+//
+// DispatchedAt records that the timer fired; ClaimedAt records that
+// a worker took the row and has not finished the dispatch yet. The
+// split matters for crash recovery: a row with DispatchedAt set and
+// ClaimedAt NULL completed, while a row with both set was claimed
+// by a worker that died mid-dispatch and must be re-armed by the
+// reaper (Repository.ReleaseStaleTimerClaims).
 type ScheduledPushTimer struct {
 	gorm.Model
-	ScheduledPushID uint      `gorm:"column:scheduled_push_id;not null;index:idx_spt_schedule_fire,priority:1;foreignKey:ScheduledPushID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	ScheduledPushID uint           `gorm:"column:scheduled_push_id;not null;index:idx_spt_schedule_fire,priority:1;foreignKey:ScheduledPushID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 	ScheduledPush   *ScheduledPush `gorm:"foreignKey:ScheduledPushID;references:ID"`
-	DeviceID        uint      `gorm:"column:device_id;not null;index:idx_spt_device_dispatched,priority:1;foreignKey:DeviceID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	FireAt          time.Time `gorm:"column:fire_at;not null;index:idx_spt_schedule_fire,priority:2"`
-	DispatchedAt    *time.Time `gorm:"column:dispatched_at;null;index:idx_spt_device_dispatched,priority:2"`
+	DeviceID        uint           `gorm:"column:device_id;not null;index:idx_spt_device_dispatched,priority:1;foreignKey:DeviceID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
+	FireAt          time.Time      `gorm:"column:fire_at;not null;index:idx_spt_schedule_fire,priority:2"`
+	DispatchedAt    *time.Time     `gorm:"column:dispatched_at;null;index:idx_spt_device_dispatched,priority:2"`
+	ClaimedAt       *time.Time     `gorm:"column:claimed_at;null;index:idx_spt_claimed_at"`
 }
 
 // ScheduledPushTarget is the join table between a scheduled_push and

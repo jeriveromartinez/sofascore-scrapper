@@ -54,13 +54,14 @@ WORKDIR /pkg
 COPY deployments/package/control ./DEBIAN/control
 COPY deployments/package/postinst.sh ./DEBIAN/postinst
 COPY deployments/package/prerm.sh ./DEBIAN/prerm
+COPY deployments/package/postrm.sh ./DEBIAN/postrm
 COPY deployments/package/iptv.service ./lib/systemd/system/iptv.service
 
 # Binaries and dashboard.
 COPY --from=build-go /out/scores365-scrapper ./opt/iptv/iptv
 COPY --from=build-vue /app/web/dist ./opt/iptv/web/dist
 
-RUN chmod 0755 ./DEBIAN/postinst ./DEBIAN/prerm \
+RUN chmod 0755 ./DEBIAN/postinst ./DEBIAN/prerm ./DEBIAN/postrm \
     && chmod 0755 ./opt/iptv/iptv
 
 # Version comes from a build arg so the .deb version matches the repo tag.

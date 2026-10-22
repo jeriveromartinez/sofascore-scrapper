@@ -2,8 +2,11 @@ package tournaments
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Repository struct {
@@ -43,10 +46,57 @@ func (r *Repository) GetByID(id uint) (*Tournament, error) {
 	return &tournament, result.Error
 }
 
+// maxIDAllocationAttempts bounds the retry loop in Create. Two admins
+// creating a tournament at the same instant can pick the same
+// candidate id; the loser retries with the next one.
+const maxIDAllocationAttempts = 5
+
+// Create inserts an admin-created tournament.
+//
+// The primary key is allocated from the band reserved for admin rows
+// (see model.go) instead of the table's auto-increment counter, so an
+// admin tournament can never collide with an upstream league row.
 func (r *Repository) Create(name, slug string) (*Tournament, error) {
-	tournament := &Tournament{Name: name, Slug: slug}
-	result := r.db.Create(tournament)
-	return tournament, result.Error
+	for range maxIDAllocationAttempts {
+		id, err := r.nextAdminTournamentID()
+		if err != nil {
+			return nil, err
+		}
+		tournament := &Tournament{Model: gorm.Model{ID: id}, Name: name, Slug: slug}
+		result := r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(tournament)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		if result.RowsAffected > 0 {
+			return tournament, nil
+		}
+	}
+	return nil, fmt.Errorf("could not allocate a tournament id in the reserved admin range")
+}
+
+// nextAdminTournamentID returns the next free primary key inside the
+// reserved admin band.
+//
+// The lookup is unscoped: a soft-deleted tournament still occupies its
+// primary key, so counting only the live rows would hand the same id
+// out again and the insert would collide with the deleted row.
+func (r *Repository) nextAdminTournamentID() (uint, error) {
+	var maxID sql.NullInt64
+	row := r.db.Unscoped().Model(&Tournament{}).
+		Where("id >= ? AND id < ?", AdminTournamentIDBase, AdminTournamentIDCeiling).
+		Select("MAX(id)").
+		Row()
+	if err := row.Scan(&maxID); err != nil {
+		return 0, err
+	}
+	if !maxID.Valid {
+		return AdminTournamentIDBase, nil
+	}
+	next := uint(maxID.Int64) + 1
+	if next >= AdminTournamentIDCeiling {
+		return 0, fmt.Errorf("reserved tournament id range is exhausted")
+	}
+	return next, nil
 }
 
 func (r *Repository) Update(id uint, name, slug string) (*Tournament, error) {

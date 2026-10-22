@@ -47,16 +47,17 @@ func NewHub() *Hub {
 // socket before the old close handler has run.
 func (h *Hub) Register(deviceID uint64, c *Connection) {
 	h.mu.Lock()
-	if old, ok := h.conns[deviceID]; ok && old != c {
-		// Evict the previous connection. The new one takes its
-		// place; the old writer/read goroutines exit when the
-		// socket close propagates.
-		old.Close(1011, "evicted by new connection for same device")
-		delete(h.conns, deviceID)
-	}
+	old := h.conns[deviceID]
 	h.conns[deviceID] = c
 	count := len(h.conns)
 	h.mu.Unlock()
+
+	// Evict the previous connection outside the lock: Close runs the
+	// close hook synchronously and that hook calls back into the hub,
+	// so closing while holding the lock deadlocks the whole hub.
+	if old != nil && old != c {
+		old.Close(1011, "evicted by new connection for same device")
+	}
 	h.notifyConnCount(count)
 }
 
@@ -73,6 +74,24 @@ func (h *Hub) Unregister(deviceID uint64) {
 	h.mu.Unlock()
 	if ok && c != nil {
 		c.Close(1000, "client closed or hub unregister")
+	}
+	h.notifyConnCount(count)
+}
+
+// UnregisterConn removes the connection registered for deviceID only
+// when it is still the given connection. A connection evicted by
+// Register closes after its replacement is already in place; without
+// the identity check its close hook would drop the live connection.
+func (h *Hub) UnregisterConn(deviceID uint64, c *Connection) {
+	h.mu.Lock()
+	cur, ok := h.conns[deviceID]
+	if ok && cur == c {
+		delete(h.conns, deviceID)
+	}
+	count := len(h.conns)
+	h.mu.Unlock()
+	if ok && cur == c && cur != nil {
+		cur.Close(1000, "client closed or hub unregister")
 	}
 	h.notifyConnCount(count)
 }

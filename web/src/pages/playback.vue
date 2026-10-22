@@ -9,8 +9,8 @@ import PaginationControls from "../components/PaginationControls.vue";
 const pagination = useCursorPagination<PlaybackLog>({
   routeName: "Playback",
   defaultSize: 20,
-  fetchPage: async (cursor, size) => {
-    const page: PlaybackPageResponse = await playbackApiService.getPlaybackPage(cursor, size);
+  fetchPage: async (cursor, size, signal) => {
+    const page: PlaybackPageResponse = await playbackApiService.getPlaybackPage(cursor, size, signal);
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",

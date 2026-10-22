@@ -190,8 +190,9 @@ immediately.
 *Confirm:* `redis-cli INFO memory | grep maxmemory`. If
 `maxmemory_policy` is `allkeys-lru` (the common default), Redis
 silently evicts keys under memory pressure — including the rate-limit
-counters (`iptv:ratelimit:...`) and invitation tokens
-(`iptv:invitation:...`).
+counters (`ratelimit:<sha256>`) and invitation tokens
+(`auth:invitation:<sha256>`). Those are the base key names;
+`REDIS_KEY_PREFIX`, when set, is prepended to them.
 
 *Fix:* set `maxmemory-policy noeviction` in `/etc/redis/redis.conf`
 and restart redis-server. The application expects rate-limit and
@@ -241,12 +242,17 @@ old, half-uploaded chunks accumulate in
 `/opt/iptv/apk_storage/`.
 
 *Fix:* the cleanup cron (`internal/apk/cleanup.go`) runs every
-15 minutes and removes chunks from aborted uploads older than 1 hour.
-Wait one hour for the next sweep; if it has not recovered, prune
-manually: `find /opt/iptv/apk_storage -name '*.part' -mmin +60 -delete`.
-For finished builds, the policy is keep-the-active-APK-only —
-`rm /opt/iptv/apk_storage/finished/<old-version>` is safe as long as
-no device is still downloading it (check `apk_versions.active`).
+15 minutes and removes the chunks of upload sessions that have
+expired — the session TTL is 24 hours (`uploadSessionTTL` in
+`internal/apk/upload_state.go`). Chunks live in
+`/opt/iptv/apk_storage/chunks/<upload_id>/chunk-<n>`. Wait for the
+next sweep; if it has not recovered, prune manually:
+`find /opt/iptv/apk_storage/chunks -mindepth 1 -maxdepth 1 -type d -mmin +1440 -exec rm -rf {} +`.
+Assembled builds are published straight into
+`/opt/iptv/apk_storage/<package>-<version>.apk` — there is no
+`finished/` subdirectory — so the policy is keep-the-active-APK-only:
+`rm /opt/iptv/apk_storage/<package>-<old-version>.apk` is safe as
+long as no device is still downloading it (check `apk_versions.active`).
 
 ### Image storage disk full
 
@@ -275,8 +281,8 @@ sudo journalctl -u iptv.service | grep "failed to download logo"
 *Fix:* upstream CDNs (FotMob, 365scores) check the `Referer` header
 on logo requests. If an upstream changes its expected `Referer`, all
 logos silently revert to initials chips. The handler has a fallback
-(`internal/events/logo_handler.go`) that consults the CDN's URL
-allow-list; check whether the URL pattern changed upstream before
+(`internal/events/logo_store.go`, `TeamLogoSourceURL`) that consults the
+CDN's URL allow-list; check whether the URL pattern changed upstream before
 treating this as an env-var problem.
 
 ---
@@ -294,7 +300,7 @@ Edit `/etc/iptv/env` so `JWT_SECRET` is at least 32 bytes
 **Symptoms.** Operator runs `bootstrap-invitation`, prints the token,
 but `POST /api/web/v1/users/register` returns 401 / 404 / `invalid token`.
 
-*Confirm:* `redis-cli KEYS 'iptv:invitation:*'` (or `KEYS '*'`
+*Confirm:* `redis-cli KEYS 'auth:invitation:*'` (or `KEYS '*'`
 depending on your `REDIS_KEY_PREFIX`). If the key is missing or has
 no TTL, Redis lost it (see [Redis returned, but rate limits or invitations are missing](#redis-returned-but-rate-limits-or-invitations-are-missing)).
 
@@ -319,16 +325,22 @@ yields zero-valued fields.
 1. Is the cron running?
    `sudo journalctl -u iptv.service | grep 'scrape day'`
 2. Is the upstream reachable from this host?
-   `curl -fs 'https://webws.365scores.com/web/games/allscores/?lang=en' | head -c 200`
+   ```bash
+   DAY=$(date -u +%d/%m/%Y)
+   curl -fs -H 'Referer: https://www.365scores.com/' \
+     "https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=$DAY&endDate=$DAY&onlyMajorGames=false&withTop=true" | head -c 200
+   ```
+   The upstream rejects requests without the `Referer` header.
 3. Is the league catalog doing its job? See
-   [`verify-scraper-output.md` → Is the league catalog doing its job?](verify-scraper-output.md#is-the-league-catalog-doing-its-job).
+   [`verify-scraper-output.md` → Is the league catalog doing its job?](verify-scraper-output.md#3-is-the-league-catalog-doing-its-job).
 
 ### Scraper rate-limited (429)
 
 **Symptoms.** Logs show `scrape: 429 from /web/games/allscores/` then
 `fetch error: rate limited`.
 
-*Confirm:* `curl -I https://webws.365scores.com/web/games/allscores/?lang=en`
+*Confirm:* `curl -I -H 'Referer: https://www.365scores.com/' \
+  'https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=21/10/2026&endDate=21/10/2026&onlyMajorGames=false&withTop=true'`
 returns `HTTP 429` repeatedly from the backend host.
 
 *Behavior:* The HTTP client retries with exponential backoff
@@ -401,9 +413,11 @@ backend's Pub/Sub fanout fails when Redis is unreachable.
 - The client's local upload state — does it have a `upload_id`?
   Without it, the server cannot resume; the client must restart.
 - `/opt/iptv/apk_storage` is the disk path the upload resumes
-  against. Verify with `ls /opt/iptv/apk_storage/uploads/` — if the
-  directory is missing, the server had to recreate it (a `mkdir`
-  failure typically shows in `journalctl`).
+  against. Chunks are written to
+  `/opt/iptv/apk_storage/chunks/<upload_id>/chunk-<n>`. Verify with
+  `ls /opt/iptv/apk_storage/chunks/` — if the directory is missing,
+  the server had to recreate it (a `mkdir` failure typically shows in
+  `journalctl`).
 
 *Fix:* ask the client to retry from chunk 1 with a fresh
 `POST /uploads/begin`. Old partial chunks are cleaned up by
@@ -420,10 +434,10 @@ the 15-minute job (see [APK storage disk full](#apk-storage-disk-full)).
 *Confirm:* `/opt/iptv/web/dist/index.html` exists and is readable
 by the `iptv` system user.
 
-*Fix:* the binary serves the embedded `web/dist`. If the
-distribution is missing, you built a backend binary without the
-frontend step. Run the `.deb` package build (see
-[`deb-package.md`](deb-package.md)) which always runs the
+*Fix:* the binary serves `web/dist` from disk, relative to its
+working directory. If the distribution is missing, you built a
+backend binary without the frontend step. Run the `.deb` package
+build (see [`deb-package.md`](deb-package.md)) which always runs the
 `build-vue` stage first.
 
 ### Protobuf endpoint accepts JSON, then rejects as missing fields
@@ -466,7 +480,7 @@ during real operations. Use it to triage an unfamiliar symptom.
    `max_connections` in `mariadb-server`.
 5. **Redis eviction silently drops rate-limit + invitation keys.**
    Set `maxmemory-policy noeviction`. Otherwise, on memory pressure,
-   Redis evicts `iptv:ratelimit:*` and `iptv:invitation:*` keys.
+   Redis evicts `ratelimit:*` and `auth:invitation:*` keys.
 6. **`/health/ready` 503 while `/health/live` is 200.** Readiness
    pings Redis. The most common alert is a Redis blip — check
    `journalctl -u redis-server`.

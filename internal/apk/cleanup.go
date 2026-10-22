@@ -3,6 +3,7 @@ package apk
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -25,6 +26,15 @@ const (
 )
 
 func (cj *CleanupJob) Run(ctx context.Context, client *goredis.Client) error {
+	removed, err := cj.chunkStore.CleanupStaleFiles(time.Now(), ChunkTempMaxAge, ChunkDirMaxAge)
+	if err != nil {
+		return fmt.Errorf("cleanup stale chunk files: %w", err)
+	}
+	if removed > 0 {
+		slog.Default().Info("apk: removed stale upload leftovers",
+			slog.Int("entries", removed))
+	}
+
 	if client == nil {
 		return nil
 	}

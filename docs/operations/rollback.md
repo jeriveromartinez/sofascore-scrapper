@@ -152,12 +152,15 @@ greater than zero.
 - **Deliberate wipe** (`DROP DATABASE` with no restore) — the seeder
   recreates the default admin on the next boot:
   - Email: `admin@local`
-  - Password: `admin1234`
+  - Password: the value of `DEFAULT_ADMIN_PASSWORD`; when that
+    variable is unset the seeder generates a random password and never
+    prints it
   - Role: `admin`
 
-  Both values are hardcoded in `internal/seeder/admin.go` and public.
-  If a wiped host should not expose them, mint a bootstrap invitation
-  **before** the first normal boot. On a `.deb` host:
+  Only the email is hardcoded in `internal/seeder/admin.go`. To
+  register the first account through the invitation flow, mint a
+  bootstrap invitation **before** the first normal boot. On a `.deb`
+  host:
 
   ```bash
   sudo -u iptv bash -c 'set -a; . /etc/iptv/env; set +a; /opt/iptv/iptv bootstrap-invitation'

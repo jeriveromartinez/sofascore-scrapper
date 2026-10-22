@@ -9,8 +9,8 @@ import PaginationControls from "../components/PaginationControls.vue";
 const pagination = useCursorPagination<Device>({
   routeName: "Devices",
   defaultSize: 20,
-  fetchPage: async (cursor, size) => {
-    const page: DevicePageResponse = await devicesApiService.getDevicePage(cursor, size);
+  fetchPage: async (cursor, size, signal) => {
+    const page: DevicePageResponse = await devicesApiService.getDevicePage(cursor, size, signal);
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",

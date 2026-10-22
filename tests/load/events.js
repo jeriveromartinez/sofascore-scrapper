@@ -2,6 +2,8 @@ import http from "k6/http";
 import { check } from "k6";
 import {
   BASE_URL,
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
   thresholds,
   HEADERS_PROTOBUF,
   checkStatus200,
@@ -23,7 +25,7 @@ export const options = {
 const DEVICE_BASE_TOKEN = "k6-load-events-";
 
 export function setup() {
-  const token = loginUser(http, "admin@example.com", "admin123");
+  const token = loginUser(http, ADMIN_EMAIL, ADMIN_PASSWORD);
 
   const devices = [];
   for (let i = 0; i < 20; i++) {

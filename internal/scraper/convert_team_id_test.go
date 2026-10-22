@@ -13,7 +13,7 @@ import (
 // freshly scraped events even though the relation loaded fine.
 func TestToEvent_PopulatesHomeAndAwayTeamIdFKs(t *testing.T) {
 	start := time.Date(2026, 9, 10, 20, 0, 0, 0, time.UTC)
-	got := ToEvent(Match{
+	got, err := ToEvent(Match{
 		Source:         "fotmob",
 		SourceMatchId:  "4193492",
 		Slug:           "team-a-vs-team-b",
@@ -34,6 +34,9 @@ func TestToEvent_PopulatesHomeAndAwayTeamIdFKs(t *testing.T) {
 			Sport:          "football",
 		},
 	}, "football")
+	if err != nil {
+		t.Fatalf("ToEvent: %v", err)
+	}
 
 	if got.HomeTeamId != 123 {
 		t.Errorf("HomeTeamId: want 123, got %d", got.HomeTeamId)

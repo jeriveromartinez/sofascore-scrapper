@@ -118,17 +118,33 @@ func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkI
 		return nil, fmt.Errorf("chunk index %d out of range [0, %d)", chunkIndex, session.TotalChunks)
 	}
 
-	result, err := s.chunkStore.WriteChunk(session.ID, chunkIndex, reader)
+	// The chunk is staged first and published only once the upload
+	// state accepted it: a chunk whose hash the state rejects must not
+	// replace the stored chunk.
+	staged, err := s.chunkStore.StageChunk(session.ID, chunkIndex, reader)
 	if err != nil {
 		return nil, fmt.Errorf("write chunk: %w", err)
 	}
 
 	if err := s.store.RecordChunk(ctx, uploadID, ChunkRecord{
 		Index: chunkIndex,
-		Hash:  result.Hash,
-		Size:  result.ByteSize,
+		Hash:  staged.Hash,
+		Size:  staged.ByteSize,
 	}); err != nil {
+		s.chunkStore.DiscardChunk(staged)
 		return nil, err
+	}
+
+	if err := s.chunkStore.PublishChunk(session.ID, chunkIndex, staged); err != nil {
+		return nil, fmt.Errorf("publish chunk: %w", err)
+	}
+
+	verified, err := s.chunkStore.VerifyChunk(session.ID, chunkIndex, staged.Hash)
+	if err != nil {
+		return nil, fmt.Errorf("verify chunk: %w", err)
+	}
+	if !verified {
+		return nil, fmt.Errorf("published chunk does not match the recorded hash")
 	}
 
 	return &pb.UploadChunkResponse{

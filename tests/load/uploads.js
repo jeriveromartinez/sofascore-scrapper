@@ -2,12 +2,16 @@ import http from "k6/http";
 import { check, sleep } from "k6";
 import {
   BASE_URL,
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
   makeAuthHeaders,
   loginUser,
   checkStatus200,
   checkStatus201,
   HEADERS_PROTOBUF,
   encodeUploadBeginRequest,
+  decodeProtoStringField,
+  UPLOAD_ID_FIELD,
 } from "./common.js";
 
 export const options = {
@@ -25,7 +29,7 @@ for (let i = 0; i < CHUNK_BYTES.length; i++) {
 }
 
 export function setup() {
-  const token = loginUser(http, "admin@example.com", "admin123");
+  const token = loginUser(http, ADMIN_EMAIL, ADMIN_PASSWORD);
   return { adminToken: token };
 }
 
@@ -44,6 +48,7 @@ export default function (data) {
 
   const beginRes = http.post(`${BASE_URL}/api/web/v1/apk/uploads`, beginBody, {
     headers: authHeaders,
+    responseType: "binary",
     tags: { kind: "write" },
   });
   checks["upload begin"] = beginRes.status === 201 || beginRes.status === 409;
@@ -52,10 +57,8 @@ export default function (data) {
     return;
   }
 
-  let uploadId;
-  try {
-    uploadId = beginRes.json("upload_id");
-  } catch (_) {
+  const uploadId = decodeProtoStringField(beginRes.body, UPLOAD_ID_FIELD);
+  if (!uploadId) {
     check(null, checks);
     return;
   }

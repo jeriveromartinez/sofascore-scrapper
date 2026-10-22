@@ -162,7 +162,10 @@ func TestToEvent_FromMatch(t *testing.T) {
 		AwayTeam:       Team{SourceId: 9825, Name: "Arsenal", LogoURL: "https://x/arsenal.png"},
 		League:         LeagueRef{SourceLeagueId: "47", Name: "Premier League"},
 	}
-	e := ToEvent(m, "football")
+	e, err := ToEvent(m, "football")
+	if err != nil {
+		t.Fatalf("ToEvent: %v", err)
+	}
 	if e.ExternalMatchId != "4193492" {
 		t.Fatalf("ExternalMatchId: %q", e.ExternalMatchId)
 	}

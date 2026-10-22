@@ -13,7 +13,7 @@ import (
 
 var (
 	ErrJWTSecretRequired = errors.New("JWT_SECRET is required")
-	ErrJWTSecretTooShort  = errors.New("JWT_SECRET is too short")
+	ErrJWTSecretTooShort = errors.New("JWT_SECRET is too short")
 )
 
 // MinJWTSecretLength is the minimum acceptable length for JWT_SECRET.
@@ -126,19 +126,19 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("%w: must be at least %d characters (got %d)", ErrJWTSecretTooShort, MinJWTSecretLength, len(secret))
 	}
 
-	return Config{
-		APIAddr:           getEnv("API_ADDR", ":8080"),
-		PprofAddr:         getEnv("PPROF_ADDR", ""),
-		PprofEnabled:      getBool("ENABLE_PPROF", false),
-		JWTSecret:         secret,
-		APKStoragePath:    getEnv("APK_STORAGE_PATH", "./apk_storage"),
-		ImageStoragePath:  getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
-		ScrapeBatchSize:        getInt("SCRAPE_BATCH_SIZE", 500),
-		ScrapeConcurrency:      getInt("SCRAPE_CONCURRENCY", 8),
-		PushTimerTickInterval:  getDuration("PUSH_TIMER_TICK_INTERVAL", 5*time.Second),
-		PushTimerBatchLimit:    getInt("PUSH_TIMER_BATCH_LIMIT", 100),
-		SkipMigrate:            getBool("SKIP_MIGRATE", false),
-		FotMobTimezone:         getEnv("FOTMOB_TIMEZONE", "Europe/Paris"),
+	cfg := Config{
+		APIAddr:               getEnv("API_ADDR", ":8080"),
+		PprofAddr:             getEnv("PPROF_ADDR", ""),
+		PprofEnabled:          getBool("ENABLE_PPROF", false),
+		JWTSecret:             secret,
+		APKStoragePath:        getEnv("APK_STORAGE_PATH", "./apk_storage"),
+		ImageStoragePath:      getEnv("IMAGE_STORAGE_PATH", "./image_storage"),
+		ScrapeBatchSize:       getInt("SCRAPE_BATCH_SIZE", 500),
+		ScrapeConcurrency:     getInt("SCRAPE_CONCURRENCY", 8),
+		PushTimerTickInterval: getDuration("PUSH_TIMER_TICK_INTERVAL", 5*time.Second),
+		PushTimerBatchLimit:   getInt("PUSH_TIMER_BATCH_LIMIT", 100),
+		SkipMigrate:           getBool("SKIP_MIGRATE", false),
+		FotMobTimezone:        getEnv("FOTMOB_TIMEZONE", "Europe/Paris"),
 		Scores365: Scores365{
 			LangID:          getInt("SCORES365_LANG_ID", scores365.DefaultLangID),
 			Timezone:        getEnv("SCORES365_TIMEZONE", scores365.DefaultTimezoneName),
@@ -163,13 +163,23 @@ func Load() (Config, error) {
 			ReadTimeout:  getDuration("REDIS_READ_TIMEOUT", 3*time.Second),
 			WriteTimeout: getDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
 		},
+		// The write deadline starts when the request header is read,
+		// so it must cover the whole request: the APK endpoints stream
+		// large files as the response body and accept 10 MiB chunks,
+		// both slower than the 15m read timeout the server allows.
 		HTTP: HTTP{
 			ReadHeaderTimeout: getDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
-			WriteTimeout:      getDuration("HTTP_WRITE_TIMEOUT", 10*time.Second),
+			WriteTimeout:      getDuration("HTTP_WRITE_TIMEOUT", 15*time.Minute),
 			IdleTimeout:       getDuration("HTTP_IDLE_TIMEOUT", 120*time.Second),
 			TrustedProxies:    getCSV("TRUSTED_PROXIES"),
 		},
-	}, nil
+	}
+	// Validate here so an unusable pool configuration fails the boot
+	// instead of surfacing later as a runtime connection error.
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func getEnv(key, fallback string) string {

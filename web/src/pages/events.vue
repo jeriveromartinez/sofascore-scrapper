@@ -37,8 +37,8 @@ const pagination = useCursorPagination<ExternalEvent>({
   routeName: "Events",
   defaultSize: 20,
   filters: () => filters.value,
-  fetchPage: async (cursor, size) => {
-    const page: EventPageResponse = await eventsApiService.getEventPage(cursor, size, filters.value);
+  fetchPage: async (cursor, size, signal) => {
+    const page: EventPageResponse = await eventsApiService.getEventPage(cursor, size, filters.value, signal);
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",

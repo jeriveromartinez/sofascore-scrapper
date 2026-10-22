@@ -242,8 +242,8 @@ func TestClient_ScheduledEvents_4xx_NoRetry(t *testing.T) {
 // the date field reflects the configured timezone's local day.
 func TestClient_DayMatches_DateUsesConfiguredTimezone(t *testing.T) {
 	cases := []struct {
-		name          string
-		timezone      string
+		name     string
+		timezone string
 		// "now" expressed as a UTC instant. The cron would call
 		// dayMatches with date=time.Now() — for the test we pass an
 		// explicit instant so the assertion is deterministic.

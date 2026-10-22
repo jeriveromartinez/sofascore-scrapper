@@ -116,8 +116,6 @@ func RateLimit(redisClient *goredis.Client) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
 			return
 		}
-
-		c.Next()
 	}
 }
 

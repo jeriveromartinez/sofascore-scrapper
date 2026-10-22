@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { api, getE2EAdminToken, CreateInvitationRequest, InvitationResponse, UploadBeginRequest, UploadBeginResponse } from "./helpers";
 
 const INVITE_PATH = "/api/web/v1/users/invitations";
@@ -6,12 +8,15 @@ const UPLOADS_PATH = "/api/web/v1/apk/uploads";
 
 let accessToken: string;
 
-const COMPOSE_FILE = "../deployments/docker/compose.test.yml";
+// Resolved from this file's location so the suite does not depend on the
+// directory the test runner was started from.
+const COMPOSE_FILE = fileURLToPath(
+  new URL("../../deployments/docker/compose.test.yml", import.meta.url),
+);
 
-async function runDocker(args: string): Promise<void> {
-  const { execSync } = await import("child_process");
+async function runDocker(args: string[]): Promise<void> {
   try {
-    execSync(`docker compose -f ${COMPOSE_FILE} ${args}`, {
+    execFileSync("docker", ["compose", "-f", COMPOSE_FILE, ...args], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 30000,
@@ -22,13 +27,13 @@ async function runDocker(args: string): Promise<void> {
 }
 
 async function pauseRedis(): Promise<void> {
-  await runDocker("pause redis");
+  await runDocker(["pause", "redis"]);
   // Give time for TCP connections to time out
   await new Promise((r) => setTimeout(r, 2000));
 }
 
 async function unpauseRedis(): Promise<void> {
-  await runDocker("unpause redis");
+  await runDocker(["unpause", "redis"]);
   await new Promise((r) => setTimeout(r, 1000));
 }
 

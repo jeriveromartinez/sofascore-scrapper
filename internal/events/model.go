@@ -17,14 +17,14 @@ type Team struct {
 
 type Event struct {
 	gorm.Model
-	ExternalMatchId             string                  `gorm:"column:external_match_id;uniqueIndex:idx_events_external_match_id;size:64;not null"`
-	Source                      string                  `gorm:"column:source;size:32;not null;default:''"`
-	Sport                       string                  `gorm:"column:sport;type:longtext"`
-	HomeScore                   int                     `gorm:"column:home_score"`
-	HomeTeamId                  int64                   `gorm:"column:home_team_id;foreignKey:HomeTeamId;references:TeamId"`
-	AwayScore                   int                     `gorm:"column:away_score"`
-	AwayTeamId                  int64                   `gorm:"column:away_team_id;foreignKey:AwayTeamId;references:TeamId"`
-	ScrapedAt                   int64                   `gorm:"column:scraped_at"`
+	ExternalMatchId string `gorm:"column:external_match_id;uniqueIndex:idx_events_external_match_id;size:64;not null"`
+	Source          string `gorm:"column:source;size:32;not null;default:''"`
+	Sport           string `gorm:"column:sport;type:longtext"`
+	HomeScore       int    `gorm:"column:home_score"`
+	HomeTeamId      int64  `gorm:"column:home_team_id;foreignKey:HomeTeamId;references:TeamId"`
+	AwayScore       int    `gorm:"column:away_score"`
+	AwayTeamId      int64  `gorm:"column:away_team_id;foreignKey:AwayTeamId;references:TeamId"`
+	ScrapedAt       int64  `gorm:"column:scraped_at"`
 	// Index notes:
 	//
 	//   idx_events_start_timestamp covers two hot paths:

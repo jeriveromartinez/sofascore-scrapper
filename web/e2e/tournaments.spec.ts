@@ -10,7 +10,20 @@ test.describe("Tournament CRUD", () => {
     accessToken = getE2EAdminToken();
   });
 
-  test("list tournaments (empty initially)", async ({ request }) => {
+  test("list tournaments returns the created tournament", async ({ request }) => {
+    // The list is not empty on a running stack: the scraper seeds the
+    // curated leagues on the first boot. What matters is that a
+    // tournament created through the API shows up in the list.
+    const created = await api.post<Tournament, TournamentRequest>(
+      request,
+      TOURNAMENTS_PATH,
+      { name: "Listed Tournament", slug: "listed-tournament" },
+      TournamentRequest,
+      Tournament,
+      { Authorization: `Bearer ${accessToken}` },
+    );
+    expect(created.status, `create error: ${created.error}`).toBe(201);
+
     const resp = await api.get<TournamentList>(
       request,
       TOURNAMENTS_PATH,
@@ -18,7 +31,9 @@ test.describe("Tournament CRUD", () => {
       { Authorization: `Bearer ${accessToken}` },
     );
     expect(resp.status).toBe(200);
-    expect(resp.data!.tournaments).toEqual([]);
+    const tournaments = resp.data!.tournaments;
+    expect(Array.isArray(tournaments)).toBe(true);
+    expect(tournaments.some((t) => t.id === created.data!.id)).toBe(true);
   });
 
   test("create tournament", async ({ request }) => {

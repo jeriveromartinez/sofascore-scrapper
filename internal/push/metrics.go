@@ -1,10 +1,57 @@
 package push
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/prometheus/client_golang/prometheus"
+)
+
+// The collectors are package-level singletons on purpose: the
+// registerer the caller hands to NewMetrics is usually process-wide,
+// so registering the same collector twice (two App instances in one
+// test binary, for instance) must not blow up. Reusing one instance
+// also keeps the values visible in whichever registry ends up serving
+// /metrics.
+var (
+	dispatchedCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "push_dispatched_total",
+		Help: "Number of push dispatches attempted, by source (immediate|scheduled).",
+	}, []string{"source"})
+	deliveredCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "push_delivered_total",
+		Help: "Number of WsPush frames the client acknowledged.",
+	})
+	failedCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "push_failed_total",
+		Help: "Number of failed delivery attempts, by reason.",
+	}, []string{"reason"})
+	firedCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "push_schedule_fired_total",
+		Help: "Number of scheduled_pushes fired, by type (one_shot|recurring).",
+	}, []string{"type"})
+	scheduleFailedCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "push_schedule_failed_total",
+		Help: "Number of scheduled_pushes that failed to dispatch.",
+	})
+	wsConnsGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "push_websocket_connections",
+		Help: "Current number of open WebSocket connections on this backend.",
+	})
+	enabledGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "push_enabled_users",
+		Help: "Current number of users with the notifications toggle on.",
+	})
+	activeGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "push_active_schedules",
+		Help: "Current number of active scheduled_pushes.",
+	})
+	latencyHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "push_latency_ms",
+		Help:    "Delivery latency in milliseconds (server sent_at -> client acked_at).",
+		Buckets: []float64{10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000},
+	})
 )
 
 // Metrics groups the Prometheus counters/gauges/histograms the
@@ -23,51 +70,38 @@ type Metrics struct {
 	latencyMS      prometheus.Histogram
 }
 
-// NewMetrics builds and registers a Metrics on the given
-// registerer. Pass prometheus.DefaultRegisterer in production
-// (or a test-local registry in unit tests). The returned
-// Metrics is safe to use from any goroutine.
+// NewMetrics builds a Metrics and registers its collectors with the
+// given registerer. The registerer MUST be the one the /metrics
+// endpoint serves (the project's own collector registry), otherwise
+// the push metrics are collected but never scraped.
+//
+// The returned Metrics is safe to use from any goroutine.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
-		dispatched: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "push_dispatched_total",
-			Help: "Number of push dispatches attempted, by source (immediate|scheduled).",
-		}, []string{"source"}),
-		delivered: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "push_delivered_total",
-			Help: "Number of WsPush frames the client acknowledged.",
-		}),
-		failed: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "push_failed_total",
-			Help: "Number of failed delivery attempts, by reason.",
-		}, []string{"reason"}),
-		fired: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "push_schedule_fired_total",
-			Help: "Number of scheduled_pushes fired, by type (one_shot|recurring).",
-		}, []string{"type"}),
-		scheduleFailed: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "push_schedule_failed_total",
-			Help: "Number of scheduled_pushes that failed to dispatch.",
-		}),
-		wsConns: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "push_websocket_connections",
-			Help: "Current number of open WebSocket connections on this backend.",
-		}),
-		enabled: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "push_enabled_users",
-			Help: "Current number of users with the notifications toggle on.",
-		}),
-		active: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "push_active_schedules",
-			Help: "Current number of active scheduled_pushes.",
-		}),
-		latencyMS: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name:    "push_latency_ms",
-			Help:    "Delivery latency in milliseconds (server sent_at -> client acked_at).",
-			Buckets: []float64{10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000},
-		}),
+		dispatched:     dispatchedCounter,
+		delivered:      deliveredCounter,
+		failed:         failedCounter,
+		fired:          firedCounter,
+		scheduleFailed: scheduleFailedCounter,
+		wsConns:        wsConnsGauge,
+		enabled:        enabledGauge,
+		active:         activeGauge,
+		latencyMS:      latencyHistogram,
 	}
-	reg.MustRegister(m.dispatched, m.delivered, m.failed, m.fired, m.scheduleFailed, m.wsConns, m.enabled, m.active, m.latencyMS)
+	if reg == nil {
+		return m
+	}
+	for _, c := range []prometheus.Collector{
+		m.dispatched, m.delivered, m.failed, m.fired, m.scheduleFailed,
+		m.wsConns, m.enabled, m.active, m.latencyMS,
+	} {
+		if err := reg.Register(c); err != nil {
+			var already prometheus.AlreadyRegisteredError
+			if !errors.As(err, &already) {
+				panic(err)
+			}
+		}
+	}
 	return m
 }
 

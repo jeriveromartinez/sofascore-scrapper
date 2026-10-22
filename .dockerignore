@@ -1,5 +1,6 @@
 # Files / directories never needed by any build stage in this repo.
-# Used by: Dockerfile, deployments/docker/Dockerfile.test,
+# Used by: Dockerfile, deployments/docker/Dockerfile.e2e,
+# deployments/docker/Dockerfile.test,
 # deployments/package/Dockerfile.builder.
 
 # --- Package managers / build caches -----------------------------------

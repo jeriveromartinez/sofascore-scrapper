@@ -38,12 +38,17 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 	defer jobCancel()
 
 	var wg sync.WaitGroup
-	var jobErr error
+	var jobErr, renewErr error
+
+	renewInterval := ttl / 3
+	if renewInterval <= 0 {
+		renewInterval = ttl
+	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(ttl / 3)
+		ticker := time.NewTicker(renewInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -51,6 +56,9 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 				return
 			case <-ticker.C:
 				if err := lease.Renew(jobCtx, ttl); err != nil {
+					if jobCtx.Err() == nil {
+						renewErr = err
+					}
 					jobCancel()
 					return
 				}
@@ -61,17 +69,26 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// jobCancel is idempotent; the outer defer at the top of
-		// runLocked covers cleanup once wg.Wait() returns, so we
-		// do not need to defer it again here.
 		jobErr = job(jobCtx)
+		// The renewal goroutine only exits when jobCtx is cancelled,
+		// and jobCancel used to be deferred until after wg.Wait(),
+		// so the wait never returned and the lock was renewed
+		// forever. Cancel here so the renewal goroutine stops.
+		jobCancel()
 	}()
 
 	wg.Wait()
 
 	releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer releaseCancel()
-	_ = lease.Release(releaseCtx)
+	if relErr := lease.Release(releaseCtx); relErr != nil && r.logger != nil {
+		r.logger.Warn("scheduler: lock release failed",
+			slog.String("lock", name),
+			slog.String("error", relErr.Error()))
+	}
 
+	if renewErr != nil {
+		return fmt.Errorf("renew lock %s: %w", name, renewErr)
+	}
 	return jobErr
 }

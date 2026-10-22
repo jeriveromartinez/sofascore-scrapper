@@ -14,13 +14,14 @@ export class PlaybackApiService extends BaseApiService {
   async getPlaybackPage(
     cursor?: string,
     limit?: number,
+    signal?: AbortSignal,
   ): Promise<PlaybackPageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
-    return this.get(url, PlaybackPage);
+    return this.get(url, PlaybackPage, signal);
   }
 }
 

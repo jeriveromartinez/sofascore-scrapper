@@ -17,6 +17,9 @@ func New(ctx context.Context, cfg config.Redis) (*goredis.Client, error) {
 	options.ReadTimeout = cfg.ReadTimeout
 	options.WriteTimeout = cfg.WriteTimeout
 	client := goredis.NewClient(options)
+	if cfg.KeyPrefix != "" {
+		client.AddHook(keyPrefixHook{prefix: cfg.KeyPrefix})
+	}
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("ping redis: %w", err)

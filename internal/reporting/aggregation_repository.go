@@ -17,6 +17,29 @@ func NewAggregationRepository(db *gorm.DB) *AggregationRepository {
 	return &AggregationRepository{db: db}
 }
 
+// dailyWindow returns the half-open [begin, end) interval the daily
+// rollup covers: the previous calendar day in loc.
+//
+// The bounds are built from the calendar fields instead of subtracting
+// 24 hours from today's midnight. On a DST transition day the two
+// disagree by an hour, and "midnight minus 24h" no longer lands on the
+// previous local midnight.
+func dailyWindow(now time.Time, loc *time.Location) (begin, end time.Time) {
+	year, month, day := now.In(loc).Date()
+	begin = time.Date(year, month, day-1, 0, 0, 0, 0, loc)
+	end = time.Date(year, month, day, 0, 0, 0, 0, loc)
+	return begin, end
+}
+
+// monthlyWindow returns the half-open [begin, end) interval the
+// monthly rollup covers: the previous calendar month in loc.
+func monthlyWindow(now time.Time, loc *time.Location) (begin, end time.Time) {
+	year, month, _ := now.In(loc).Date()
+	begin = time.Date(year, month-1, 1, 0, 0, 0, 0, loc)
+	end = time.Date(year, month, 1, 0, 0, 0, 0, loc)
+	return begin, end
+}
+
 // GenerateDaily rolls up the previous day's playback_logs into the
 // content_stats table (one row per content_hash, period_type=day)
 // and deletes the source rows so the table stays small.
@@ -28,9 +51,7 @@ func NewAggregationRepository(db *gorm.DB) *AggregationRepository {
 // "aggregation ran but did nothing".
 func (r *AggregationRepository) GenerateDaily() (err error) {
 	db := r.db
-	now := time.Now()
-	begin := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).Add(-time.Hour * 24)
-	end := begin.AddDate(0, 0, 1).Add(-time.Second)
+	begin, end := dailyWindow(time.Now(), time.Local)
 
 	tx := db.Begin()
 	if tx.Error != nil {
@@ -56,7 +77,7 @@ func (r *AggregationRepository) GenerateDaily() (err error) {
 	if err = tx.Table("playback_logs").
 		Select("content, COUNT(id) as total_views, COALESCE(SUM(ended_at - started_at) / 1000, 0) as time_played").
 		Group("content").
-		Where("ended_at <= ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).
+		Where("ended_at < ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).
 		Find(&stats).Error; err != nil {
 		_ = tx.Rollback().Error
 		return err
@@ -87,7 +108,7 @@ func (r *AggregationRepository) GenerateDaily() (err error) {
 		return err
 	}
 
-	if err = tx.Unscoped().Table("playback_logs").Where("ended_at <= ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).Delete(nil).Error; err != nil {
+	if err = tx.Unscoped().Table("playback_logs").Where("ended_at < ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).Delete(nil).Error; err != nil {
 		_ = tx.Rollback().Error
 		return err
 	}
@@ -100,9 +121,7 @@ func (r *AggregationRepository) GenerateDaily() (err error) {
 // source day rows. Same panic-and-error semantics as GenerateDaily.
 func (r *AggregationRepository) GenerateMonthly() (err error) {
 	db := r.db
-	now := time.Now()
-	begin := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).AddDate(0, -1, 0)
-	end := begin.AddDate(0, 1, 0)
+	begin, end := monthlyWindow(time.Now(), time.Local)
 
 	tx := db.Begin()
 	if tx.Error != nil {

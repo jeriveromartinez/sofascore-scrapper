@@ -179,11 +179,9 @@ export abstract class BaseApiService {
   }
 
   private decodeResponse<T>(data: ArrayBuffer, decoder: ProtoCodec<T>): T {
-    const bytes = new Uint8Array(data);
-
-    if (!bytes.byteLength) return undefined as T;
-
-    return decoder.decode(bytes);
+    // An empty body is a valid protobuf message: decoding it yields the
+    // message defaults instead of undefined.
+    return decoder.decode(new Uint8Array(data));
   }
 
   private tryParseJsonError(data: ArrayBuffer): string | undefined {
@@ -250,7 +248,11 @@ export abstract class BaseApiService {
     return encoder.encode(body).finish();
   }
 
-  protected async get<T>(url: string, decoder: ProtoCodec<T>): Promise<T> {
+  protected async get<T>(
+    url: string,
+    decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const headers = this.getHeaders();
     const {
       data,
@@ -260,6 +262,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));

@@ -29,6 +29,24 @@ describe("EventsFilterBar", () => {
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ direction: "desc" }));
   });
 
+  it("clicking ASC keeps direction=asc instead of toggling it away", async () => {
+    const { wrapper, onUpdate } = mountBar({ direction: "asc" });
+    const ascBtn = wrapper.findAll("button").find((b) => b.text().includes("ASC"));
+    expect(ascBtn).toBeTruthy();
+    await ascBtn!.trigger("click");
+    await flushPromises();
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ direction: "asc" }));
+  });
+
+  it("clicking DESC keeps direction=desc instead of toggling it away", async () => {
+    const { wrapper, onUpdate } = mountBar({ direction: "desc" });
+    const descBtn = wrapper.findAll("button").find((b) => b.text().includes("DESC"));
+    expect(descBtn).toBeTruthy();
+    await descBtn!.trigger("click");
+    await flushPromises();
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ direction: "desc" }));
+  });
+
   it("text inputs do not emit until 2+ chars", async () => {
     vi.useFakeTimers();
     try {
@@ -42,6 +60,25 @@ describe("EventsFilterBar", () => {
       vi.advanceTimersByTime(400);
       await flushPromises();
       expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ league: "Pr" }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not emit from a pending debounce after the component is unmounted", async () => {
+    vi.useFakeTimers();
+    try {
+      const { wrapper, onUpdate } = mountBar({ direction: "asc" });
+      const leagueInput = wrapper.find('input[name="league"]');
+      await leagueInput.setValue("Pr");
+      await flushPromises();
+      expect(onUpdate).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+      vi.advanceTimersByTime(400);
+      await flushPromises();
+
+      expect(onUpdate).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

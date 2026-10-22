@@ -89,7 +89,7 @@ func SeedDefaults(db *gorm.DB, logger *slog.Logger) error {
 						"sport":   curated.Sport,
 					}).Error; updateErr != nil {
 					return fmt.Errorf("update scraper_league %s/%s: %w",
-							curated.Source, curated.SourceLeagueId, updateErr)
+						curated.Source, curated.SourceLeagueId, updateErr)
 				}
 				updated++
 			}

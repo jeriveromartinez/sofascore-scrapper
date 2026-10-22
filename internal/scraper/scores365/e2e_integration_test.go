@@ -51,7 +51,10 @@ func TestScores365EndToEnd_PersistsDayFixture(t *testing.T) {
 	// day spans every configured sport. Group before converting, the
 	// same way the dispatcher does.
 	for _, group := range groupBySport(matches) {
-		batch := scraper.ToScrapeBatch(group.matches, group.sport)
+		batch, err := scraper.ToScrapeBatch(group.matches, group.sport)
+		if err != nil {
+			t.Fatalf("ToScrapeBatch(%s): %v", group.sport, err)
+		}
 		if err := repo.UpsertScrapeBatch(context.Background(), batch, 500); err != nil {
 			t.Fatalf("UpsertScrapeBatch(%s): %v", group.sport, err)
 		}

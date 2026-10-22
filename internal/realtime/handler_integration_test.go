@@ -15,9 +15,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
 )
@@ -217,9 +217,9 @@ func statusOf(r *http.Response) int {
 // framing behaviour of `package:web_socket_channel` in Dart IO mode:
 //   - BinaryMessage → delivered as raw bytes
 //   - TextMessage   → silently dropped (the Dart stream only sees
-//                     `List<int>`, so a String frame is invisible to
-//                     the consumer and gets discarded by their
-//                     `is! List<int>` guard)
+//     `List<int>`, so a String frame is invisible to
+//     the consumer and gets discarded by their
+//     `is! List<int>` guard)
 //   - control frames (PingMessage/PongMessage/CloseMessage) → not
 //     surfaced; the Dart library does not auto-handle them in IO
 //
@@ -228,7 +228,7 @@ func statusOf(r *http.Response) int {
 // msgType with its payload to the consumer.
 type dartLikeClient struct {
 	conn     *websocket.Conn
-	dropped  int // count of TextMessage frames silently dropped
+	dropped  int  // count of TextMessage frames silently dropped
 	pingSeen bool // true once a BinaryMessage WsPing has been observed
 }
 

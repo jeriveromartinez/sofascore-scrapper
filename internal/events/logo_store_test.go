@@ -414,6 +414,39 @@ func TestDownloadTeamLogoLimitReaderEnforcesCapForChunked(t *testing.T) {
 		}
 	}
 }
+
+// TestDownloadTeamLogoRejectsChunkedBodyOverCap is the regression test
+// for the chunked-transfer hole in the size cap: the body was read
+// through io.LimitReader, which stops at exactly maxLogoBytes and
+// therefore persisted the truncated prefix of an oversized response as
+// if it were a complete logo.
+func TestDownloadTeamLogoRejectsChunkedBodyOverCap(t *testing.T) {
+	t.Setenv("IMAGE_STORAGE_PATH", t.TempDir())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		flusher, _ := w.(http.Flusher)
+		for i := 0; i < 2; i++ {
+			_, _ = w.Write(make([]byte, maxLogoBytes))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	_, err := DownloadTeamLogo(123, server.URL+"/logo.png")
+	if err == nil {
+		t.Fatal("expected an error for an oversized chunked body, got nil")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Errorf("error %q should mention 'too large'", err)
+	}
+	if _, statErr := os.Stat(TeamLogoLocalPath(123)); !os.IsNotExist(statErr) {
+		t.Errorf("an oversized logo must not be persisted at %s", TeamLogoLocalPath(123))
+	}
+}
+
 // 365scores image CDN, up to the natural competitor ID.
 const scores365Badge = "https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,d_Competitors:default1.png/v1/Competitors/"
 

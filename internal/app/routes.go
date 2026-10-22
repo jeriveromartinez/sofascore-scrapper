@@ -2,13 +2,15 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
-	"github.com/jeriveromartinez/scores365-scrapper/internal/buildinfo"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/buildinfo"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/config"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
@@ -17,11 +19,11 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/reporting"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/scores365"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper/catalog"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper/fotmob"
 	scores365source "github.com/jeriveromartinez/scores365-scrapper/internal/scraper/scores365"
-	"github.com/jeriveromartinez/scores365-scrapper/internal/scores365"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
@@ -29,7 +31,11 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService, logoScheduler events.TeamLogoScheduler, hub *realtime.Hub, pushSvc *push.Service) *gin.Engine {
+// NewRouter builds the HTTP surface. ready gates the API groups
+// with 503 while the app is not serving (startup and shutdown);
+// the health, metrics and dashboard routes stay reachable so the
+// orchestrator can probe them. A nil ready disables the gate.
+func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, tokens *auth.TokenService, logoScheduler events.TeamLogoScheduler, hub *realtime.Hub, pushSvc *push.Service, ready *atomic.Bool) *gin.Engine {
 	if cfg.ScrapeBatchSize <= 0 {
 		cfg.ScrapeBatchSize = 500
 	}
@@ -48,6 +54,17 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 	healthChecker := server.NewHealthChecker()
 	healthChecker.Register("database", func(ctx context.Context) error { return db.WithContext(ctx).Exec("SELECT 1").Error })
 	healthChecker.Register("redis", func(ctx context.Context) error { return redisClient.Ping(ctx).Err() })
+	if ready != nil {
+		// The readiness probe must fail while the app is draining,
+		// otherwise the load balancer keeps routing traffic to an
+		// instance that is shutting down.
+		healthChecker.Register("app", func(context.Context) error {
+			if !ready.Load() {
+				return errors.New("app is not serving")
+			}
+			return nil
+		})
+	}
 
 	router.GET("/health/live", healthChecker.LivenessHandler())
 	router.GET("/health/ready", healthChecker.ReadinessHandler())
@@ -55,8 +72,8 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 
 	rl := server.RateLimit(redisClient)
 
-	appV1 := router.Group("/api/app/v1", rl)
-	webV1 := router.Group("/api/web/v1")
+	appV1 := router.Group("/api/app/v1", server.ReadinessMiddleware(ready), rl)
+	webV1 := router.Group("/api/web/v1", server.ReadinessMiddleware(ready))
 
 	appMw := devices.AppMiddleware(db)
 	authMw := auth.AuthMiddleware(tokens)

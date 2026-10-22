@@ -65,6 +65,11 @@ func (r *Repository) InsertDeliveryAttempts(ctx context.Context, attempts []Deli
 // transport message_id (UUID v4), which is UNIQUE on the table.
 // Latency is computed in Go (not via SQL) for MariaDB/SQLite parity.
 //
+// The transition is conditional on the row still being in SENT: a
+// row that already reached a terminal state (FAILED) is never flipped
+// back to DELIVERED by a late ack. A row that is already DELIVERED
+// is a duplicate ack and is a no-op.
+//
 // Returns the computed latency in milliseconds (0 when the row's
 // sent_at was nil, e.g. defensive guard against a half-written
 // attempt). Callers feed this into the latency histogram.
@@ -77,6 +82,9 @@ func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string
 		Where("message_id = ?", messageID).
 		First(&existing).Error; err != nil {
 		return 0, err
+	}
+	if existing.State == StateFailed {
+		return 0, ErrInvalidDeliveryState
 	}
 	var latencyMS int
 	updates := map[string]any{
@@ -92,10 +100,18 @@ func (r *Repository) MarkDeliveryDelivered(ctx context.Context, messageID string
 		latencyMS = int(ms)
 		updates["latency_ms"] = latencyMS
 	}
-	if err := r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
-		Where("message_id = ?", messageID).
-		Updates(updates).Error; err != nil {
-		return 0, err
+	if existing.State == StateDelivered {
+		return latencyMS, nil
+	}
+	res := r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
+		Where("message_id = ? AND state = ?", messageID, StateSent).
+		Updates(updates)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	if res.RowsAffected == 0 {
+		// Another worker moved the row out of SENT while we read it.
+		return 0, ErrInvalidDeliveryState
 	}
 	return latencyMS, nil
 }
@@ -173,19 +189,83 @@ func (r *Repository) ListDueTimers(ctx context.Context, now time.Time, limit int
 	return rows, err
 }
 
-// MarkTimerDispatched stamps dispatched_at on a single timer row.
+// MarkTimerDispatched claims a timer for dispatch. It stamps
+// dispatched_at (the timer fired) and claimed_at (the claim is still
+// open) in one atomic UPDATE guarded by "dispatched_at IS NULL".
 // Idempotent: if the row is already stamped, the UPDATE affects 0
 // rows but no error is raised. The unique invariant we rely on is
 // that each (schedule, device, fire) fires at most once across the
 // cluster even under worker races.
+//
+// claimed_at is what separates "claimed and completed" from "claimed
+// and abandoned": the reaper only re-arms rows whose claim is still
+// open after the stale window.
 func (r *Repository) MarkTimerDispatched(ctx context.Context, timerID uint, firedAt time.Time) (bool, error) {
 	res := r.db.WithContext(ctx).Model(&ScheduledPushTimer{}).
 		Where("id = ? AND dispatched_at IS NULL", timerID).
-		Update("dispatched_at", firedAt)
+		Updates(map[string]any{"dispatched_at": firedAt, "claimed_at": firedAt})
 	if res.Error != nil {
 		return false, res.Error
 	}
 	return res.RowsAffected > 0, nil
+}
+
+// CompleteTimerDispatch closes the claim on a timer whose dispatch
+// finished: claimed_at is cleared while dispatched_at stays, so the
+// reaper never re-arms a push that already fired.
+//
+// The guard "claimed_at IS NOT NULL" makes it a no-op when the claim
+// was already closed (or the row was reaped meanwhile).
+func (r *Repository) CompleteTimerDispatch(ctx context.Context, timerID uint) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&ScheduledPushTimer{}).
+		Where("id = ? AND claimed_at IS NOT NULL", timerID).
+		Updates(map[string]any{"claimed_at": nil})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+// ReleaseTimerDispatch clears the claim a worker took on a timer
+// whose dispatch failed, so the next tick picks it up again. It is
+// the rollback path of a failed dispatch: both stamps are cleared
+// because the push was never delivered.
+//
+// The stamp can only have been written by the worker that still owns
+// the timer (a second worker cannot claim a stamped row), so matching
+// on "stamped" is enough to avoid clearing somebody else's claim.
+// claimed_at must still be set: a completed dispatch already closed
+// its claim and must not be re-armed.
+func (r *Repository) ReleaseTimerDispatch(ctx context.Context, timerID uint) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&ScheduledPushTimer{}).
+		Where("id = ? AND dispatched_at IS NOT NULL AND claimed_at IS NOT NULL", timerID).
+		Updates(map[string]any{"dispatched_at": nil, "claimed_at": nil})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+// ReleaseStaleTimerClaims re-arms timers whose claim is still open
+// after the cutoff: the worker that claimed them died before the
+// dispatch completed, so the push would otherwise be lost forever.
+//
+// Only rows with claimed_at IS NOT NULL qualify — a dispatch that
+// completed cleared its claim, so it is never re-fired. Both stamps
+// are cleared: the fire never happened (or never finished), so the
+// next tick must retry it.
+//
+// The cutoff must be far larger than the worst-case duration of a
+// single dispatch, otherwise a slow-but-alive worker would have its
+// timer stolen and the push delivered twice.
+func (r *Repository) ReleaseStaleTimerClaims(ctx context.Context, cutoff time.Time) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&ScheduledPushTimer{}).
+		Where("claimed_at IS NOT NULL AND claimed_at < ?", cutoff).
+		Updates(map[string]any{"claimed_at": nil, "dispatched_at": nil})
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
 }
 
 // InsertTimer adds a new pending timer for a recurring re-fire.
@@ -273,18 +353,6 @@ func (r *Repository) EarliestPendingTimer(ctx context.Context, scheduleID uint) 
 		return time.Time{}, err
 	}
 	return row.FireAt, nil
-}
-
-// PendingTimersAtOrAfter returns every undispatched timer on a
-// schedule whose fire_at >= the given moment. Used by the worker
-// to repopulate the Redis index after a fire.
-func (r *Repository) PendingTimersAtOrAfter(ctx context.Context, scheduleID uint, min time.Time) ([]ScheduledPushTimer, error) {
-	var rows []ScheduledPushTimer
-	err := r.db.WithContext(ctx).
-		Where("scheduled_push_id = ? AND dispatched_at IS NULL AND fire_at >= ?", scheduleID, min).
-		Order("fire_at ASC").
-		Find(&rows).Error
-	return rows, err
 }
 
 // UpdateScheduledPushNextFireAt is a one-column setter. Called when
