@@ -14,6 +14,8 @@ help:
 # Regenerate Go bindings from proto/api.proto.
 # Output lands in $(GENERATED_DIR) because that matches the `option go_package`
 # in $(PROTO_FILE).
+# The committed bindings were produced with protoc 28.3 and protoc-gen-go
+# v1.36.8, the version go.mod pins.
 proto:
 	protoc \
 		--go_out=. \
