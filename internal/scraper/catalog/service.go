@@ -161,13 +161,7 @@ func (s *Service) SearchLeagues(ctx context.Context, query string) ([]scraper.Le
 	} else if len(local) > 0 {
 		out := make([]scraper.LeagueSearchResult, 0, len(local))
 		for _, lg := range local {
-			out = append(out, scraper.LeagueSearchResult{
-				Source:         lg.Source,
-				SourceLeagueId: lg.SourceLeagueId,
-				Name:           lg.Name,
-				Country:        lg.Country,
-				Sport:          lg.Sport,
-			})
+			out = append(out, scraper.LeagueSearchResult(lg))
 		}
 		return out, nil
 	}
