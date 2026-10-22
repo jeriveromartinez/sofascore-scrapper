@@ -35,8 +35,13 @@ func TestDiscovery_PersistPhaseIsBounded(t *testing.T) {
 	srv, _ := newCompetitionsServer(t, competitionsBody)
 	defer srv.Close()
 
+	// A negative budget makes the persist context already expired when
+	// it is created, so the deadline is observed deterministically.
+	// A 1ns budget instead races the context's timer against the
+	// driver's own cancellation check, and the sweep sometimes
+	// finishes before the timer fires.
 	previous := discoveryPersistTimeout
-	discoveryPersistTimeout = time.Nanosecond
+	discoveryPersistTimeout = -time.Second
 	t.Cleanup(func() { discoveryPersistTimeout = previous })
 
 	client := scores365.NewClient(scores365.Options{BaseURL: srv.URL})
