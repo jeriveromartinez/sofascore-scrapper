@@ -95,7 +95,7 @@ defineExpose({ openModal });
         </div>
         <div class="modal-body">
           <form
-            id="upload-apk-form"
+            id="edit-apk-url-form"
             class="row g-3"
             @submit.prevent="submitUrl"
           >
@@ -125,7 +125,7 @@ defineExpose({ openModal });
           <button
             type="submit"
             class="btn btn-primary"
-            form="upload-apk-form"
+            form="edit-apk-url-form"
             :disabled="modal.loading"
           >
             {{ modal.loading ? "Updating..." : "Update" }}
