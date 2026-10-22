@@ -174,8 +174,8 @@ func (m *Metrics) SetWSConnections(n int) {
 	m.wsConns.Set(float64(n))
 }
 
-// SetEnabledUsers sets the gauge to the given count. Computed
-// periodically by a background goroutine (TODO: phase 4d).
+// SetEnabledUsers sets the gauge to the given count. Refreshed
+// periodically from the database by Service.RefreshGauges.
 func (m *Metrics) SetEnabledUsers(n int64) {
 	if m == nil {
 		return
@@ -183,8 +183,8 @@ func (m *Metrics) SetEnabledUsers(n int64) {
 	m.enabled.Set(float64(n))
 }
 
-// SetActiveSchedules sets the gauge to the given count. Computed
-// periodically by a background goroutine.
+// SetActiveSchedules sets the gauge to the given count. Refreshed
+// periodically from the database by Service.RefreshGauges.
 func (m *Metrics) SetActiveSchedules(n int64) {
 	if m == nil {
 		return
