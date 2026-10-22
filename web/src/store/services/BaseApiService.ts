@@ -61,8 +61,10 @@ export function headerString(headers: unknown, name: string): string {
  * Exchange the stored refresh token for a fresh access token. On success
  * the new user is written to the same storage (session vs local) the refresh
  * token came from, and the Pinia auth store is updated so subsequent reads
- * see the new token. Returns `null` if the refresh is not possible (no
- * stored token, network error, or non-200 response).
+ * see the new token. Returns `null` when the session cannot be refreshed (no
+ * stored refresh token or a non-200 response), which logs the user out.
+ * Network errors and timeouts reject instead, so a transient failure surfaces
+ * as a request error without ending the session.
  *
  * Exported for testing; production code should rely on the 401 interceptor
  * installed by {@link BaseApiService}.
