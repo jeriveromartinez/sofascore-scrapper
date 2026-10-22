@@ -466,9 +466,6 @@ func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event,
 	}
 
 	query := r.db.WithContext(ctx).
-		Joins("LEFT JOIN tournaments AS leagues ON leagues.id = events.league_id").
-		Joins("LEFT JOIN teams AS home_team_models ON home_team_models.team_id = events.home_team_id").
-		Joins("LEFT JOIN teams AS away_team_models ON away_team_models.team_id = events.away_team_id").
 		Order(order).
 		Preload("HomeTeamModel").
 		Preload("AwayTeamModel").
@@ -493,15 +490,22 @@ func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event,
 	if f.Status != "" {
 		query = query.Where("events.status_type = ?", f.Status)
 	}
+	// The soft-delete guard lives in the ON clause so the name filters
+	// agree with the Preloads, which never return deleted rows.
 	if f.LeagueName != "" {
-		query = query.Where("leagues.name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.LeagueName)+"%")
+		query = query.
+			Joins("LEFT JOIN tournaments AS leagues ON leagues.id = events.league_id AND leagues.deleted_at IS NULL").
+			Where("leagues.name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.LeagueName)+"%")
 	}
 	if f.TeamName != "" {
-		query = query.Where(
-			"(home_team_models.name LIKE ? ESCAPE '\\' OR away_team_models.name LIKE ? ESCAPE '\\')",
-			"%"+escapeLike(f.TeamName)+"%",
-			"%"+escapeLike(f.TeamName)+"%",
-		)
+		query = query.
+			Joins("LEFT JOIN teams AS home_team_models ON home_team_models.team_id = events.home_team_id AND home_team_models.deleted_at IS NULL").
+			Joins("LEFT JOIN teams AS away_team_models ON away_team_models.team_id = events.away_team_id AND away_team_models.deleted_at IS NULL").
+			Where(
+				"(home_team_models.name LIKE ? ESCAPE '\\' OR away_team_models.name LIKE ? ESCAPE '\\')",
+				"%"+escapeLike(f.TeamName)+"%",
+				"%"+escapeLike(f.TeamName)+"%",
+			)
 	}
 
 	var rows []Event
