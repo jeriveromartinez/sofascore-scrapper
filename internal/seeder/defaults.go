@@ -8,10 +8,13 @@ import (
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/scraper/catalog"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // SeedDefaults reconciles the scraper_leagues table with the curated
-// initialLeagues slice on every boot. For each curated row:
+// initialLeagues slice on every boot. Rows are matched on the unique
+// key (source, source_league_id), the same key the catalog uses. For
+// each curated row:
 //
 //   - If no row exists with that source_league_id, the curated row
 //     is inserted.
@@ -35,10 +38,13 @@ import (
 // /#/scraper-leagues and can disable the old one manually. See
 // docs/operations/runbook.md for the cleanup SQL.
 //
-// The seed runs inside a single transaction so partial inserts cannot
-// leave the table in a half-populated state. If the scraper_leagues
-// table has not been migrated yet the seed will surface that as an
-// error; callers are expected to AutoMigrate the catalog first.
+// The seed is safe to run concurrently: every curated row is written
+// with a single atomic statement that no other backend can invalidate,
+// and the whole reconciliation is idempotent, so a backend that
+// retries after a lock conflict only repeats work that is already
+// committed. If the scraper_leagues table has not been migrated yet
+// the seed will surface that as an error; callers are expected to
+// AutoMigrate the catalog first.
 //
 // Logging goes through the injected logger when non-nil, falling back
 // to slog.Default(). This mirrors the convention used by
@@ -53,20 +59,25 @@ func SeedDefaults(db *gorm.DB, logger *slog.Logger) error {
 	}
 	all := append([]catalog.ScraperLeague{}, initialLeagues...)
 
-	return db.Transaction(func(tx *gorm.DB) error {
-		inserted := 0
-		updated := 0
-		skipped := 0
+	inserted := 0
+	updated := 0
+	skipped := 0
+	err := retryOnLockConflict(3, func() error {
+		inserted, updated, skipped = 0, 0, 0
 		for i := range all {
 			curated := all[i]
 			var existing catalog.ScraperLeague
-			err := tx.Unscoped().
-				Where("source_league_id = ?", curated.SourceLeagueId).
+			err := db.Unscoped().
+				Where("source = ? AND source_league_id = ?", curated.Source, curated.SourceLeagueId).
 				First(&existing).Error
 			switch {
 			case errors.Is(err, gorm.ErrRecordNotFound):
-				// Brand-new curated row: insert.
-				if createErr := tx.Create(&curated).Error; createErr != nil {
+				// Brand-new curated row. A sibling backend may
+				// insert the same key at the same time, so the
+				// insert must tolerate the duplicate instead of
+				// failing on it.
+				if createErr := db.Clauses(clause.OnConflict{DoNothing: true}).
+					Create(&curated).Error; createErr != nil {
 					return fmt.Errorf("seed scraper_league %s/%s: %w",
 						curated.Source, curated.SourceLeagueId, createErr)
 				}
@@ -81,8 +92,11 @@ func SeedDefaults(db *gorm.DB, logger *slog.Logger) error {
 			default:
 				// Existing live row: rewrite name/country/sport to
 				// the curated values. DO NOT touch `enabled` — see
-				// comment above.
-				if updateErr := tx.Unscoped().Model(&existing).
+				// comment above. The soft-delete scope keeps a row
+				// that was deleted in the meantime untouched.
+				if updateErr := db.Model(&catalog.ScraperLeague{}).
+					Where("source = ? AND source_league_id = ?",
+						curated.Source, curated.SourceLeagueId).
 					Updates(map[string]any{
 						"name":    curated.Name,
 						"country": curated.Country,
@@ -94,14 +108,18 @@ func SeedDefaults(db *gorm.DB, logger *slog.Logger) error {
 				updated++
 			}
 		}
-		logger.Info("reconciled scraper leagues with curated seed",
-			slog.Int("curated", len(all)),
-			slog.Int("inserted", inserted),
-			slog.Int("updated", updated),
-			slog.Int("skipped_soft_deleted", skipped),
-		)
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	logger.Info("reconciled scraper leagues with curated seed",
+		slog.Int("curated", len(all)),
+		slog.Int("inserted", inserted),
+		slog.Int("updated", updated),
+		slog.Int("skipped_soft_deleted", skipped),
+	)
+	return nil
 }
 
 // initialLeagues is the curated seed of FotMob leagues that the

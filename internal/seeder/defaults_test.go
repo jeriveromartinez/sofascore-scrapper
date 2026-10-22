@@ -170,6 +170,35 @@ func TestSeed_LoadsInitialLeagues(t *testing.T) {
 	}
 }
 
+// TestSeed_IsIdempotent verifies that running the reconciliation
+// twice leaves exactly one row per curated league and does not fail on
+// the unique key. The reconciliation is applied on every boot, so it
+// must be safe to repeat.
+func TestSeed_IsIdempotent(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&catalog.ScraperLeague{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+
+	if err := SeedDefaults(db, nil); err != nil {
+		t.Fatalf("first seed: %v", err)
+	}
+	if err := SeedDefaults(db, nil); err != nil {
+		t.Fatalf("second seed: %v", err)
+	}
+
+	var rows int64
+	if err := db.Unscoped().Model(&catalog.ScraperLeague{}).Count(&rows).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if rows != int64(len(initialLeagues)) {
+		t.Errorf("scraper_leagues rows = %d, want %d", rows, len(initialLeagues))
+	}
+}
+
 func TestSeed_NonEmptyCatalogIsNoop(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
