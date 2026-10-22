@@ -43,10 +43,4 @@ export const managerRoutes: CustomRouteRecordRaw[] = [
     component: () => import("../pages/playback.vue"),
     icon: "bx-poll",
   },
-  /* {
-    name: "Stats",
-    path: "stats",
-    component: () => import("../pages/stats.vue"),
-    icon: "bx-pie-chart",
-  }, */
 ];
