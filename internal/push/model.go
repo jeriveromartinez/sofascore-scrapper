@@ -209,8 +209,8 @@ type ScheduledPushTimer struct {
 	ScheduledPushID uint           `gorm:"column:scheduled_push_id;not null;index:idx_spt_schedule_fire,priority:1;foreignKey:ScheduledPushID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 	ScheduledPush   *ScheduledPush `gorm:"foreignKey:ScheduledPushID;references:ID"`
 	DeviceID        uint           `gorm:"column:device_id;not null;index:idx_spt_device_dispatched,priority:1;foreignKey:DeviceID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
-	FireAt          time.Time      `gorm:"column:fire_at;not null;index:idx_spt_schedule_fire,priority:2"`
-	DispatchedAt    *time.Time     `gorm:"column:dispatched_at;null;index:idx_spt_device_dispatched,priority:2"`
+	FireAt          time.Time      `gorm:"column:fire_at;not null;index:idx_spt_schedule_fire,priority:2;index:idx_spt_dispatched_fire,priority:2"`
+	DispatchedAt    *time.Time     `gorm:"column:dispatched_at;null;index:idx_spt_device_dispatched,priority:2;index:idx_spt_dispatched_fire,priority:1"`
 	ClaimedAt       *time.Time     `gorm:"column:claimed_at;null;index:idx_spt_claimed_at"`
 }
 
