@@ -2,14 +2,17 @@
 import { onBeforeUnmount, reactive, useId, watch } from "vue";
 import type { Domain, User } from "../store/services/models";
 
+type DomainFormPayload = { id: number | null; domain: string; userId: number };
+
 const props = withDefaults(
-  defineProps<{ autoCloseModal?: boolean; users: User[] }>(),
+  defineProps<{
+    autoCloseModal?: boolean;
+    users: User[];
+    // A prop instead of an emit so the modal can await the parent's request.
+    onSubmit?: (payload: DomainFormPayload) => Promise<void> | void;
+  }>(),
   { autoCloseModal: true },
 );
-
-const emit = defineEmits<{
-  submit: [payload: { id: number | null; domain: string; userId: number }];
-}>();
 
 const formId = useId();
 
@@ -40,6 +43,7 @@ function open(entity?: Domain): void {
 }
 
 async function submit(): Promise<void> {
+  if (modal.loading) return;
   if (!modal.form.domain) {
     modal.error = "El dominio es requerido";
     return;
@@ -50,12 +54,14 @@ async function submit(): Promise<void> {
   }
   modal.loading = true;
   try {
-    emit("submit", {
+    await props.onSubmit?.({
       id: modal.form.id,
       domain: modal.form.domain,
       userId: modal.form.userId,
     });
     if (props.autoCloseModal) reset();
+  } catch (err) {
+    modal.error = err instanceof Error && err.message ? err.message : "No se pudo guardar el dominio";
   } finally {
     modal.loading = false;
   }

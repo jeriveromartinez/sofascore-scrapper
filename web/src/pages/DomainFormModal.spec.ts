@@ -26,13 +26,19 @@ const base: Domain = {
   updatedAt: "",
 };
 
+const onSubmit = vi.fn();
+
+beforeEach(() => {
+  onSubmit.mockReset();
+});
+
 describe("DomainFormModal", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
 
   it("renders the user <select> from the users prop", async () => {
-    const wrapper = mount(DomainFormModal, { props: { users } });
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit } });
     const vm = wrapper.vm as unknown as { open: (d?: Domain) => void };
     vm.open();
     await nextTick();
@@ -41,7 +47,7 @@ describe("DomainFormModal", () => {
   });
 
   it("open() without args puts modal in create mode and selects first user as default", () => {
-    const wrapper = mount(DomainFormModal, { props: { users } });
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit } });
     const vm = wrapper.vm as unknown as {
       open: (d?: Domain) => void;
       modal: { form: { domain: string; userId: number; id: number | null } };
@@ -52,7 +58,7 @@ describe("DomainFormModal", () => {
   });
 
   it("open(entity) pre-fills domain + userId and clones the entity", () => {
-    const wrapper = mount(DomainFormModal, { props: { users } });
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit } });
     const vm = wrapper.vm as unknown as {
       open: (d?: Domain) => void;
       modal: { form: { domain: string; userId: number; id: number | null } };
@@ -66,8 +72,8 @@ describe("DomainFormModal", () => {
     expect(base.domain).toBe("example.com");
   });
 
-  it("submit in create mode emits submit event with id=null", async () => {
-    const wrapper = mount(DomainFormModal, { props: { users } });
+  it("submit in create mode calls onSubmit with id=null", async () => {
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit } });
     const vm = wrapper.vm as unknown as {
       open: (d?: Domain) => void;
       modal: { form: { domain: string; userId: number; id: number | null } };
@@ -78,14 +84,12 @@ describe("DomainFormModal", () => {
     vm.modal.form.userId = 20;
 
     await vm.submit();
-    const emitted = wrapper.emitted("submit");
-    expect(emitted).toBeTruthy();
-    expect(emitted![0]![0]).toEqual({ id: null, domain: "new.com", userId: 20 });
+    expect(onSubmit).toHaveBeenCalledWith({ id: null, domain: "new.com", userId: 20 });
   });
 });
 describe("DomainFormModal form submission", () => {
   it("associates the submit button with the form and submits exactly once", async () => {
-    const wrapper = mount(DomainFormModal, { props: { users }, attachTo: document.body });
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit }, attachTo: document.body });
     (wrapper.vm as unknown as { open: () => void }).open();
     await nextTick();
     const button = wrapper.find("button[type='submit']").element as HTMLButtonElement;
@@ -93,17 +97,58 @@ describe("DomainFormModal form submission", () => {
     await wrapper.find("input[type='text']").setValue("new.example.com");
     button.click();
     await flushPromises();
-    expect(wrapper.emitted("submit")).toHaveLength(1);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 
   it("does not submit when the required domain is empty", async () => {
-    const wrapper = mount(DomainFormModal, { props: { users }, attachTo: document.body });
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit }, attachTo: document.body });
     (wrapper.vm as unknown as { open: () => void }).open();
     await nextTick();
     (wrapper.find("button[type='submit']").element as HTMLButtonElement).click();
     await flushPromises();
-    expect(wrapper.emitted("submit")).toBeFalsy();
+    expect(onSubmit).not.toHaveBeenCalled();
     wrapper.unmount();
+  });
+});
+
+describe("DomainFormModal async submit", () => {
+  type Vm = {
+    open: () => void;
+    submit: () => Promise<void>;
+    modal: { loading: boolean; error: string; form: Record<string, unknown> };
+  };
+
+  it("keeps the submit button disabled until the parent handler settles", async () => {
+    let finish!: () => void;
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit, autoCloseModal: false } });
+    const vm = wrapper.vm as unknown as Vm;
+    vm.open();
+    Object.assign(vm.modal.form, { domain: "new.com", userId: 20 });
+    const pending = vm.submit();
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(vm.modal.loading).toBe(true);
+    expect(wrapper.find("button[type='submit']").attributes("disabled")).toBeDefined();
+
+    await vm.submit();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    finish();
+    await pending;
+    expect(vm.modal.loading).toBe(false);
+  });
+
+  it("shows the error when the parent handler rejects", async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error("boom"));
+    const wrapper = mount(DomainFormModal, { props: { users, onSubmit, autoCloseModal: false } });
+    const vm = wrapper.vm as unknown as Vm;
+    vm.open();
+    Object.assign(vm.modal.form, { domain: "new.com", userId: 20 });
+    await vm.submit();
+    expect(vm.modal.error).toBe("boom");
+    expect(vm.modal.loading).toBe(false);
   });
 });

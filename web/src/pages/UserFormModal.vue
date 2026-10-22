@@ -2,13 +2,16 @@
 import { onBeforeUnmount, reactive, useId, watch } from "vue";
 import type { User } from "../store/services/models";
 
-const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
-  autoCloseModal: true,
-});
+type UserFormPayload = { id: number | null; email: string; password: string; role: string };
 
-const emit = defineEmits<{
-  submit: [payload: { id: number | null; email: string; password: string; role: string }];
-}>();
+const props = withDefaults(
+  defineProps<{
+    autoCloseModal?: boolean;
+    // A prop instead of an emit so the modal can await the parent's request.
+    onSubmit?: (payload: UserFormPayload) => Promise<void> | void;
+  }>(),
+  { autoCloseModal: true },
+);
 
 const formId = useId();
 
@@ -35,6 +38,7 @@ function open(entity?: User): void {
 }
 
 async function submit(): Promise<void> {
+  if (modal.loading) return;
   if (!modal.form.email) {
     modal.error = "El email es requerido";
     return;
@@ -45,13 +49,15 @@ async function submit(): Promise<void> {
   }
   modal.loading = true;
   try {
-    emit("submit", {
+    await props.onSubmit?.({
       id: modal.form.id,
       email: modal.form.email,
       password: modal.form.password,
       role: modal.form.role,
     });
     if (props.autoCloseModal) reset();
+  } catch (err) {
+    modal.error = err instanceof Error && err.message ? err.message : "No se pudo guardar el usuario";
   } finally {
     modal.loading = false;
   }

@@ -2,13 +2,16 @@
 import { onBeforeUnmount, reactive, useId, watch } from "vue";
 import type { Tournament } from "../store/services/models";
 
-const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
-  autoCloseModal: true,
-});
+type TournamentFormPayload = { id: number | null; name: string; slug: string };
 
-const emit = defineEmits<{
-  submit: [payload: { id: number | null; name: string; slug: string }];
-}>();
+const props = withDefaults(
+  defineProps<{
+    autoCloseModal?: boolean;
+    // A prop instead of an emit so the modal can await the parent's request.
+    onSubmit?: (payload: TournamentFormPayload) => Promise<void> | void;
+  }>(),
+  { autoCloseModal: true },
+);
 
 const formId = useId();
 
@@ -35,14 +38,17 @@ function open(entity?: Tournament): void {
 }
 
 async function submit(): Promise<void> {
+  if (modal.loading) return;
   if (!modal.form.name) {
     modal.error = "El nombre es requerido";
     return;
   }
   modal.loading = true;
   try {
-    emit("submit", { id: modal.form.id, name: modal.form.name, slug: modal.form.slug });
+    await props.onSubmit?.({ id: modal.form.id, name: modal.form.name, slug: modal.form.slug });
     if (props.autoCloseModal) reset();
+  } catch (err) {
+    modal.error = err instanceof Error && err.message ? err.message : "No se pudo guardar el torneo";
   } finally {
     modal.loading = false;
   }

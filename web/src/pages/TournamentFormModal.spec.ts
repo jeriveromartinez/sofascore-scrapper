@@ -20,13 +20,19 @@ const base: Tournament = {
   region: "EU",
 };
 
+const onSubmit = vi.fn();
+
+beforeEach(() => {
+  onSubmit.mockReset();
+});
+
 describe("TournamentFormModal", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
 
   it("open() without args puts modal in create mode (no id emitted)", async () => {
-    const wrapper = mount(TournamentFormModal);
+    const wrapper = mount(TournamentFormModal, { props: { onSubmit } });
     const vm = wrapper.vm as unknown as {
       open: (t?: Tournament) => void;
       modal: { open: boolean; form: { name: string; slug: string; id: number | null } };
@@ -39,7 +45,7 @@ describe("TournamentFormModal", () => {
   });
 
   it("open(entity) pre-fills the form and clones the entity (no parent mutation)", async () => {
-    const wrapper = mount(TournamentFormModal);
+    const wrapper = mount(TournamentFormModal, { props: { onSubmit } });
     const vm = wrapper.vm as unknown as {
       open: (t?: Tournament) => void;
       modal: { form: { name: string; slug: string; id: number | null } };
@@ -54,8 +60,8 @@ describe("TournamentFormModal", () => {
     expect(base.name).toBe("Premier");
   });
 
-  it("submit in create mode emits submit event without id", async () => {
-    const wrapper = mount(TournamentFormModal);
+  it("submit in create mode calls onSubmit without id", async () => {
+    const wrapper = mount(TournamentFormModal, { props: { onSubmit } });
     const vm = wrapper.vm as unknown as {
       open: (t?: Tournament) => void;
       modal: { form: { name: string; slug: string; id: number | null } };
@@ -66,13 +72,11 @@ describe("TournamentFormModal", () => {
     vm.modal.form.slug = "copa";
 
     await vm.submit();
-    const emitted = wrapper.emitted("submit");
-    expect(emitted).toBeTruthy();
-    expect(emitted![0]![0]).toEqual({ id: null, name: "Copa", slug: "copa" });
+    expect(onSubmit).toHaveBeenCalledWith({ id: null, name: "Copa", slug: "copa" });
   });
 
-  it("submit in edit mode emits submit event with id", async () => {
-    const wrapper = mount(TournamentFormModal);
+  it("submit in edit mode calls onSubmit with id", async () => {
+    const wrapper = mount(TournamentFormModal, { props: { onSubmit } });
     const vm = wrapper.vm as unknown as {
       open: (t?: Tournament) => void;
       modal: { form: { name: string; slug: string; id: number | null } };
@@ -82,15 +86,13 @@ describe("TournamentFormModal", () => {
     vm.modal.form.name = "Premier League";
 
     await vm.submit();
-    const emitted = wrapper.emitted("submit");
-    expect(emitted).toBeTruthy();
-    expect(emitted![0]![0]).toEqual({ id: 1, name: "Premier League", slug: "premier" });
+    expect(onSubmit).toHaveBeenCalledWith({ id: 1, name: "Premier League", slug: "premier" });
   });
 });
 
 describe("TournamentFormModal form submission", () => {
   it("associates the submit button with the form and submits exactly once", async () => {
-    const wrapper = mount(TournamentFormModal, { attachTo: document.body });
+    const wrapper = mount(TournamentFormModal, { props: { onSubmit }, attachTo: document.body });
     (wrapper.vm as unknown as { open: () => void }).open();
     await wrapper.vm.$nextTick();
     const button = wrapper.find("button[type='submit']").element as HTMLButtonElement;
@@ -98,7 +100,48 @@ describe("TournamentFormModal form submission", () => {
     await wrapper.find("input[required]").setValue("Serie A");
     button.click();
     await flushPromises();
-    expect(wrapper.emitted("submit")).toHaveLength(1);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
     wrapper.unmount();
+  });
+});
+
+describe("TournamentFormModal async submit", () => {
+  type Vm = {
+    open: () => void;
+    submit: () => Promise<void>;
+    modal: { loading: boolean; error: string; form: Record<string, unknown> };
+  };
+
+  it("keeps the submit button disabled until the parent handler settles", async () => {
+    let finish!: () => void;
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const wrapper = mount(TournamentFormModal, { props: { onSubmit, autoCloseModal: false } });
+    const vm = wrapper.vm as unknown as Vm;
+    vm.open();
+    Object.assign(vm.modal.form, { name: "Copa" });
+    const pending = vm.submit();
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(vm.modal.loading).toBe(true);
+    expect(wrapper.find("button[type='submit']").attributes("disabled")).toBeDefined();
+
+    await vm.submit();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    finish();
+    await pending;
+    expect(vm.modal.loading).toBe(false);
+  });
+
+  it("shows the error when the parent handler rejects", async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error("boom"));
+    const wrapper = mount(TournamentFormModal, { props: { onSubmit, autoCloseModal: false } });
+    const vm = wrapper.vm as unknown as Vm;
+    vm.open();
+    Object.assign(vm.modal.form, { name: "Copa" });
+    await vm.submit();
+    expect(vm.modal.error).toBe("boom");
+    expect(vm.modal.loading).toBe(false);
   });
 });
