@@ -328,8 +328,6 @@ cleanup is required to keep the system running.
 
 ## Related docs
 
-- Spec: `docs/superpowers/specs/2026-09-13-scores365-source-design.md`
-- Implementation plan: `docs/superpowers/plans/2026-09-13-scores365-source.md`
 - Source code:
   - `internal/scraper/scores365/` — source adapter, feed adapter, sport-map table
   - `internal/scraper/catalog/discovery.go` — boot-time discovery sweep
