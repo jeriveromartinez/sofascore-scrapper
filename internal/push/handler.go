@@ -72,7 +72,7 @@ func (h *Handler) handleCreateImmediate(c *gin.Context) {
 	}
 	msg, _, err := h.svc.CreateImmediate(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload)
 	if err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	server.RespondProto(c, http.StatusCreated, &pb.PushMessage{
@@ -106,12 +106,12 @@ func (h *Handler) handleGet(c *gin.Context) {
 	// full detail+metrics response is wired in a follow-up.
 	msg, err := h.svc.repo.GetPushMessageByID(c.Request.Context(), id, callerID)
 	if err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	targets, err := h.svc.repo.GetPushMessageTargets(c.Request.Context(), msg.ID)
 	if err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	domainIDs := make([]uint32, 0, len(targets))
@@ -136,7 +136,7 @@ func (h *Handler) handleList(c *gin.Context) {
 	source := c.Query("source") // optional: "immediate" | "scheduled"
 	rows, hasMore, err := h.svc.repo.ListPushMessagesByUser(c.Request.Context(), callerID, source, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		h.internalError(c, "list pushes", err)
 		return
 	}
 	resp := &pb.PushMessagePage{
@@ -149,7 +149,7 @@ func (h *Handler) handleList(c *gin.Context) {
 		}
 		targetsByID, terr := h.svc.repo.GetPushMessageTargetsByMessageIDs(c.Request.Context(), ids)
 		if terr != nil {
-			server.RespondError(c, http.StatusInternalServerError, terr.Error())
+			h.internalError(c, "list push targets", terr)
 			return
 		}
 		for i := range rows {
@@ -211,7 +211,7 @@ func (h *Handler) handleCreateSchedule(c *gin.Context) {
 
 	sched, _, err := h.svc.CreateSchedule(c.Request.Context(), callerID, callerID, uint32SliceToUint(req.DomainIds), req.Payload, req.ScheduleType, runAt, req.CronExpr, tzMode, timezone)
 	if err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	server.RespondProto(c, http.StatusCreated, ScheduledPushToProto(*sched, req.DomainIds))
@@ -231,7 +231,7 @@ func (h *Handler) handleListSchedules(c *gin.Context) {
 	}
 	rows, hasMore, err := h.svc.repo.ListScheduledPushesByUser(c.Request.Context(), callerID, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		h.internalError(c, "list schedules", err)
 		return
 	}
 	resp := &pb.ScheduledPushPage{Data: make([]*pb.ScheduledPush, 0, len(rows))}
@@ -242,7 +242,7 @@ func (h *Handler) handleListSchedules(c *gin.Context) {
 		}
 		targetsByID, terr := h.svc.repo.GetScheduledPushTargetsByScheduledIDs(c.Request.Context(), ids)
 		if terr != nil {
-			server.RespondError(c, http.StatusInternalServerError, terr.Error())
+			h.internalError(c, "list schedule targets", terr)
 			return
 		}
 		for i := range rows {
@@ -277,12 +277,12 @@ func (h *Handler) handleGetSchedule(c *gin.Context) {
 	}
 	sched, err := h.svc.repo.GetScheduledPushByID(c.Request.Context(), id, callerID)
 	if err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	targets, terr := h.svc.repo.GetScheduledPushTargets(c.Request.Context(), sched.ID)
 	if terr != nil {
-		writeServiceError(c, terr)
+		h.writeServiceError(c, terr)
 		return
 	}
 	domainIDs := make([]uint32, 0, len(targets))
@@ -310,12 +310,12 @@ func (h *Handler) handleUpdateSchedule(c *gin.Context) {
 	}
 	sched, err := h.svc.repo.UpdateScheduledPushActive(c.Request.Context(), id, callerID, req.IsActive)
 	if err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	targets, terr := h.svc.repo.GetScheduledPushTargets(c.Request.Context(), sched.ID)
 	if terr != nil {
-		writeServiceError(c, terr)
+		h.writeServiceError(c, terr)
 		return
 	}
 	domainIDs := make([]uint32, 0, len(targets))
@@ -337,7 +337,7 @@ func (h *Handler) handleDeleteSchedule(c *gin.Context) {
 		return
 	}
 	if err := h.svc.repo.DeleteScheduledPush(c.Request.Context(), id, callerID); err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "schedule deleted"})
@@ -351,7 +351,7 @@ func (h *Handler) handleMetricsAggregate(c *gin.Context) {
 	}
 	snap, err := h.svc.repo.AggregateMetricsForUser(c.Request.Context(), callerID)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		h.internalError(c, "aggregate metrics", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, snap)
@@ -370,7 +370,7 @@ func (h *Handler) handleCampaignMetrics(c *gin.Context) {
 	}
 	snap, err := h.svc.repo.CampaignMetrics(c.Request.Context(), id, callerID)
 	if err != nil {
-		writeServiceError(c, err)
+		h.writeServiceError(c, err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, snap)
@@ -379,7 +379,7 @@ func (h *Handler) handleCampaignMetrics(c *gin.Context) {
 // writeServiceError maps the service's sentinel errors to HTTP
 // status codes. Centralized so every handler uses the same
 // translation table.
-func writeServiceError(c *gin.Context, err error) {
+func (h *Handler) writeServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrForbidden):
 		server.RespondError(c, http.StatusForbidden, "forbidden")
@@ -392,8 +392,22 @@ func writeServiceError(c *gin.Context, err error) {
 	case errors.Is(err, ErrDisabledFeature):
 		server.RespondError(c, http.StatusForbidden, "notifications disabled for this user")
 	default:
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		h.internalError(c, "push request", err)
 	}
+}
+
+// internalError logs the cause of a 500 and answers with a generic
+// message, so SQL and driver details never reach the client.
+func (h *Handler) internalError(c *gin.Context, op string, err error) {
+	logger := h.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Error("push: "+op+" failed",
+		slog.String("method", c.Request.Method),
+		slog.String("path", c.FullPath()),
+		slog.String("error", err.Error()))
+	server.RespondError(c, http.StatusInternalServerError, "internal server error")
 }
 
 // uint32SliceToUint narrows the proto's []uint32 back to the
