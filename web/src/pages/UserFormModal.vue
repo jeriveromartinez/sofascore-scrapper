@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { onBeforeUnmount, reactive, useId, watch } from "vue";
 import type { User } from "../store/services/models";
 
 const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
@@ -9,6 +9,8 @@ const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
 const emit = defineEmits<{
   submit: [payload: { id: number | null; email: string; password: string; role: string }];
 }>();
+
+const formId = useId();
 
 const modal = reactive({
   open: false,
@@ -89,7 +91,7 @@ defineExpose({ open, reset });
           <button type="button" class="btn-close" aria-label="Close" @click="reset"></button>
         </div>
         <div class="modal-body">
-          <form class="row g-3" @submit.prevent="submit">
+          <form :id="formId" class="row g-3" @submit.prevent="submit">
             <div class="col-12">
               <label class="form-label">Email *</label>
               <input v-model="modal.form.email" type="email" class="form-control" required />
@@ -133,7 +135,7 @@ defineExpose({ open, reset });
             type="submit"
             class="btn btn-primary"
             :disabled="modal.loading"
-            @click="submit"
+            :form="formId"
           >
             {{ modal.form.id ? "Actualizar" : "Crear" }}
           </button>

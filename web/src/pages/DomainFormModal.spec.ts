@@ -1,6 +1,6 @@
 import { nextTick } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import DomainFormModal from "./DomainFormModal.vue";
 import type { Domain, User } from "../store/services/models";
@@ -81,5 +81,29 @@ describe("DomainFormModal", () => {
     const emitted = wrapper.emitted("submit");
     expect(emitted).toBeTruthy();
     expect(emitted![0]![0]).toEqual({ id: null, domain: "new.com", userId: 20 });
+  });
+});
+describe("DomainFormModal form submission", () => {
+  it("associates the submit button with the form and submits exactly once", async () => {
+    const wrapper = mount(DomainFormModal, { props: { users }, attachTo: document.body });
+    (wrapper.vm as unknown as { open: () => void }).open();
+    await nextTick();
+    const button = wrapper.find("button[type='submit']").element as HTMLButtonElement;
+    expect(button.form).toBe(wrapper.find("form").element);
+    await wrapper.find("input[type='text']").setValue("new.example.com");
+    button.click();
+    await flushPromises();
+    expect(wrapper.emitted("submit")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("does not submit when the required domain is empty", async () => {
+    const wrapper = mount(DomainFormModal, { props: { users }, attachTo: document.body });
+    (wrapper.vm as unknown as { open: () => void }).open();
+    await nextTick();
+    (wrapper.find("button[type='submit']").element as HTMLButtonElement).click();
+    await flushPromises();
+    expect(wrapper.emitted("submit")).toBeFalsy();
+    wrapper.unmount();
   });
 });

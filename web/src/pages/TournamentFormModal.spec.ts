@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import TournamentFormModal from "./TournamentFormModal.vue";
 import type { Tournament } from "../store/services/models";
@@ -85,5 +85,20 @@ describe("TournamentFormModal", () => {
     const emitted = wrapper.emitted("submit");
     expect(emitted).toBeTruthy();
     expect(emitted![0]![0]).toEqual({ id: 1, name: "Premier League", slug: "premier" });
+  });
+});
+
+describe("TournamentFormModal form submission", () => {
+  it("associates the submit button with the form and submits exactly once", async () => {
+    const wrapper = mount(TournamentFormModal, { attachTo: document.body });
+    (wrapper.vm as unknown as { open: () => void }).open();
+    await wrapper.vm.$nextTick();
+    const button = wrapper.find("button[type='submit']").element as HTMLButtonElement;
+    expect(button.form).toBe(wrapper.find("form").element);
+    await wrapper.find("input[required]").setValue("Serie A");
+    button.click();
+    await flushPromises();
+    expect(wrapper.emitted("submit")).toHaveLength(1);
+    wrapper.unmount();
   });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { onBeforeUnmount, reactive, useId, watch } from "vue";
 import type { Domain, User } from "../store/services/models";
 
 const props = withDefaults(
@@ -10,6 +10,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   submit: [payload: { id: number | null; domain: string; userId: number }];
 }>();
+
+const formId = useId();
 
 const modal = reactive({
   open: false,
@@ -93,7 +95,7 @@ defineExpose({ open, reset });
           <button type="button" class="btn-close" aria-label="Close" @click="reset"></button>
         </div>
         <div class="modal-body">
-          <form class="row g-3" @submit.prevent="submit">
+          <form :id="formId" class="row g-3" @submit.prevent="submit">
             <div class="col-12">
               <label class="form-label">Dominio *</label>
               <input
@@ -137,7 +139,7 @@ defineExpose({ open, reset });
             type="submit"
             class="btn btn-primary"
             :disabled="modal.loading || props.users.length === 0"
-            @click="submit"
+            :form="formId"
           >
             {{ modal.form.id ? "Actualizar" : "Crear" }}
           </button>

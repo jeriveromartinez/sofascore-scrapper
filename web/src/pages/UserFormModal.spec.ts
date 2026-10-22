@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import UserFormModal from "./UserFormModal.vue";
 import type { User } from "../store/services/models";
@@ -101,5 +101,41 @@ describe("UserFormModal", () => {
     const emitted = wrapper.emitted("submit");
     expect(emitted).toBeTruthy();
     expect(emitted![0]![0]).toEqual({ id: null, email: "new@x.com", password: "secret", role: "user" });
+  });
+});
+
+describe("UserFormModal form submission", () => {
+  async function openCreate() {
+    const wrapper = mount(UserFormModal, { attachTo: document.body });
+    (wrapper.vm as unknown as { open: () => void }).open();
+    await wrapper.vm.$nextTick();
+    return wrapper;
+  }
+
+  function clickSubmit(wrapper: ReturnType<typeof mount>) {
+    const button = wrapper.find("button[type='submit']").element as HTMLButtonElement;
+    button.click();
+  }
+
+  it("runs native validation before submitting (invalid email is rejected)", async () => {
+    const wrapper = await openCreate();
+    await wrapper.find("input[type='email']").setValue("not-an-email");
+    await wrapper.find("input[type='password']").setValue("secret");
+    clickSubmit(wrapper);
+    await flushPromises();
+    expect(wrapper.emitted("submit")).toBeFalsy();
+    wrapper.unmount();
+  });
+
+  it("associates the submit button with the form and submits exactly once", async () => {
+    const wrapper = await openCreate();
+    const button = wrapper.find("button[type='submit']").element as HTMLButtonElement;
+    expect(button.form).toBe(wrapper.find("form").element);
+    await wrapper.find("input[type='email']").setValue("new@x.com");
+    await wrapper.find("input[type='password']").setValue("secret");
+    clickSubmit(wrapper);
+    await flushPromises();
+    expect(wrapper.emitted("submit")).toHaveLength(1);
+    wrapper.unmount();
   });
 });

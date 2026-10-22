@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { onBeforeUnmount, reactive, useId, watch } from "vue";
 import type { Tournament } from "../store/services/models";
 
 const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
@@ -9,6 +9,8 @@ const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
 const emit = defineEmits<{
   submit: [payload: { id: number | null; name: string; slug: string }];
 }>();
+
+const formId = useId();
 
 const modal = reactive({
   open: false,
@@ -85,7 +87,7 @@ defineExpose({ open, reset });
           ></button>
         </div>
         <div class="modal-body">
-          <form class="row g-3" @submit.prevent="submit">
+          <form :id="formId" class="row g-3" @submit.prevent="submit">
             <div class="col-12">
               <label class="form-label">Nombre *</label>
               <input
@@ -117,7 +119,7 @@ defineExpose({ open, reset });
             type="submit"
             class="btn btn-primary"
             :disabled="modal.loading"
-            @click="submit"
+            :form="formId"
           >
             {{ modal.form.id ? "Actualizar" : "Crear" }}
           </button>
