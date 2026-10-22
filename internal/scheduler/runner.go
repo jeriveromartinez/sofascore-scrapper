@@ -79,7 +79,7 @@ func (r *Runner) RunLocked(ctx context.Context, name string, ttl time.Duration, 
 
 	wg.Wait()
 
-	releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer releaseCancel()
 	if relErr := lease.Release(releaseCtx); relErr != nil && r.logger != nil {
 		r.logger.Warn("scheduler: lock release failed",
