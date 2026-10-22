@@ -56,10 +56,10 @@ func p0Match(id, leagueID, source string) Match {
 }
 
 // TestService_PerSourceEmptyCatalogWarns characterizes gap P0 #2:
-// ScrapeToday silently skips a source whose ActiveLeaguesBySource
-// returns an empty bucket (service.go:161-163 contains only a bare
-// `continue`). With one source empty and another non-empty, no log
-// names the empty source. The fix should emit a per-source warning.
+// ScrapeToday skips a source whose ActiveLeaguesBySource returns an
+// empty bucket (service.go:167-171). With one source empty and
+// another non-empty, the warning emitted there must name the empty
+// source.
 func TestService_PerSourceEmptyCatalogWarns(t *testing.T) {
 	db := setupScraperTestDB(t)
 	repo := events.NewRepository(db)
@@ -89,10 +89,10 @@ func TestService_PerSourceEmptyCatalogWarns(t *testing.T) {
 
 // TestService_FotMobUnknownLeagueProducesLog characterizes gap P0 #1:
 // dispatchDayMatch auto-creates unknown leagues only when
-// src.Name() == "scores365" (service.go:319). A non-scores365 source
+// src.Name() == "scores365" (service.go:361). A non-scores365 source
 // like fotmob that returns matches for league IDs not in the catalog
-// drops them silently with no log. The fix should surface the unknown
-// FotMob league (via log) OR persist its matches.
+// is not auto-created, so the unknown league must still be surfaced
+// (via log) OR its matches persisted.
 func TestService_FotMobUnknownLeagueProducesLog(t *testing.T) {
 	db := setupScraperTestDB(t)
 	repo := events.NewRepository(db)
@@ -132,10 +132,10 @@ func TestService_FotMobUnknownLeagueProducesLog(t *testing.T) {
 }
 
 // TestService_UpsertLeagueMatchesLogsZeroMatches characterizes gap P0 #3:
-// upsertLeagueMatches short-circuits at service.go:424 with a bare
-// `return nil` when the bucket is empty. Operators get no signal that
-// "this league returned zero matches today". The fix should emit a log
-// record naming the empty bucket.
+// upsertLeagueMatches short-circuits at service.go:475-479 when the
+// bucket is empty. The log record emitted there must name the empty
+// bucket, so operators can see that the league returned zero matches
+// today.
 func TestService_UpsertLeagueMatchesLogsZeroMatches(t *testing.T) {
 	db := setupScraperTestDB(t)
 	repo := events.NewRepository(db)
@@ -166,11 +166,11 @@ func TestService_UpsertLeagueMatchesLogsZeroMatches(t *testing.T) {
 }
 
 // TestService_NonScores365AutoCreateLogged characterizes gap P0 #4:
-// the auto-create gate at service.go:319 (`src.Name() == "scores365"`)
-// silently drops matches that any non-scores365 source returns for
-// league IDs not in the catalog. With a DayMatcher source named
-// "mystery_dm", the gate fires and byLeague["999"] is never visited.
-// The fix should surface the unknown league (via log) OR auto-create it.
+// the auto-create gate at service.go:361 (`src.Name() == "scores365"`)
+// blocks matches that any non-scores365 source returns for league IDs
+// not in the catalog. With a DayMatcher source named "mystery_dm", the
+// gate fires and byLeague["999"] is never auto-created. The unknown
+// league must be surfaced (via log) OR auto-created.
 func TestService_NonScores365AutoCreateLogged(t *testing.T) {
 	db := setupScraperTestDB(t)
 	repo := events.NewRepository(db)

@@ -1,7 +1,8 @@
 // Package buildinfo exposes the version/commit baked into the binary
-// at compile time. The package-level variables Version, Commit, and
-// BuiltAt are resolved via -ldflags at build time (see Dockerfile).
-// The defaults identify a dev build (no -ldflags).
+// at compile time. The package-level variables Version and Commit are
+// resolved via -ldflags at build time (see Dockerfile); BuiltAt is
+// never injected and keeps its default. The defaults identify a dev
+// build (no -ldflags).
 package buildinfo
 
 import (

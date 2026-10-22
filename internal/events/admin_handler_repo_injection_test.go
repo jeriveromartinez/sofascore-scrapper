@@ -21,7 +21,7 @@ func TestAdminHandler_AcceptsInjectedRepository(t *testing.T) {
 	db := setupAdminHandlerTestDB(t)
 
 	// Construct the repository once, then inject it. This mirrors the
-	// production wiring in internal/app/routes.go:108.
+	// production wiring in internal/app/routes.go:133.
 	repo := NewRepository(db)
 	h := NewAdminHandler(repo)
 	if h == nil {
