@@ -1,6 +1,8 @@
 package reporting
 
 import (
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,6 +30,7 @@ func (h *CrashHandler) handle(c *gin.Context) {
 	}
 
 	if err := h.repo.SaveCrash(c.Request.Context(), report); err != nil {
+		slog.Default().Error("reporting: save crash report failed", slog.String("error", err.Error()))
 		c.JSON(500, gin.H{"error": "Failed to save crash report"})
 		return
 	}
