@@ -248,7 +248,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
   }
 
   async function setFilters(newFilters: Record<string, unknown>): Promise<void> {
-    // The caller (e.g. events.vue:48-50) updates its local filters
+    // The caller (e.g. pages/events.vue:50-53) updates its local filters
     // ref BEFORE invoking setFilters, so getFilters() now returns the
     // NEW filter set. The cache we need to clear belongs to the OLD
     // filter set, which is still in the URL.

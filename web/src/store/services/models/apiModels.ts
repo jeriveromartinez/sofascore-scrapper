@@ -27,8 +27,7 @@ import type {
   User as ProtoUser,
   UserPage as ProtoUserPage,
   UserWriteRequest,
-  // Push notification types (added 2026-08-28; see
-  // docs/superpowers/specs/2026-08-28-push-notifications-websocket-design.md).
+  // Push notification types (added 2026-08-28; see proto/api.proto).
   CreateImmediatePushRequest as ProtoCreateImmediatePushRequest,
   CreateScheduleRequest as ProtoCreateScheduleRequest,
   UpdateScheduleRequest as ProtoUpdateScheduleRequest,

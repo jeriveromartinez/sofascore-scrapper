@@ -63,8 +63,8 @@ import { useModal } from '../../../composables/useModal'
 // only exists in vite.config.ts (runtime); there is no matching `paths` mapping
 // in tsconfig.app.json, and `eslint.config.js` does not register the alias with
 // import/resolver. The rest of the project uses relative imports (e.g.
-// pages/scraper-leagues/index.vue:49). Switched to relative imports — the
-// file passes `tsc --noEmit` and `yarn lint` cleanly this way.
+// pages/admin/scraper-leagues/index.vue:76). Switched to relative imports — the
+// file passes `vue-tsc -b` and `npm run lint` cleanly this way.
 const props = defineProps<{ item: ScraperLeague | null }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'saved'): void }>()
 

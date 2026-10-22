@@ -53,13 +53,14 @@ export interface ScraperLeagueSearchResult {
  * snake_case shape the rest of the frontend expects.
  *
  * Background: the Go model `catalog.ScraperLeague` embeds `gorm.Model` and
- * exposes its columns without explicit `json:` tags, so JSON tags fall back to
- * the Go field names (`ID`, `Source`, `SourceLeagueId`, `CreatedAt`,
- * `UpdatedAt`). After axios decodes the response, `item.id` is `undefined`
- * and downstream code builds URLs like `/scraper-leagues/undefined`.
+ * now emits explicit snake_case `json:` tags (`json:"source"`,
+ * `json:"source_league_id"`, …), so the wire payload already uses the field
+ * names this helper returns.
  *
- * This helper accepts BOTH casings so the service remains usable while
- * upstream JSON tags are added (PR #122 covers the Go side; see its brief).
+ * This helper accepts BOTH casings so it keeps tolerating the legacy
+ * PascalCase casing (the Go field names `ID`, `Source`, `SourceLeagueId`,
+ * `CreatedAt`, `UpdatedAt`) that the payload carried before those tags were
+ * added.
  */
 export function normalizeScraperLeague(raw: unknown): ScraperLeague {
   const r = (raw ?? {}) as Record<string, unknown>
