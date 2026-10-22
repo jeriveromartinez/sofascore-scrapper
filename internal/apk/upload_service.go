@@ -16,6 +16,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// Publication statuses are the values stored in the
+// apk_upload_publications.status column.
+const (
+	PublicationStatusAssembling = "assembling"
+	PublicationStatusPublished  = "published"
+	PublicationStatusPersisted  = "persisted"
+	PublicationStatusFailed     = "failed"
+)
+
 type UploadPublication struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement"`
 	UploadID  string    `gorm:"uniqueIndex:idx_upload_id;size:36;not null;column:upload_id"`
@@ -178,7 +187,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 
 	pub := &UploadPublication{
 		UploadID: uploadID.String(),
-		Status:   "assembling",
+		Status:   PublicationStatusAssembling,
 		UserID:   userID,
 	}
 	if err := s.db.WithContext(ctx).Create(pub).Error; err != nil {
@@ -278,7 +287,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	var apkV *ApkVersion
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		pub.FinalPath = destPath
-		pub.Status = "published"
+		pub.Status = PublicationStatusPublished
 		if err := tx.Save(pub).Error; err != nil {
 			return err
 		}
@@ -290,7 +299,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 			return err
 		}
 		apkV = created
-		pub.Status = "persisted"
+		pub.Status = PublicationStatusPersisted
 		if err := tx.Save(pub).Error; err != nil {
 			return err
 		}
@@ -340,7 +349,7 @@ func (s *UploadService) Abort(ctx context.Context, uploadID uuid.UUID, userID ui
 	switch {
 	case err == nil:
 		removeUploadTemp(pub.TempPath)
-		if err := s.db.WithContext(ctx).Model(&pub).Update("status", "failed").Error; err != nil {
+		if err := s.db.WithContext(ctx).Model(&pub).Update("status", PublicationStatusFailed).Error; err != nil {
 			slog.Default().Error("abort: mark publication failed",
 				slog.Uint64("publication_id", uint64(pub.ID)),
 				slog.String("err", err.Error()),
@@ -362,7 +371,7 @@ func (s *UploadService) markPublicationFailed(ctx context.Context, pubID uint) {
 	observability.UploadFailures.Inc()
 	markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if err := s.db.WithContext(markCtx).Model(&UploadPublication{}).Where("id = ?", pubID).Update("status", "failed").Error; err != nil {
+	if err := s.db.WithContext(markCtx).Model(&UploadPublication{}).Where("id = ?", pubID).Update("status", PublicationStatusFailed).Error; err != nil {
 		slog.Default().Error("mark publication failed",
 			slog.Uint64("publication_id", uint64(pubID)),
 			slog.String("err", err.Error()),
@@ -393,7 +402,7 @@ const publicationStaleAfter = time.Hour
 func (s *UploadService) ReconcilePublications(ctx context.Context) error {
 	var batch []UploadPublication
 	return s.db.WithContext(ctx).
-		Where("status = ? OR (status = ? AND updated_at < ?)", "published", "assembling", time.Now().Add(-publicationStaleAfter)).
+		Where("status = ? OR (status = ? AND updated_at < ?)", PublicationStatusPublished, PublicationStatusAssembling, time.Now().Add(-publicationStaleAfter)).
 		FindInBatches(&batch, reconcilePublicationsBatchSize, func(_ *gorm.DB, _ int) error {
 			return s.reconcilePublicationBatch(ctx, batch)
 		}).Error
@@ -425,7 +434,7 @@ func (s *UploadService) reconcilePublicationBatch(ctx context.Context, pubs []Up
 		}
 
 		switch pub.Status {
-		case "published":
+		case PublicationStatusPublished:
 			if pub.FinalPath != "" {
 				if _, statErr := os.Stat(pub.FinalPath); os.IsNotExist(statErr) {
 					failedIDs = append(failedIDs, pub.ID)
@@ -433,7 +442,7 @@ func (s *UploadService) reconcilePublicationBatch(ctx context.Context, pubs []Up
 				}
 			}
 			toComplete = append(toComplete, uploadID)
-		case "assembling":
+		case PublicationStatusAssembling:
 			failedIDs = append(failedIDs, pub.ID)
 			toAbort = append(toAbort, staleUpload{id: uploadID, tempPath: pub.TempPath})
 		}

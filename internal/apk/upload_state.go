@@ -23,6 +23,9 @@ const (
 
 type UploadSessionStatus string
 
+// The session status is part of the wire contract: the web client
+// polls it and compares the returned string against the terminal
+// states below, so they must stay in sync with the client.
 const (
 	StatusReceiving  UploadSessionStatus = "receiving"
 	StatusAssembling UploadSessionStatus = "assembling"
@@ -259,7 +262,7 @@ func (s *UploadStateStore) Begin(ctx context.Context, req BeginUploadRequest) (*
 		return nil, fmt.Errorf("begin upload: %w", err)
 	}
 
-	resultSlice, ok := result.([]interface{})
+	resultSlice, ok := result.([]any)
 	if !ok || len(resultSlice) == 0 {
 		return nil, fmt.Errorf("unexpected script result")
 	}
@@ -326,12 +329,12 @@ func (s *UploadStateStore) RecordChunk(ctx context.Context, id uuid.UUID, chunk 
 		return fmt.Errorf("record chunk: %w", err)
 	}
 
-	resultSlice, ok := result.([]interface{})
+	resultSlice, ok := result.([]any)
 	if !ok || len(resultSlice) == 0 {
 		return fmt.Errorf("unexpected script result")
 	}
 
-	resultMap := make(map[string]interface{})
+	resultMap := make(map[string]any)
 	for i := 0; i < len(resultSlice); i += 2 {
 		resultMap[resultSlice[i].(string)] = resultSlice[i+1]
 	}
@@ -359,12 +362,12 @@ func (s *UploadStateStore) BeginAssembly(ctx context.Context, id uuid.UUID, tota
 		return fmt.Errorf("begin assembly: %w", err)
 	}
 
-	resultSlice, ok := result.([]interface{})
+	resultSlice, ok := result.([]any)
 	if !ok || len(resultSlice) == 0 {
 		return fmt.Errorf("unexpected script result")
 	}
 
-	resultMap := make(map[string]interface{})
+	resultMap := make(map[string]any)
 	for i := 0; i < len(resultSlice); i += 2 {
 		resultMap[resultSlice[i].(string)] = resultSlice[i+1]
 	}
@@ -398,7 +401,7 @@ func (s *UploadStateStore) Complete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("complete upload: %w", err)
 	}
 
-	resultSlice, ok := result.([]interface{})
+	resultSlice, ok := result.([]any)
 	if !ok || len(resultSlice) == 0 {
 		return fmt.Errorf("unexpected script result")
 	}
@@ -438,7 +441,7 @@ func (s *UploadStateStore) Abort(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("abort upload: %w", err)
 	}
 
-	resultSlice, ok := result.([]interface{})
+	resultSlice, ok := result.([]any)
 	if !ok || len(resultSlice) == 0 {
 		return fmt.Errorf("unexpected script result")
 	}
@@ -483,7 +486,7 @@ func (s *UploadStateStore) ListExpired(ctx context.Context, before time.Time, li
 }
 
 func parseUploadSession(id string, raw string) (*UploadSession, error) {
-	var data map[string]interface{}
+	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		return nil, fmt.Errorf("parse upload session: %w", err)
 	}
