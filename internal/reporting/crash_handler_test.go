@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -36,13 +36,24 @@ func TestCrashHandlerReturnsStableInvalidJSONError(t *testing.T) {
 	}
 }
 
+// reportingCrashDBCounter hands out the name of the in-memory database each
+// call gets. A shared-cache database survives until its last connection
+// closes, so the name has to be unique per call.
+var reportingCrashDBCounter atomic.Int64
+
 func newCrashTestRepo(t *testing.T) (*Repository, *gorm.DB) {
 	t.Helper()
-	dsn := fmt.Sprintf("file:reporting-crash-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	dsn := fmt.Sprintf("file:reporting-crash-%d?mode=memory&cache=shared", reportingCrashDBCounter.Add(1))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	// The pool is closed so the named database does not outlive the test.
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&CrashReport{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

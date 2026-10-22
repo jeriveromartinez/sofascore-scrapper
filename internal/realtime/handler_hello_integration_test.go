@@ -53,16 +53,27 @@ func countGoroutines(fn string) int {
 	return strings.Count(string(buf), fn)
 }
 
+// wsHelloDBCounter hands out the name of the in-memory database each call
+// gets. A shared-cache database survives until its last connection closes,
+// so the name has to be unique per call.
+var wsHelloDBCounter atomic.Int64
+
 // TestWSHandler_FailedHelloDoesNotLeakConnectionGoroutines guards the
 // leak on the WsHello failure path: the socket was closed without
 // closing the Connection, so its ack worker blocked forever, one
 // goroutine per failed handshake.
 func TestWSHandler_FailedHelloDoesNotLeakConnectionGoroutines(t *testing.T) {
-	dsn := fmt.Sprintf("file:test_ws_hello_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	dsn := fmt.Sprintf("file:test_ws_hello_%d?mode=memory&cache=shared", wsHelloDBCounter.Add(1))
 	db, err := gorm.Open(openDriver(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
+	// The pool is closed so the named database does not outlive the test.
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&devices.Device{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}

@@ -4,6 +4,8 @@ package reporting
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +13,11 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/playback"
 	"gorm.io/gorm"
 )
+
+// reportingCtxDBCounter hands out the name of the in-memory database each
+// call gets. A shared-cache database survives until its last connection
+// closes, so the name has to be unique per call.
+var reportingCtxDBCounter atomic.Int64
 
 // TestGetTopEvents_PropagatesContext pins the contract that the ctx
 // passed to GetTopEvents is forwarded to the underlying *gorm.DB query.
@@ -23,10 +30,17 @@ import (
 // returned error is non-nil. We use a context that is already cancelled
 // so we do not need to race the test against the query.
 func TestGetTopEvents_PropagatesContext(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	dsn := fmt.Sprintf("file:reporting-ctx-%d?mode=memory&cache=shared", reportingCtxDBCounter.Add(1))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
+	// The pool is closed so the named database does not outlive the test.
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(&playback.PlaybackLog{}, &ContentStat{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

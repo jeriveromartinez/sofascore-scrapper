@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -15,16 +16,26 @@ import (
 	"gorm.io/gorm"
 )
 
+// tournamentDedupDBCounter hands out the name of the in-memory database
+// each call gets. A shared-cache database survives until its last connection
+// closes, so the name has to be unique per call.
+var tournamentDedupDBCounter atomic.Int64
+
 // openDedupTestDB opens a sqlite-backed database with every table the
 // FotMob tournament migration touches.
 func openDedupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	dsn := fmt.Sprintf("file:tournament-dedup-%s?mode=memory&cache=shared",
-		strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()))
+	dsn := fmt.Sprintf("file:tournament-dedup-%d?mode=memory&cache=shared", tournamentDedupDBCounter.Add(1))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	// The pool is closed so the named database does not outlive the test.
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(
 		&users.User{},
 		&domains.Domain{},
@@ -39,6 +50,18 @@ func openDedupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("migrate schema: %v", err)
 	}
 	return db
+}
+
+// TestOpenDedupTestDBUsesAFreshDatabasePerCall pins the hermeticity of the
+// in-memory database: a shared-cache database survives until its last
+// connection closes, so a second call must not attach to the database the
+// first one seeded.
+func TestOpenDedupTestDBUsesAFreshDatabasePerCall(t *testing.T) {
+	first := openDedupTestDB(t)
+	seedTournament(t, first, 47, "Premier League", "premier-league", "GB")
+
+	second := openDedupTestDB(t)
+	seedTournament(t, second, 47, "Premier League", "premier-league", "GB")
 }
 
 func seedTournament(t *testing.T, db *gorm.DB, id uint, name, slug, region string) {
