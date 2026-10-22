@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { reactive, ref, useId } from "vue";
+import { useModal } from "../composables/useModal";
 import type { Tournament } from "../store/services/models";
 
-const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
-  autoCloseModal: true,
-});
+type TournamentFormPayload = { id: number | null; name: string; slug: string };
 
-const emit = defineEmits<{
-  submit: [payload: { id: number | null; name: string; slug: string }];
-}>();
+const props = withDefaults(
+  defineProps<{
+    autoCloseModal?: boolean;
+    // A prop instead of an emit so the modal can await the parent's request.
+    onSubmit?: (payload: TournamentFormPayload) => Promise<void> | void;
+  }>(),
+  { autoCloseModal: true },
+);
+
+const formId = useId();
+const titleId = useId();
+const dialog = ref<HTMLElement | null>(null);
 
 const modal = reactive({
   open: false,
@@ -33,30 +41,28 @@ function open(entity?: Tournament): void {
 }
 
 async function submit(): Promise<void> {
+  if (modal.loading) return;
   if (!modal.form.name) {
     modal.error = "El nombre es requerido";
     return;
   }
   modal.loading = true;
   try {
-    emit("submit", { id: modal.form.id, name: modal.form.name, slug: modal.form.slug });
+    await props.onSubmit?.({ id: modal.form.id, name: modal.form.name, slug: modal.form.slug });
     if (props.autoCloseModal) reset();
+  } catch (err) {
+    modal.error = err instanceof Error && err.message ? err.message : "No se pudo guardar el torneo";
   } finally {
     modal.loading = false;
   }
 }
 
-watch(
-  () => modal.open,
-  (isOpen) => {
-    document.body.classList.toggle("modal-open", isOpen);
-    document.body.style.overflow = isOpen ? "hidden" : "";
+useModal({
+  isOpen: () => modal.open,
+  container: dialog,
+  onClose: () => {
+    if (!modal.loading) reset();
   },
-);
-
-onBeforeUnmount(() => {
-  document.body.classList.remove("modal-open");
-  document.body.style.overflow = "";
 });
 
 defineExpose({ open, reset });
@@ -65,16 +71,18 @@ defineExpose({ open, reset });
 <template>
   <div
     v-if="modal.open"
+    ref="dialog"
     class="modal fade show"
     tabindex="-1"
     style="display: block"
     aria-modal="true"
     role="dialog"
+    :aria-labelledby="titleId"
   >
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">
+          <h5 :id="titleId" class="modal-title">
             {{ modal.form.id ? "Editar torneo" : "Crear torneo" }}
           </h5>
           <button
@@ -85,7 +93,7 @@ defineExpose({ open, reset });
           ></button>
         </div>
         <div class="modal-body">
-          <form class="row g-3" @submit.prevent="submit">
+          <form :id="formId" class="row g-3" @submit.prevent="submit">
             <div class="col-12">
               <label class="form-label">Nombre *</label>
               <input
@@ -117,7 +125,7 @@ defineExpose({ open, reset });
             type="submit"
             class="btn btn-primary"
             :disabled="modal.loading"
-            @click="submit"
+            :form="formId"
           >
             {{ modal.form.id ? "Actualizar" : "Crear" }}
           </button>

@@ -1,6 +1,7 @@
 package tournaments
 
 import (
+	"context"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -44,7 +45,7 @@ func TestRepository_Create_AllocatesIDOutsideUpstreamNamespaces(t *testing.T) {
 		}
 	}
 
-	created, err := repo.Create("Admin Cup", "admin-cup")
+	created, err := repo.Create(context.Background(), "Admin Cup", "admin-cup")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -74,11 +75,11 @@ func TestRepository_Create_AllocatesDistinctIDs(t *testing.T) {
 	db := newNamespaceTestDB(t)
 	repo := NewRepository(db)
 
-	first, err := repo.Create("First", "first")
+	first, err := repo.Create(context.Background(), "First", "first")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
-	second, err := repo.Create("Second", "second")
+	second, err := repo.Create(context.Background(), "Second", "second")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -102,15 +103,15 @@ func TestRepository_Create_AfterSoftDeletedTournament(t *testing.T) {
 	db := newNamespaceTestDB(t)
 	repo := NewRepository(db)
 
-	first, err := repo.Create("First", "first")
+	first, err := repo.Create(context.Background(), "First", "first")
 	if err != nil {
 		t.Fatalf("create first: %v", err)
 	}
-	if err := repo.Delete(first.ID); err != nil {
+	if err := repo.Delete(context.Background(), first.ID); err != nil {
 		t.Fatalf("delete first: %v", err)
 	}
 
-	second, err := repo.Create("Second", "second")
+	second, err := repo.Create(context.Background(), "Second", "second")
 	if err != nil {
 		t.Fatalf("create after soft delete: %v", err)
 	}

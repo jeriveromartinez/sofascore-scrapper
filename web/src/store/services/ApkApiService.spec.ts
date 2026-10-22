@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import axios from "axios";
 import { ApkApiService } from "./ApkApiService";
 import { APP_API_BASE_URL } from "../../constants";
+import { REQUEST_TIMEOUT_MS, UPLOAD_TIMEOUT_MS } from "./BaseApiService";
 
 describe("ApkApiService client-facing endpoints", () => {
   afterEach(() => {
@@ -52,5 +53,45 @@ describe("ApkApiService client-facing endpoints", () => {
     const url = get.mock.calls[0]?.[0] as string;
     expect(url).toBe(`${APP_API_BASE_URL}/apk/download/tok-123`);
     expect(blob.size).toBe(4);
+  });
+});
+
+describe("ApkApiService chunk upload", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends chunks with the upload timeout", async () => {
+    const put = vi.spyOn(axios, "put").mockResolvedValue({ status: 200, data: new ArrayBuffer(0) });
+
+    await new ApkApiService().putChunk("up-1", 0, new Blob([new Uint8Array([1, 2, 3])]));
+
+    expect(put).toHaveBeenCalledWith(
+      expect.stringContaining("/apk/uploads/up-1/chunks/0"),
+      expect.anything(),
+      expect.objectContaining({ timeout: UPLOAD_TIMEOUT_MS }),
+    );
+  });
+});
+
+describe("ApkApiService client-facing timeouts", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("bounds checkUpdate with the request timeout", async () => {
+    const get = vi.spyOn(axios, "get").mockResolvedValue({ status: 200, data: new ArrayBuffer(0), headers: {} });
+
+    await new ApkApiService().checkUpdate("1.0.0", "com.example.app");
+
+    expect(get).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeout: REQUEST_TIMEOUT_MS }));
+  });
+
+  it("gives downloadByToken the longer transfer timeout", async () => {
+    const get = vi.spyOn(axios, "get").mockResolvedValue({ status: 200, data: new ArrayBuffer(4), headers: {} });
+
+    await new ApkApiService().downloadByToken("tok-123");
+
+    expect(get).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeout: UPLOAD_TIMEOUT_MS }));
   });
 });

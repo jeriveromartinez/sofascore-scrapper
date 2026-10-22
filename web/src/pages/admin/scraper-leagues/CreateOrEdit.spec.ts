@@ -209,4 +209,33 @@ describe('CreateOrEdit', () => {
     expect(wrapper.text()).toContain('duplicate league')
     expect(wrapper.emitted('saved')).toBeFalsy()
   })
+
+  it('shows the search error instead of leaving an unhandled rejection', async () => {
+    const store = useScraperLeaguesStore()
+    const svc = new ScraperLeagueService() as any
+    svc.search.mockRejectedValue(new Error('search down'))
+    store.setService(svc)
+
+    const wrapper = mount(CreateOrEdit, { props: { item: null } })
+    await wrapper.find('input.search').setValue('premier')
+    await flushPromises()
+    await new Promise(r => setTimeout(r, 300))  // debounce
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('search down')
+    expect(wrapper.findAll('.suggestion')).toHaveLength(0)
+  })
+
+  it('is a modal dialog labelled by its title that closes on Escape', async () => {
+    const wrapper = mount(CreateOrEdit, { props: { item: null }, attachTo: document.body })
+    const dialog = wrapper.find('.modal')
+    expect(dialog.attributes('role')).toBe('dialog')
+    expect(dialog.attributes('aria-modal')).toBe('true')
+    expect(wrapper.find(`[id="${dialog.attributes('aria-labelledby')}"]`).text()).toBe('Add new league')
+    expect(dialog.element.contains(document.activeElement)).toBe(true)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })

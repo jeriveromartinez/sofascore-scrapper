@@ -157,6 +157,9 @@ greater than zero.
     prints it
   - Role: `admin`
 
+  On a `.deb` host the env file normally carries the
+  `DEFAULT_ADMIN_PASSWORD` that `postinst` generated, so the recreated
+  account uses it: `sudo grep DEFAULT_ADMIN_PASSWORD /etc/iptv/env`.
   Only the email is hardcoded in `internal/seeder/admin.go`. To
   register the first account through the invitation flow, mint a
   bootstrap invitation **before** the first normal boot. On a `.deb`

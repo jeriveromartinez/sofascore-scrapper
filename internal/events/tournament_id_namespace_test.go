@@ -37,7 +37,7 @@ func TestUpsertScrapeBatch_DoesNotClobberAdminTournament(t *testing.T) {
 	}
 
 	repo := NewRepository(db)
-	adminTournament, err := tournaments.NewRepository(db).Create("Admin Cup", "admin-cup")
+	adminTournament, err := tournaments.NewRepository(db).Create(context.Background(), "Admin Cup", "admin-cup")
 	if err != nil {
 		t.Fatalf("create admin tournament: %v", err)
 	}

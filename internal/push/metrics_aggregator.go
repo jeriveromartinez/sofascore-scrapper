@@ -2,9 +2,13 @@ package push
 
 import (
 	"context"
+	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
@@ -97,23 +101,14 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 	// among the user's owned domains. We reuse the audience
 	// filter from the dispatch path so the two numbers agree.
 	var domainsOwned []uint
-	if err := db.WithContext(ctx).Model(&struct {
-		gorm.Model
-		Domain string
-		UserID uint
-	}{}).
+	if err := db.WithContext(ctx).Model(&domains.Domain{}).
 		Where("user_id = ?", userID).
 		Pluck("id", &domainsOwned).Error; err != nil {
-		// Best effort: ignore the audience size if the domains
-		// table shape has changed.
-		out.AudienceSize = 0
+		return nil, err
 	}
 	if len(domainsOwned) > 0 {
 		var audience int64
-		if err := db.WithContext(ctx).Model(&struct {
-			gorm.Model
-			DomainID *uint
-		}{}).
+		if err := db.WithContext(ctx).Model(&devices.Device{}).
 			Where("domain_id IN ? AND domain_id IS NOT NULL", domainsOwned).
 			Count(&audience).Error; err != nil {
 			return nil, err
@@ -121,22 +116,26 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 		out.AudienceSize = audience
 	}
 
-	// Audience peak today: max(sent_at::date, count(*)) grouped by
-	// hour. Cheap on the volumes we expect; if it becomes the
-	// slow query, add an index on delivery_attempts.sent_at.
+	// Audience peak today: the busiest hour of the current day. The
+	// day bounds are computed in Go so the filter needs no
+	// dialect-specific date function.
 	type row struct {
 		Hour  int
 		Count int64
 	}
+	hourExpr := sentAtHourExpr(db)
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var peaks []row
 	if err := db.WithContext(ctx).Raw(`
-		SELECT CAST(strftime('%H', sent_at) AS INTEGER) AS hour, COUNT(*) AS count
+		SELECT `+hourExpr+` AS hour, COUNT(*) AS count
 		FROM delivery_attempts
 		JOIN push_messages ON push_messages.id = delivery_attempts.push_message_id
 		WHERE push_messages.user_id = ?
-		  AND date(sent_at) = date('now')
+		  AND delivery_attempts.sent_at >= ? AND delivery_attempts.sent_at < ?
 		GROUP BY hour
-	`, userID).Scan(&peaks).Error; err == nil {
+	`, userID, startOfDay, startOfDay.AddDate(0, 0, 1)).Scan(&peaks).Error; err != nil {
+		logSnapshotQueryError("audience peak", err, slog.Uint64("user_id", uint64(userID)))
+	} else {
 		var maxN int64
 		for _, p := range peaks {
 			if p.Count > maxN {
@@ -164,7 +163,9 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 		GROUP BY devices.platform, devices.version
 		ORDER BY count DESC
 		LIMIT 5
-	`, userID).Scan(&platformRows).Error; err == nil {
+	`, userID).Scan(&platformRows).Error; err != nil {
+		logSnapshotQueryError("top platforms", err, slog.Uint64("user_id", uint64(userID)))
+	} else {
 		seen := map[string]bool{}
 		for _, p := range platformRows {
 			if !seen[p.Platform] {
@@ -185,13 +186,15 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 	// 0..23 with the total count.
 	var hourly []row
 	if err := db.WithContext(ctx).Raw(`
-		SELECT CAST(strftime('%H', sent_at) AS INTEGER) AS hour, COUNT(*) AS count
+		SELECT `+hourExpr+` AS hour, COUNT(*) AS count
 		FROM delivery_attempts
 		JOIN push_messages ON push_messages.id = delivery_attempts.push_message_id
 		WHERE push_messages.user_id = ?
-		  AND sent_at >= ?
+		  AND delivery_attempts.sent_at >= ?
 		GROUP BY hour
-	`, userID, now.Add(-30*24*time.Hour)).Scan(&hourly).Error; err == nil {
+	`, userID, now.Add(-30*24*time.Hour)).Scan(&hourly).Error; err != nil {
+		logSnapshotQueryError("hourly histogram", err, slog.Uint64("user_id", uint64(userID)))
+	} else {
 		// Sort by hour for stable output.
 		sort.Slice(hourly, func(i, j int) bool { return hourly[i].Hour < hourly[j].Hour })
 		for _, h := range hourly {
@@ -208,11 +211,30 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 		Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Limit(1).
-		Pluck("created_at", &lastAt).Error; err == nil && lastAt != nil {
+		Pluck("created_at", &lastAt).Error; err != nil {
+		logSnapshotQueryError("last push", err, slog.Uint64("user_id", uint64(userID)))
+	} else if lastAt != nil {
 		out.LastPushAt = lastAt.Format(time.RFC3339)
 	}
 
 	return out, nil
+}
+
+// logSnapshotQueryError reports a failed breakdown query. Breakdowns
+// are best effort: the rest of the snapshot is still served, with
+// the failed breakdown left empty.
+func logSnapshotQueryError(query string, err error, attrs ...any) {
+	slog.Default().Warn("push: "+query+" query failed", append(attrs, slog.String("error", err.Error()))...)
+}
+
+// sentAtHourExpr returns the SQL expression extracting the hour of
+// delivery_attempts.sent_at: production runs MariaDB, unit tests run
+// SQLite, and neither understands the other's date functions.
+func sentAtHourExpr(db *gorm.DB) string {
+	if strings.Contains(db.Dialector.Name(), "sqlite") {
+		return "CAST(strftime('%H', delivery_attempts.sent_at) AS INTEGER)"
+	}
+	return "HOUR(delivery_attempts.sent_at)"
 }
 
 // buildCampaignSnapshot returns the per-campaign dashboard. The
@@ -267,7 +289,9 @@ func buildCampaignSnapshot(ctx context.Context, db *gorm.DB, pushID, userID uint
 	var lats []latRow
 	if err := db.WithContext(ctx).Model(&DeliveryAttempt{}).
 		Where("push_message_id = ? AND state = ? AND latency_ms IS NOT NULL", pushID, StateDelivered).
-		Pluck("latency_ms", &lats).Error; err == nil && len(lats) > 0 {
+		Pluck("latency_ms", &lats).Error; err != nil {
+		logSnapshotQueryError("campaign latency", err, slog.Uint64("push_id", uint64(pushID)))
+	} else if len(lats) > 0 {
 		// Sort ascending; the p50 is the middle element, p95 the
 		// element at 0.95 * len.
 		sort.Slice(lats, func(i, j int) bool { return lats[i].LatencyMS < lats[j].LatencyMS })
@@ -287,7 +311,9 @@ func buildCampaignSnapshot(ctx context.Context, db *gorm.DB, pushID, userID uint
 		Select("failure_reason AS reason, COUNT(*) AS count").
 		Where("push_message_id = ? AND state = ?", pushID, StateFailed).
 		Group("failure_reason").
-		Scan(&fails).Error; err == nil {
+		Scan(&fails).Error; err != nil {
+		logSnapshotQueryError("campaign failures", err, slog.Uint64("push_id", uint64(pushID)))
+	} else {
 		for _, f := range fails {
 			out.FailuresByReason = append(out.FailuresByReason, &pb.FailureBreakdown{
 				Reason: failureReasonToProto(f.Reason),

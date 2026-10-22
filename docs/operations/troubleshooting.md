@@ -99,7 +99,9 @@ returns `> 0`.
 *Fix options:*
 
 - **Log in as the existing admin** and use `/#/users` to invite
-  additional operators.
+  additional operators. On a `.deb` install the seeded `admin@local`
+  password is in `/etc/iptv/env`:
+  `sudo grep DEFAULT_ADMIN_PASSWORD /etc/iptv/env`.
 - **Reset to a fresh database** if you are sure no production users
   exist: `sudo systemctl stop iptv.service && sudo mariadb -uroot -e "DROP DATABASE iptv"`, then restart the service. The
   postinst does not run on a manual DB drop; you recreate the schema
@@ -399,6 +401,12 @@ shows repeated close / open cycles.
 auto-reconnect). If you see persistent disconnect storms during
 peak traffic, check `/health/ready` (which includes Redis) — the
 backend's Pub/Sub fanout fails when Redis is unreachable.
+
+Behind a reverse proxy, `GET /api/app/v1/ws` must be proxied with
+HTTP/1.1, the `Upgrade`/`Connection` headers and a read timeout
+well above the server's 30-second ping; otherwise the upgrade fails
+with a 400 or idle sockets are cut. `deployments/docker/nginx.conf`
+has a dedicated `location = /api/app/v1/ws` block to copy.
 
 ---
 

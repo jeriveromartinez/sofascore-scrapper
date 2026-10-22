@@ -5,7 +5,7 @@ import axios, {
 } from "axios";
 import { API_BASE_URL } from "../../constants";
 import { clearAuthStorage } from "../authStorage";
-import { refreshAuth, ApiError } from "./BaseApiService";
+import { refreshAuth, ApiError, REQUEST_TIMEOUT_MS } from "./BaseApiService";
 
 /**
  * Routes the user back to the login screen when the refresh token is no
@@ -72,7 +72,7 @@ async function retryWithRefresh(
  * how the consumer drives the request.
  */
 export function createAuthJsonAxios(): AxiosInstance {
-  const instance = axios.create({ baseURL: API_BASE_URL });
+  const instance = axios.create({ baseURL: API_BASE_URL, timeout: REQUEST_TIMEOUT_MS });
 
   instance.interceptors.response.use(
     async (response: AxiosResponse) => {

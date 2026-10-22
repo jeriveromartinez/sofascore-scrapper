@@ -65,6 +65,8 @@ jobs:
         env:
           BASE_URL: http://localhost:8080
           INVITE_TOKEN: ${{ steps.invite.outputs.token }}
+          # The fixed DEFAULT_ADMIN_PASSWORD of compose.test.yml, not a secret.
+          ADMIN_PASSWORD: E2eStackAdminPass1!
 
       - name: Upload k6 summary
         if: always()
@@ -108,6 +110,8 @@ jobs:
           exit "$failed"
         env:
           BASE_URL: ${{ secrets.LOAD_BASE_URL }}
+          ADMIN_EMAIL: ${{ secrets.LOAD_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.LOAD_ADMIN_PASSWORD }}
 
       - name: Upload k6 summaries
         if: always()
