@@ -3,6 +3,7 @@ package catalog
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -81,7 +82,7 @@ func (h *Handler) Create(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "validation", "message": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
+		respondInternalError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, sl)
@@ -95,7 +96,7 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 	sl, err := h.svc.Get(c.Request.Context(), uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
+		respondInternalError(c, err)
 		return
 	}
 	if sl == nil {
@@ -141,7 +142,7 @@ func (h *Handler) Update(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "validation", "message": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
+		respondInternalError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -158,7 +159,7 @@ func (h *Handler) Delete(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
+		respondInternalError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -189,7 +190,7 @@ func (h *Handler) List(c *gin.Context) {
 	}
 	items, total, err := h.svc.List(c.Request.Context(), f)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
+		respondInternalError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -208,8 +209,17 @@ func (h *Handler) Search(c *gin.Context) {
 	}
 	results, err := h.svc.SearchLeagues(c.Request.Context(), q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
+		respondInternalError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": results})
+}
+
+func respondInternalError(c *gin.Context, err error) {
+	slog.Default().ErrorContext(c.Request.Context(), "scraper-leagues: request failed",
+		slog.String("method", c.Request.Method),
+		slog.String("path", c.FullPath()),
+		slog.String("err", err.Error()),
+	)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": "internal server error"})
 }
