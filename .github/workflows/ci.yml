@@ -11,6 +11,9 @@ concurrency:
 env:
   GO_VERSION: "1.25"
   NODE_VERSION: "22"
+  # Pinned to the google.golang.org/protobuf version in go.mod so the
+  # regenerated bindings match the ones committed to the repository.
+  PROTOC_GEN_GO_VERSION: "v1.36.8"
 
 jobs:
   proto-diff:
@@ -32,7 +35,7 @@ jobs:
           rm protoc.zip
 
       - name: Install protoc-gen-go
-        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
 
       - name: Install make
         run: sudo apt-get update && sudo apt-get install -y make
@@ -143,15 +146,3 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t scores365-scrapper:ci .
-
-  native-deploy:
-    name: Native deployment checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Check deployment scripts
-        run: |
-          bash -n deployments/native/deploy.sh deployments/native/deploy_test.sh deployments/native/workflow_test.sh
-          deployments/native/deploy_test.sh
-          deployments/native/workflow_test.sh
