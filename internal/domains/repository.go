@@ -15,9 +15,9 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) GetAll() ([]Domain, error) {
+func (r *Repository) GetAll(ctx context.Context) ([]Domain, error) {
 	domains := make([]Domain, 0)
-	result := r.db.Preload("User").Order("domain ASC").Find(&domains)
+	result := r.db.WithContext(ctx).Preload("User").Order("domain ASC").Find(&domains)
 	return domains, result.Error
 }
 
@@ -38,9 +38,9 @@ func (r *Repository) ListPage(ctx context.Context, domainStr string, id uint, li
 	return rows, hasMore, nil
 }
 
-func (r *Repository) GetByID(id uint) (*Domain, error) {
+func (r *Repository) GetByID(ctx context.Context, id uint) (*Domain, error) {
 	var domain Domain
-	result := r.db.Preload("User").First(&domain, id)
+	result := r.db.WithContext(ctx).Preload("User").First(&domain, id)
 	return &domain, result.Error
 }
 
@@ -53,17 +53,17 @@ func (r *Repository) ListByUser(ctx context.Context, userID uint) ([]Domain, err
 	return rows, err
 }
 
-func (r *Repository) Create(domain string, userID uint) (*Domain, error) {
-	if err := r.db.First(&users.User{}, userID).Error; err != nil {
+func (r *Repository) Create(ctx context.Context, domain string, userID uint) (*Domain, error) {
+	if err := r.db.WithContext(ctx).First(&users.User{}, userID).Error; err != nil {
 		return nil, err
 	}
 
 	record := &Domain{Domain: domain, UserID: userID}
-	if err := r.db.Create(record).Error; err != nil {
+	if err := r.db.WithContext(ctx).Create(record).Error; err != nil {
 		return nil, err
 	}
 
-	if err := r.db.Preload("User").First(record, record.ID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("User").First(record, record.ID).Error; err != nil {
 		return nil, err
 	}
 
@@ -96,9 +96,9 @@ func (r *Repository) Update(ctx context.Context, id uint, domain string) (*Domai
 	return &record, nil
 }
 
-func (r *Repository) Delete(id uint) error {
-	if err := r.db.First(&Domain{}, id).Error; err != nil {
+func (r *Repository) Delete(ctx context.Context, id uint) error {
+	if err := r.db.WithContext(ctx).First(&Domain{}, id).Error; err != nil {
 		return err
 	}
-	return r.db.Delete(&Domain{}, id).Error
+	return r.db.WithContext(ctx).Delete(&Domain{}, id).Error
 }
