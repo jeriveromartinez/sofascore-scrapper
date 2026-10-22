@@ -126,6 +126,12 @@ func (m *Metrics) IncDelivered() {
 // package; unknown values map to "other" so a future enum does
 // not break the dashboard.
 func (m *Metrics) IncFailed(reason FailureReason) {
+	m.AddFailed(reason, 1)
+}
+
+// AddFailed bumps the failed counter for the given reason by n, with
+// the same label mapping as IncFailed.
+func (m *Metrics) AddFailed(reason FailureReason, n int64) {
 	if m == nil {
 		return
 	}
@@ -133,7 +139,7 @@ func (m *Metrics) IncFailed(reason FailureReason) {
 	if r == "" {
 		r = "other"
 	}
-	m.failed.WithLabelValues(r).Inc()
+	m.failed.WithLabelValues(r).Add(float64(n))
 }
 
 // IncScheduleFired bumps the schedule-fired counter.

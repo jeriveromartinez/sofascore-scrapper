@@ -515,9 +515,38 @@ func (s *Service) DispatchTimer(ctx context.Context, schedule *ScheduledPush, ti
 // dispatch completed, so the push would otherwise be lost forever.
 // Rows whose dispatch completed are untouched.
 //
-// Exposed so the scheduler runner can reap on every tick.
+// Exposed so the scheduler runner can reap on every tick. The same
+// tick also fails deliveries that were never acknowledged (see
+// failStaleDeliveries); the returned count covers timers only.
 func (s *Service) ReleaseStaleTimerClaims(ctx context.Context, cutoff time.Time) (int64, error) {
+	s.failStaleDeliveries(ctx, time.Now().Add(-deliveryAckWindow))
 	return s.repo.ReleaseStaleTimerClaims(ctx, cutoff)
+}
+
+// deliveryAckWindow is how long a delivery may stay in state sent
+// before it is failed with send_timeout. The cross-instance pusher
+// only publishes to Redis and cannot report an offline device, so
+// without this window an undeliverable push would stay sent forever.
+// It sits far above the realtime ack round trip (10s) so a slow but
+// genuine ack is never pre-empted.
+const deliveryAckWindow = 5 * time.Minute
+
+// failStaleDeliveries fails the deliveries still in state sent whose
+// sent_at is older than cutoff. Best effort: errors are logged and
+// the next tick retries.
+func (s *Service) failStaleDeliveries(ctx context.Context, cutoff time.Time) {
+	failed, err := s.repo.FailStaleDeliveries(ctx, cutoff)
+	if err != nil {
+		s.logger.Warn("push: fail stale deliveries",
+			slog.String("error", err.Error()))
+		return
+	}
+	if failed > 0 {
+		s.metrics.AddFailed(FailureSendTimeout, failed)
+		s.logger.Info("push: failed unacknowledged deliveries",
+			slog.Int64("count", failed),
+			slog.String("reason", string(FailureSendTimeout)))
+	}
 }
 
 // completeTimer closes the claim on a timer whose dispatch

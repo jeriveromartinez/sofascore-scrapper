@@ -139,6 +139,19 @@ func (r *Repository) MarkDeliveriesFailed(ctx context.Context, messageIDs []stri
 	return res.RowsAffected, res.Error
 }
 
+// FailStaleDeliveries flips every row still in SENT whose sent_at is
+// older than cutoff to FAILED with reason send_timeout, in one UPDATE.
+// Returns the number of rows flipped.
+func (r *Repository) FailStaleDeliveries(ctx context.Context, cutoff time.Time) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&DeliveryAttempt{}).
+		Where("state = ? AND sent_at < ?", StateSent, cutoff).
+		Updates(map[string]any{
+			"state":          StateFailed,
+			"failure_reason": FailureSendTimeout,
+		})
+	return res.RowsAffected, res.Error
+}
+
 // ListAudienceDevicesForDomains returns every device whose
 // domain_id is in the given set AND is non-null. Devices without a
 // domain are excluded — they cannot receive pushes (see the
