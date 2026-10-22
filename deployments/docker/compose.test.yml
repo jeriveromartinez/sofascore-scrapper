@@ -16,7 +16,9 @@ services:
     tmpfs:
       - /var/lib/mysql
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      # mariadb-admin ping also answers the socket-only temporary server
+      # the entrypoint runs during first init, before TCP 3306 is open.
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 3s
       timeout: 5s
       retries: 15

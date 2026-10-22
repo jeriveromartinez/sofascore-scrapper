@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -300,12 +301,16 @@ func (s *Service) dispatchDayMatch(
 	date time.Time,
 	parentCtx context.Context,
 ) error {
+	start := time.Now()
 	matches, err := dm.DayMatches(ctx, date)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "scrape day: dayMatches",
 			slog.String("source", src.Name()),
 			slog.String("date", date.Format("2006-01-02")),
 			slog.String("error", err.Error()))
+		for _, league := range srcLeagues {
+			recordLeagueScrape(league, start, err)
+		}
 		return err
 	}
 	byLeague := make(map[string][]Match, len(srcLeagues))
@@ -337,7 +342,9 @@ func (s *Service) dispatchDayMatch(
 	for _, league := range srcLeagues {
 		league := league
 		g.Go(func() error {
-			return s.upsertLeagueMatches(ctx, league, date, byLeague[league.SourceLeagueId])
+			err := s.upsertLeagueMatches(ctx, league, date, byLeague[league.SourceLeagueId])
+			recordLeagueScrape(league, start, err)
+			return err
 		})
 	}
 
@@ -378,6 +385,7 @@ func (s *Service) dispatchDayMatch(
 						slog.String("source", src.Name()),
 						slog.String("source_league_id", id),
 						slog.String("error", err.Error()))
+					recordLeagueScrape(league, start, err)
 					return nil
 				}
 				// Fix 4 (P1): only push matches when the row was
@@ -388,7 +396,9 @@ func (s *Service) dispatchDayMatch(
 				if !created {
 					return nil
 				}
-				return s.upsertLeagueMatches(ctx, league, date, byLeague[id])
+				err = s.upsertLeagueMatches(ctx, league, date, byLeague[id])
+				recordLeagueScrape(league, start, err)
+				return err
 			})
 		}
 	}
@@ -431,8 +441,10 @@ func (s *Service) dispatchPerLeague(
 	for _, league := range srcLeagues {
 		league := league
 		g.Go(func() error {
+			start := time.Now()
 			matches, err := src.ScheduledEvents(ctx, league, date)
 			if err != nil {
+				recordLeagueScrape(league, start, err)
 				s.logger.ErrorContext(ctx, "scrape per-league",
 					slog.String("source", src.Name()),
 					slog.String("source_league_id", league.SourceLeagueId),
@@ -440,7 +452,9 @@ func (s *Service) dispatchPerLeague(
 					slog.String("error", err.Error()))
 				return err
 			}
-			return s.upsertLeagueMatches(ctx, league, date, matches)
+			err = s.upsertLeagueMatches(ctx, league, date, matches)
+			recordLeagueScrape(league, start, err)
+			return err
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -463,10 +477,7 @@ func (s *Service) upsertLeagueMatches(ctx context.Context, league LeagueRef, dat
 			slog.String("league_id", league.SourceLeagueId))
 		return nil
 	}
-	sport := league.Sport
-	if sport == "" {
-		sport = "football"
-	}
+	sport := leagueSport(league)
 	batch, err := ToScrapeBatch(matches, sport)
 	if err != nil {
 		return fmt.Errorf("scraper: build batch for %s on %s: %w", league.SourceLeagueId, date.Format("2006-01-02"), err)
@@ -474,7 +485,28 @@ func (s *Service) upsertLeagueMatches(ctx context.Context, league LeagueRef, dat
 	if err := s.repo.UpsertScrapeBatch(ctx, batch, s.batchSize); err != nil {
 		return fmt.Errorf("scraper: upsert %s on %s: %w", league.SourceLeagueId, date.Format("2006-01-02"), err)
 	}
+	observability.ScrapeEvents.WithLabelValues(sport).Add(float64(len(batch.Events)))
 	return nil
+}
+
+func leagueSport(league LeagueRef) string {
+	if league.Sport == "" {
+		return "football"
+	}
+	return league.Sport
+}
+
+// recordLeagueScrape publishes the outcome of one league's scrape for
+// one day. On the bulk-fetch path start is taken before the shared day
+// fetch, so the duration covers fetch plus upsert on both paths.
+func recordLeagueScrape(league LeagueRef, start time.Time, err error) {
+	sport := leagueSport(league)
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+	observability.ScrapeRequests.WithLabelValues(sport, status).Inc()
+	observability.ScrapeDuration.WithLabelValues(sport).Observe(time.Since(start).Seconds())
 }
 
 // isNilCatalog reports whether the catalog dependency is missing.

@@ -50,6 +50,20 @@ BASE_URL=http://localhost:8080 k6 run tests/load/pr-load.js
 BASE_URL=http://staging.example.com:8080 k6 run tests/load/events.js
 ```
 
+Every scenario logs in as an administrator and refuses to start
+without `ADMIN_PASSWORD` (there is no built-in default). `ADMIN_EMAIL`
+defaults to `admin@local`. Against `compose.test.yml` the seeded
+password is its `DEFAULT_ADMIN_PASSWORD`:
+
+```bash
+ADMIN_PASSWORD='E2eStackAdminPass1!' k6 run tests/load/pr-load.js
+ADMIN_EMAIL=ops@example.com ADMIN_PASSWORD=... BASE_URL=http://staging.example.com:8080 k6 run tests/load/events.js
+```
+
+The `full` suite of `load.yml` reads them from the
+`LOAD_ADMIN_EMAIL` / `LOAD_ADMIN_PASSWORD` repository secrets, next
+to `LOAD_BASE_URL`.
+
 `pr-load.js` additionally reads `INVITE_TOKEN` so the scenario can
 register and promote its first admin against a fresh stack.
 

@@ -1,12 +1,20 @@
 export const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
 
-// Account the load scripts authenticate as. Override with
-// -e ADMIN_EMAIL=... / -e ADMIN_PASSWORD=... when the target deployment
-// uses different credentials. The defaults are the administrator that the
-// test stack seeds on first boot (internal/seeder), the only account with
-// admin rights on a fresh stack.
+// Account the load scripts authenticate as. The email defaults to the
+// administrator internal/seeder creates on first boot. There is no default
+// password: a guessed one only turns into a 401 deep inside the run.
 export const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || "admin@local";
-export const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || "E2eStackAdminPass1!";
+export const ADMIN_PASSWORD = requireEnv("ADMIN_PASSWORD");
+
+function requireEnv(name) {
+  const value = __ENV[name];
+  if (!value) {
+    throw new Error(
+      `${name} is not set: pass the target deployment's admin password with -e ${name}=... or the ${name} environment variable`,
+    );
+  }
+  return value;
+}
 
 // Field numbers from proto/api.proto. The API speaks application/x-protobuf
 // (see internal/server/protobuf.go), so every response body has to be

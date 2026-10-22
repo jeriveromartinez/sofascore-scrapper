@@ -80,3 +80,14 @@ func TestMetricsRouteNormalization(t *testing.T) {
 		t.Errorf("found %d raw URL labels instead of /users/:id: %v", len(rawRoutes), rawRoutes)
 	}
 }
+
+// TestScrapeRequestsCarriesStatusLabel is the regression test for the
+// scrape failure-rate alert, which filters scrape_requests_total on a
+// status label the counter did not have, so the alert never fired.
+func TestScrapeRequestsCarriesStatusLabel(t *testing.T) {
+	for _, status := range []string{"ok", "error"} {
+		if _, err := ScrapeRequests.GetMetricWithLabelValues("tennis", status); err != nil {
+			t.Errorf("scrape_requests_total{sport, status=%q}: %v", status, err)
+		}
+	}
+}

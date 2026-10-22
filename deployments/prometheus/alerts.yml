@@ -2,29 +2,27 @@ groups:
   - name: scores365-app
     interval: 30s
     rules:
-      # Health probe: /health/ready must return 200. The probe check is
-      # performed by Prometheus via blackbox_exporter or a synthetic
-      # scrape; we publish the result as `probe_success`. If you do
-      # not run blackbox_exporter, replace this expression with
-      # `up{job="scores365-backends"} == 0`.
+      # No blackbox_exporter is deployed, so the backend's own /metrics
+      # scrape is the liveness signal: `up` drops to 0 when the process
+      # is down or unreachable. The job name must match
+      # deployments/docker/prometheus.yml.
       - alert: scores365_health_probe_failure
-        expr: probe_success{instance=~".*scores365.*"} == 0
+        expr: up{job="scores365-backends"} == 0
         for: 2m
         labels:
           severity: critical
           service: scores365-scrapper
         annotations:
-          summary: "Health probe failing for scores365-scrapper"
+          summary: "Backend {{ $labels.instance }} unreachable"
           description: |
-            The /health/ready probe for {{ $labels.instance }} has been
-            failing for 2 minutes. The readiness probe in
-            internal/server/health.go checks both MariaDB and Redis
-            connectivity. See docs/operations/runbook.md,
+            Prometheus has failed to scrape /metrics on
+            {{ $labels.instance }} for 2 minutes: the process is down,
+            crash-looping or unreachable from Prometheus. See
+            docs/operations/runbook.md,
             "Alert: scores365_health_probe_failure".
 
-      # Scrape failure rate. The scraper publishes requests and errors
-      # via the `scrape_requests_total` counter; a healthy run has the
-      # error ratio below 5% over a 5-minute window.
+      # One sample per league and day scraped, labelled status="ok" or
+      # status="error" by internal/scraper/service.go.
       - alert: scores365_scrape_failure_rate
         expr: |
           (

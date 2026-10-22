@@ -97,9 +97,9 @@ var (
 	ScrapeRequests = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "scrape_requests_total",
-			Help: "Total number of scrape requests.",
+			Help: "Total number of league scrapes by outcome (status is ok or error).",
 		},
-		[]string{"sport"},
+		[]string{"sport", "status"},
 	)
 
 	ScrapeEvents = prometheus.NewCounterVec(

@@ -8,8 +8,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-// common.js reads the k6-only global __ENV at module scope.
-globalThis.__ENV = {};
+// common.js reads the k6-only global __ENV at module scope and refuses to
+// load without an admin password.
+globalThis.__ENV = { ADMIN_PASSWORD: "test-admin-password" };
 
 const {
   decodeProtoStringField,
@@ -175,4 +176,31 @@ test("UploadBeginResponse upload_id is field 1", () => {
   const payload = Buffer.from([...refStringField(1, "upload-id-1234")]);
 
   assert.equal(decodeProtoStringField(payload, UPLOAD_ID_FIELD), "upload-id-1234");
+});
+
+// Each case imports a fresh copy of common.js, because __ENV is read
+// when the module is evaluated.
+async function importCommonWith(env, label) {
+  const previous = globalThis.__ENV;
+  globalThis.__ENV = env;
+  try {
+    return await import(`./common.js?case=${label}`);
+  } finally {
+    globalThis.__ENV = previous;
+  }
+}
+
+test("loading without ADMIN_PASSWORD fails fast instead of using a default", async () => {
+  await assert.rejects(importCommonWith({}, "missing"), /ADMIN_PASSWORD/);
+  await assert.rejects(importCommonWith({ ADMIN_PASSWORD: "" }, "empty"), /ADMIN_PASSWORD/);
+});
+
+test("ADMIN_PASSWORD and ADMIN_EMAIL come from the environment", async () => {
+  const mod = await importCommonWith(
+    { ADMIN_EMAIL: "ops@example.com", ADMIN_PASSWORD: "from-env" },
+    "set",
+  );
+
+  assert.equal(mod.ADMIN_EMAIL, "ops@example.com");
+  assert.equal(mod.ADMIN_PASSWORD, "from-env");
 });
