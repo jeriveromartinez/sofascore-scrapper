@@ -50,6 +50,10 @@ var DefaultAdminPassword string
 // both production boot and unit-test paths. Logging goes through
 // slog.Default(); callers cannot inject a custom logger.
 //
+// The function is safe to call concurrently: backends that boot
+// together only race on the unique admin email, and the insert
+// resolves that race without failing.
+//
 // Called automatically from app.New on every boot when SKIP_MIGRATE
 // is not set, and from cmd/server/main.go for the migrate-only
 // command-line path. The password of the seeded account comes from the
@@ -71,13 +75,22 @@ func SeedDefaultAdmin(ctx context.Context, db *gorm.DB) error {
 			slog.Default().Warn("truncating legacy SofaScore events",
 				slog.Int64("count", legacyCount),
 			)
-			for _, table := range []string{"events", "teams", "tournaments"} {
-				if !db.Migrator().HasTable(table) {
-					continue
+			// Backends booting together run this wipe at the same
+			// time. The deletes are idempotent, but the foreign
+			// keys make concurrent wipes deadlock each other, so
+			// retry the whole sequence on a lock conflict.
+			if err := retryOnLockConflict(3, func() error {
+				for _, table := range []string{"events", "teams", "tournaments"} {
+					if !db.Migrator().HasTable(table) {
+						continue
+					}
+					if err := db.WithContext(ctx).Exec("DELETE FROM " + table).Error; err != nil {
+						return fmt.Errorf("truncate %s: %w", table, err)
+					}
 				}
-				if err := db.WithContext(ctx).Exec("DELETE FROM " + table).Error; err != nil {
-					return fmt.Errorf("truncate %s: %w", table, err)
-				}
+				return nil
+			}); err != nil {
+				return err
 			}
 		}
 	}
@@ -100,15 +113,22 @@ func SeedDefaultAdmin(ctx context.Context, db *gorm.DB) error {
 	// Backends booting together all see an empty users table; the
 	// unique email lets exactly one insert win and the rest no-op
 	// instead of failing on the duplicate key and exiting.
-	result := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&users.User{
-		Email:    DefaultAdminEmail,
-		Password: string(hashed),
-		Role:     users.RoleAdmin,
-	})
-	if result.Error != nil {
-		return result.Error
+	if err := retryOnLockConflict(3, func() error {
+		return db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&users.User{
+			Email:    DefaultAdminEmail,
+			Password: string(hashed),
+			Role:     users.RoleAdmin,
+		}).Error
+	}); err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	// RowsAffected cannot tell who won: MySQL reports 1 for the no-op
+	// ON DUPLICATE KEY UPDATE GORM emits. The salted hash can.
+	var stored users.User
+	if err := db.WithContext(ctx).Unscoped().Where("email = ?", DefaultAdminEmail).First(&stored).Error; err != nil {
+		return fmt.Errorf("load default admin: %w", err)
+	}
+	if stored.Password != string(hashed) {
 		slog.Default().Info("seeder: default admin already exists, skipping",
 			slog.String("email", DefaultAdminEmail))
 		return nil

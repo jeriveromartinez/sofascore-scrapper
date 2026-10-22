@@ -11,6 +11,7 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/seeder"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // TestSeedDefaultAdmin_ConcurrentFirstBoot is the regression test for
@@ -41,6 +42,8 @@ func TestSeedDefaultAdmin_ConcurrentFirstBoot(t *testing.T) {
 		}
 	}
 
+	t.Setenv(seeder.DefaultAdminPasswordEnvVar, "")
+	seeder.DefaultAdminPassword = ""
 	const backends = 8
 	start := make(chan struct{})
 	errs := make([]error, backends)
@@ -67,6 +70,16 @@ func TestSeedDefaultAdmin_ConcurrentFirstBoot(t *testing.T) {
 	}
 	if admins != 1 {
 		t.Errorf("admin rows = %d, want 1", admins)
+	}
+	// Only the call that stored the row may publish its password; a
+	// losing call overwriting it would expose a password that does not
+	// log in.
+	var admin users.User
+	if err := db.Where("email = ?", seeder.DefaultAdminEmail).First(&admin).Error; err != nil {
+		t.Fatalf("load admin: %v", err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(seeder.DefaultAdminPassword)); err != nil {
+		t.Errorf("DefaultAdminPassword does not match the stored admin: %v", err)
 	}
 	var legacy int64
 	if err := db.Model(&events.Event{}).Count(&legacy).Error; err != nil {
