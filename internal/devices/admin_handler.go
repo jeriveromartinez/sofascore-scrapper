@@ -120,7 +120,7 @@ func (h *AdminHandler) handleGetDevices(c *gin.Context) {
 		return
 	}
 
-	devices, total, err := h.repo.GetDevices(uint(page), uint(limit))
+	devices, total, err := h.repo.GetDevices(c.Request.Context(), uint(page), uint(limit))
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

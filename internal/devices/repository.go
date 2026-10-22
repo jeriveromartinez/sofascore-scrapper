@@ -88,10 +88,11 @@ func (r *Repository) UpdateLastSeenByID(ctx context.Context, deviceID uint, ts i
 	return r.db.WithContext(ctx).Model(&Device{}).Where("id = ?", deviceID).Update("last_seen", ts).Error
 }
 
-func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
+func (r *Repository) GetDevices(ctx context.Context, page, limit uint) ([]Device, int64, error) {
+	db := r.db.WithContext(ctx)
 	var devices []Device
 	var total int64
-	if err := r.db.Model(&Device{}).Count(&total).Error; err != nil {
+	if err := db.Model(&Device{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * limit
@@ -100,7 +101,7 @@ func (r *Repository) GetDevices(page, limit uint) ([]Device, int64, error) {
 	// page. Dropped here and in ListPage/GetAll; if a future consumer
 	// needs the manager email, replace with a LEFT JOIN users that
 	// selects only that column rather than loading the whole row.
-	result := r.db.Offset(int(offset)).Limit(int(limit)).Find(&devices)
+	result := db.Order("id DESC").Offset(int(offset)).Limit(int(limit)).Find(&devices)
 	return devices, total, result.Error
 }
 
