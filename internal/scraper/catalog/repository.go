@@ -38,7 +38,16 @@ func (r *Repository) Update(ctx context.Context, id uint, fields map[string]any)
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return ErrNotFound
+		// MySQL reports 0 affected rows for an UPDATE that changes
+		// nothing, so the row's existence has to be checked
+		// separately before the update is called a miss.
+		var count int64
+		if err := r.db.WithContext(ctx).Model(&ScraperLeague{}).Where("id = ?", id).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return ErrNotFound
+		}
 	}
 	return nil
 }
@@ -106,7 +115,7 @@ func (r *Repository) SoftDelete(ctx context.Context, id uint) error {
 }
 
 // ActiveLeagues is the multi-source dispatcher default: every enabled
-// league goes to its natural source unless override_source is set.
+// league goes to the source that published its id.
 func (r *Repository) ActiveLeagues(ctx context.Context) ([]scraper.LeagueRef, error) {
 	var rows []ScraperLeague
 	if err := r.db.WithContext(ctx).
@@ -128,17 +137,20 @@ func (r *Repository) ActiveLeagues(ctx context.Context) ([]scraper.LeagueRef, er
 	return out, nil
 }
 
-// ActiveLeaguesBySource returns enabled leagues whose effective
-// source matches the requested name. The effective source is
-// COALESCE(override_source, source): a row with
-// source=scores365, override_source=fotmob belongs to the fotmob
-// dispatcher, NOT the scores365 one. Used by the dispatcher to
-// route per-league.
+// ActiveLeaguesBySource returns the enabled leagues that belong to the
+// requested source.
+//
+// The league id is only meaningful inside the source that published
+// it, so the row's own source has to match: routing a league to
+// another dispatcher would look its id up in a foreign id space and
+// silently match a different competition. An override_source that
+// names another source is therefore ignored here, exactly like the
+// ActiveLeagues predicate does.
 func (r *Repository) ActiveLeaguesBySource(ctx context.Context, source string) ([]scraper.LeagueRef, error) {
 	var rows []ScraperLeague
 	q := r.db.WithContext(ctx).
 		Where("enabled = ?", true).
-		Where("(source = ? AND override_source IS NULL) OR override_source = ?", source, source)
+		Where("source = ? AND (override_source IS NULL OR override_source = ?)", source, source)
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}

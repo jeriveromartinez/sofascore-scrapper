@@ -33,10 +33,11 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 // contract exposes snake_case (e.g. source_league_id).
 //
 // OverrideSource is a *string so we can distinguish "omit" (route to
-// the natural source) from "explicitly set" (route to the override
-// target even if it is the same string). Pinned-away rows let
-// operators route a FotMob league to the scores365 source and vice
-// versa — see ScraperLeague.OverrideSource.
+// the natural source) from "explicitly set" (pin the league to that
+// source explicitly). The override may only name the row's own
+// source: a league id only means something inside the source that
+// published it, so pinning a FotMob league to the scores365
+// dispatcher would look for a competition the id does not belong to.
 type createLeagueRequest struct {
 	Source         string  `json:"source"`
 	SourceLeagueId string  `json:"source_league_id"`
@@ -76,7 +77,11 @@ func (h *Handler) Create(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "duplicate", "message": err.Error()})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "validation", "message": err.Error()})
+		if errors.Is(err, ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "validation", "message": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, sl)
@@ -130,6 +135,10 @@ func (h *Handler) Update(c *gin.Context) {
 	if err := h.svc.Update(c.Request.Context(), uint(id), safe); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		if errors.Is(err, ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "validation", "message": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal", "message": err.Error()})
