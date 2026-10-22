@@ -5,6 +5,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"gorm.io/gorm"
 )
@@ -97,23 +99,14 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 	// among the user's owned domains. We reuse the audience
 	// filter from the dispatch path so the two numbers agree.
 	var domainsOwned []uint
-	if err := db.WithContext(ctx).Model(&struct {
-		gorm.Model
-		Domain string
-		UserID uint
-	}{}).
+	if err := db.WithContext(ctx).Model(&domains.Domain{}).
 		Where("user_id = ?", userID).
 		Pluck("id", &domainsOwned).Error; err != nil {
-		// Best effort: ignore the audience size if the domains
-		// table shape has changed.
-		out.AudienceSize = 0
+		return nil, err
 	}
 	if len(domainsOwned) > 0 {
 		var audience int64
-		if err := db.WithContext(ctx).Model(&struct {
-			gorm.Model
-			DomainID *uint
-		}{}).
+		if err := db.WithContext(ctx).Model(&devices.Device{}).
 			Where("domain_id IN ? AND domain_id IS NOT NULL", domainsOwned).
 			Count(&audience).Error; err != nil {
 			return nil, err
