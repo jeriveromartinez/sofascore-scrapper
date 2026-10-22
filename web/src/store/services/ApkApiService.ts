@@ -1,4 +1,4 @@
-import { BaseApiService, UPLOAD_TIMEOUT_MS } from "./BaseApiService";
+import { BaseApiService, REQUEST_TIMEOUT_MS, UPLOAD_TIMEOUT_MS } from "./BaseApiService";
 import {
   ApkList,
   ApkPage,
@@ -278,6 +278,7 @@ export class ApkApiService extends BaseApiService {
         headers: { Accept: PROTO_CONTENT_TYPE },
         responseType: "arraybuffer",
         validateStatus: () => true,
+        timeout: REQUEST_TIMEOUT_MS,
       },
     );
 
@@ -300,6 +301,7 @@ export class ApkApiService extends BaseApiService {
         headers: { Accept: PROTO_CONTENT_TYPE },
         responseType: "arraybuffer",
         validateStatus: () => true,
+        timeout: UPLOAD_TIMEOUT_MS,
       },
     );
 

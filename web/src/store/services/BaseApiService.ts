@@ -10,7 +10,7 @@ import { readAuthStorage, clearAuthStorage } from "../authStorage";
 const PROTO_CONTENT_TYPE = "application/x-protobuf";
 
 export const REQUEST_TIMEOUT_MS = 30_000;
-// Upload bodies reach 10 MiB (one APK chunk), far beyond what slow links move in REQUEST_TIMEOUT_MS.
+// APK transfers (10 MiB upload chunks, whole-APK downloads) need far longer than REQUEST_TIMEOUT_MS on slow links.
 export const UPLOAD_TIMEOUT_MS = 10 * 60_000;
 
 let refreshPromise: Promise<UserAuthModel | null> | null = null;

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import axios from "axios";
 import { ApkApiService } from "./ApkApiService";
 import { APP_API_BASE_URL } from "../../constants";
-import { UPLOAD_TIMEOUT_MS } from "./BaseApiService";
+import { REQUEST_TIMEOUT_MS, UPLOAD_TIMEOUT_MS } from "./BaseApiService";
 
 describe("ApkApiService client-facing endpoints", () => {
   afterEach(() => {
@@ -71,5 +71,27 @@ describe("ApkApiService chunk upload", () => {
       expect.anything(),
       expect.objectContaining({ timeout: UPLOAD_TIMEOUT_MS }),
     );
+  });
+});
+
+describe("ApkApiService client-facing timeouts", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("bounds checkUpdate with the request timeout", async () => {
+    const get = vi.spyOn(axios, "get").mockResolvedValue({ status: 200, data: new ArrayBuffer(0), headers: {} });
+
+    await new ApkApiService().checkUpdate("1.0.0", "com.example.app");
+
+    expect(get).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeout: REQUEST_TIMEOUT_MS }));
+  });
+
+  it("gives downloadByToken the longer transfer timeout", async () => {
+    const get = vi.spyOn(axios, "get").mockResolvedValue({ status: 200, data: new ArrayBuffer(4), headers: {} });
+
+    await new ApkApiService().downloadByToken("tok-123");
+
+    expect(get).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeout: UPLOAD_TIMEOUT_MS }));
   });
 });
