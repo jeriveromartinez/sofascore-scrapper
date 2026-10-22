@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, useId, watch } from "vue";
+import { reactive, ref, useId } from "vue";
+import { useModal } from "../composables/useModal";
 import type { Tournament } from "../store/services/models";
 
 type TournamentFormPayload = { id: number | null; name: string; slug: string };
@@ -14,6 +15,8 @@ const props = withDefaults(
 );
 
 const formId = useId();
+const titleId = useId();
+const dialog = ref<HTMLElement | null>(null);
 
 const modal = reactive({
   open: false,
@@ -54,17 +57,12 @@ async function submit(): Promise<void> {
   }
 }
 
-watch(
-  () => modal.open,
-  (isOpen) => {
-    document.body.classList.toggle("modal-open", isOpen);
-    document.body.style.overflow = isOpen ? "hidden" : "";
+useModal({
+  isOpen: () => modal.open,
+  container: dialog,
+  onClose: () => {
+    if (!modal.loading) reset();
   },
-);
-
-onBeforeUnmount(() => {
-  document.body.classList.remove("modal-open");
-  document.body.style.overflow = "";
 });
 
 defineExpose({ open, reset });
@@ -73,16 +71,18 @@ defineExpose({ open, reset });
 <template>
   <div
     v-if="modal.open"
+    ref="dialog"
     class="modal fade show"
     tabindex="-1"
     style="display: block"
     aria-modal="true"
     role="dialog"
+    :aria-labelledby="titleId"
   >
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">
+          <h5 :id="titleId" class="modal-title">
             {{ modal.form.id ? "Editar torneo" : "Crear torneo" }}
           </h5>
           <button

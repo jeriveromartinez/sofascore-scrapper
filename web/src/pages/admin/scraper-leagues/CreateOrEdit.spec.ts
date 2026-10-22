@@ -225,4 +225,17 @@ describe('CreateOrEdit', () => {
     expect(wrapper.find('[role="alert"]').text()).toContain('search down')
     expect(wrapper.findAll('.suggestion')).toHaveLength(0)
   })
+
+  it('is a modal dialog labelled by its title that closes on Escape', async () => {
+    const wrapper = mount(CreateOrEdit, { props: { item: null }, attachTo: document.body })
+    const dialog = wrapper.find('.modal')
+    expect(dialog.attributes('role')).toBe('dialog')
+    expect(dialog.attributes('aria-modal')).toBe('true')
+    expect(wrapper.find(`[id="${dialog.attributes('aria-labelledby')}"]`).text()).toBe('Add new league')
+    expect(dialog.element.contains(document.activeElement)).toBe(true)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })

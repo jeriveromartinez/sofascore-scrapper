@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { reactive, ref, useId } from "vue";
 import { apkApiService } from "../../store/services";
+import { useModal } from "../../composables/useModal";
 
 const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
   autoCloseModal: true,
@@ -22,6 +23,8 @@ const upload = reactive({
 });
 
 const modal = reactive({ open: false });
+const titleId = useId();
+const dialog = ref<HTMLElement | null>(null);
 
 function resetUploadForm(): void {
   upload.file = null;
@@ -159,17 +162,12 @@ async function dismissResume(): Promise<void> {
   resetUploadForm();
 }
 
-watch(
-  () => modal.open,
-  (isOpen) => {
-    document.body.classList.toggle("modal-open", isOpen);
-    document.body.style.overflow = isOpen ? "hidden" : "";
+useModal({
+  isOpen: () => modal.open,
+  container: dialog,
+  onClose: () => {
+    if (!upload.loading) closeUploadModal();
   },
-);
-
-onBeforeUnmount(() => {
-  document.body.classList.remove("modal-open");
-  document.body.style.overflow = "";
 });
 </script>
 
@@ -180,17 +178,19 @@ onBeforeUnmount(() => {
 
   <div
     v-if="modal.open"
+    ref="dialog"
     class="modal fade show"
     tabindex="-1"
     style="display: block"
     aria-modal="true"
     role="dialog"
+    :aria-labelledby="titleId"
     @click.self="autoCloseModal"
   >
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Subir APK</h5>
+          <h5 :id="titleId" class="modal-title">Subir APK</h5>
           <button
             type="button"
             class="btn-close"

@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { setActivePinia, createPinia } from "pinia";
 import UserFormModal from "./UserFormModal.vue";
+import TournamentFormModal from "./TournamentFormModal.vue";
 import type { User } from "../store/services/models";
 
 vi.mock("../store/services", () => ({
@@ -20,6 +21,8 @@ const base: User = {
   notificationsEnabled: false,
   notificationsEnabledAt: "",
 };
+
+enableAutoUnmount(afterEach);
 
 const onSubmit = vi.fn();
 
@@ -126,7 +129,6 @@ describe("UserFormModal form submission", () => {
     clickSubmit(wrapper);
     await flushPromises();
     expect(onSubmit).not.toHaveBeenCalled();
-    wrapper.unmount();
   });
 
   it("associates the submit button with the form and submits exactly once", async () => {
@@ -138,7 +140,6 @@ describe("UserFormModal form submission", () => {
     clickSubmit(wrapper);
     await flushPromises();
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    wrapper.unmount();
   });
 });
 
@@ -180,5 +181,43 @@ describe("UserFormModal async submit", () => {
     await vm.submit();
     expect(vm.modal.error).toBe("boom");
     expect(vm.modal.loading).toBe(false);
+  });
+});
+
+describe("UserFormModal modal behaviour", () => {
+  it("closes on Escape and restores focus to the opener", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const wrapper = mount(UserFormModal, { props: { onSubmit }, attachTo: document.body });
+    const vm = wrapper.vm as unknown as { open: () => void; modal: { open: boolean } };
+    vm.open();
+    await flushPromises();
+    expect(wrapper.find("[role='dialog']").element.contains(document.activeElement)).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await flushPromises();
+
+    expect(vm.modal.open).toBe(false);
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it("keeps page scroll locked while another modal is still open", async () => {
+    const users = mount(UserFormModal, { props: { onSubmit }, attachTo: document.body });
+    const tournaments = mount(TournamentFormModal, { props: { onSubmit }, attachTo: document.body });
+    const usersVm = users.vm as unknown as { open: () => void; reset: () => void };
+    const tournamentsVm = tournaments.vm as unknown as { open: () => void; reset: () => void };
+    usersVm.open();
+    tournamentsVm.open();
+    await flushPromises();
+
+    tournamentsVm.reset();
+    await flushPromises();
+    expect(document.body.style.overflow).toBe("hidden");
+
+    usersVm.reset();
+    await flushPromises();
+    expect(document.body.style.overflow).toBe("");
   });
 });

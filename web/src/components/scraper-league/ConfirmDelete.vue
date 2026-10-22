@@ -1,7 +1,14 @@
 <template>
   <div class="modal-backdrop" @click.self="$emit('cancel')">
-    <div class="modal modal-visible">
-      <h2>Delete league</h2>
+    <div
+      ref="dialog"
+      class="modal modal-visible"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="titleId"
+      tabindex="-1"
+    >
+      <h2 :id="titleId">Delete league</h2>
       <p>Are you sure you want to delete '{{ item.name }}'?</p>
       <div class="actions">
         <button @click="$emit('cancel')">Cancel</button>
@@ -19,10 +26,16 @@
 // pages/admin/scraper-leagues/CreateOrEdit.vue,
 // pages/admin/scraper-leagues/index.vue). Switched to a relative import — the
 // file passes `tsc --noEmit` and `yarn lint` cleanly this way.
+import { ref, useId } from 'vue'
 import type { ScraperLeague } from '../../store/pinia/scraperLeaguesStore'
+import { useModal } from '../../composables/useModal'
 
 defineProps<{ item: ScraperLeague }>()
-defineEmits<{ (e: 'confirm'): void; (e: 'cancel'): void }>()
+const emit = defineEmits<{ (e: 'confirm'): void; (e: 'cancel'): void }>()
+
+const titleId = useId()
+const dialog = ref<HTMLElement | null>(null)
+useModal({ isOpen: () => true, container: dialog, onClose: () => emit('cancel') })
 </script>
 
 <style scoped>

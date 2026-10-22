@@ -1,7 +1,14 @@
 <template>
   <div class="modal-backdrop" @click.self="$emit('close')">
-    <div class="modal modal-visible">
-      <h2>{{ item ? 'Edit league' : 'Add new league' }}</h2>
+    <div
+      ref="dialog"
+      class="modal modal-visible"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="titleId"
+      tabindex="-1"
+    >
+      <h2 :id="titleId">{{ item ? 'Edit league' : 'Add new league' }}</h2>
 
       <label>Search</label>
       <input v-model="search" class="search" placeholder="Search leagues..." />
@@ -48,8 +55,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, onBeforeUnmount } from 'vue'
+import { ref, reactive, watch, onBeforeUnmount, useId } from 'vue'
 import { useScraperLeaguesStore, type ScraperLeague } from '../../../store/pinia/scraperLeaguesStore'
+import { useModal } from '../../../composables/useModal'
 
 // NOTE on @/ alias: the brief's snippet uses `@/store/...` imports. The alias
 // only exists in vite.config.ts (runtime); there is no matching `paths` mapping
@@ -59,6 +67,10 @@ import { useScraperLeaguesStore, type ScraperLeague } from '../../../store/pinia
 // file passes `tsc --noEmit` and `yarn lint` cleanly this way.
 const props = defineProps<{ item: ScraperLeague | null }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'saved'): void }>()
+
+const titleId = useId()
+const dialog = ref<HTMLElement | null>(null)
+useModal({ isOpen: () => true, container: dialog, onClose: () => emit('close') })
 
 const store = useScraperLeaguesStore()
 const search = ref('')
