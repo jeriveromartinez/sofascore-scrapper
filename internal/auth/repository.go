@@ -56,3 +56,18 @@ func (r *AuthRepository) RotateRefreshToken(ctx context.Context, userID uint, ol
 		return tx.Create(&RefreshToken{UserID: userID, TokenID: newID, ExpiresAt: expiresAt}).Error
 	})
 }
+
+// PurgeExpiredRefreshTokens deletes every refresh token that expired
+// before the given cutoff and returns the number of deleted rows.
+// Expired tokens can never be rotated or revoked into a valid
+// session, so keeping them only grows the table.
+func (r *AuthRepository) PurgeExpiredRefreshTokens(ctx context.Context, cutoff time.Time) (int64, error) {
+	res := r.db.WithContext(ctx).
+		Unscoped().
+		Where("expires_at < ?", cutoff).
+		Delete(&RefreshToken{})
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
