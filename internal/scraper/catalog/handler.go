@@ -164,6 +164,11 @@ func (h *Handler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+const (
+	defaultListLimit = 50
+	maxListLimit     = 100
+)
+
 func (h *Handler) List(c *gin.Context) {
 	f := ListFilters{
 		Source:  c.Query("source"),
@@ -174,11 +179,13 @@ func (h *Handler) List(c *gin.Context) {
 		b := e == "true" || e == "1"
 		f.Enabled = &b
 	}
-	if p, err := strconv.Atoi(c.DefaultQuery("page", "1")); err == nil {
+	f.Page = 1
+	if p, err := strconv.Atoi(c.Query("page")); err == nil && p > 1 {
 		f.Page = p
 	}
-	if l, err := strconv.Atoi(c.DefaultQuery("limit", "50")); err == nil {
-		f.Limit = l
+	f.Limit = defaultListLimit
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil {
+		f.Limit = min(max(l, 1), maxListLimit)
 	}
 	items, total, err := h.svc.List(c.Request.Context(), f)
 	if err != nil {
