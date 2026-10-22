@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { EventsPageFilters } from "../store/services/models/apiModels";
 
 const props = defineProps<{ modelValue: EventsPageFilters }>();
@@ -21,8 +21,8 @@ function commit(patch: Partial<EventsPageFilters>): void {
   emit("update:modelValue", { ...props.modelValue, ...patch });
 }
 
-function toggleDir(): void {
-  commit({ direction: props.modelValue.direction === "asc" ? "desc" : "asc" });
+function setDirection(direction: "asc" | "desc"): void {
+  commit({ direction });
 }
 
 function debouncedText(field: "league" | "team", value: string): void {
@@ -40,6 +40,15 @@ function debouncedText(field: "league" | "team", value: string): void {
 watch(leagueInput, (v) => debouncedText("league", v));
 watch(teamInput, (v) => debouncedText("team", v));
 
+onBeforeUnmount(() => {
+  for (const field of ["league", "team"] as const) {
+    if (debounceTimers[field] !== null) {
+      window.clearTimeout(debounceTimers[field]!);
+      debounceTimers[field] = null;
+    }
+  }
+});
+
 const isAsc = computed(() => props.modelValue.direction !== "desc");
 </script>
 
@@ -51,7 +60,7 @@ const isAsc = computed(() => props.modelValue.direction !== "desc");
           type="button"
           class="btn btn-sm btn-outline-secondary"
           :class="{ active: isAsc }"
-          @click="toggleDir"
+          @click="setDirection('asc')"
         >
           ASC ⇅
         </button>
@@ -59,7 +68,7 @@ const isAsc = computed(() => props.modelValue.direction !== "desc");
           type="button"
           class="btn btn-sm btn-outline-secondary"
           :class="{ active: !isAsc }"
-          @click="toggleDir"
+          @click="setDirection('desc')"
         >
           DESC ⇅
         </button>
