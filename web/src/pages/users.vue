@@ -12,8 +12,8 @@ const modalRef = ref<InstanceType<typeof UserFormModal> | null>(null);
 const pagination = useCursorPagination<User>({
   routeName: "Users",
   defaultSize: 20,
-  fetchPage: async (cursor, size) => {
-    const page: UserPageResponse = await usersApiService.getUserPage(cursor, size);
+  fetchPage: async (cursor, size, signal) => {
+    const page: UserPageResponse = await usersApiService.getUserPage(cursor, size, signal);
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",

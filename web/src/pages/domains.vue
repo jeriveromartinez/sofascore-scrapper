@@ -13,8 +13,8 @@ const users = ref<User[]>([]);
 const pagination = useCursorPagination<Domain>({
   routeName: "Domains",
   defaultSize: 20,
-  fetchPage: async (cursor, size) => {
-    const page: DomainPageResponse = await domainsApiService.getDomainPage(cursor, size);
+  fetchPage: async (cursor, size, signal) => {
+    const page: DomainPageResponse = await domainsApiService.getDomainPage(cursor, size, signal);
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",

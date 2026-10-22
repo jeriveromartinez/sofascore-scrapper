@@ -28,13 +28,14 @@ export class UsersApiService extends BaseApiService {
   async getUserPage(
     cursor?: string,
     limit?: number,
+    signal?: AbortSignal,
   ): Promise<UserPageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
-    return this.get(url, UserPage);
+    return this.get(url, UserPage, signal);
   }
 
   async getUser(id: number): Promise<User> {

@@ -12,8 +12,8 @@ const modalRef = ref<InstanceType<typeof TournamentFormModal> | null>(null);
 const pagination = useCursorPagination<Tournament>({
   routeName: "Tournaments",
   defaultSize: 20,
-  fetchPage: async (cursor, size) => {
-    const page: TournamentPageResponse = await tournamentsApiService.getTournamentPage(cursor, size);
+  fetchPage: async (cursor, size, signal) => {
+    const page: TournamentPageResponse = await tournamentsApiService.getTournamentPage(cursor, size, signal);
     return {
       data: page.data,
       nextCursor: page.page?.nextCursor ?? "",

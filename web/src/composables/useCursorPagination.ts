@@ -15,7 +15,11 @@ export interface UseCursorPaginationOptions<T> {
   routeName: string;
   defaultSize?: number;
   filters?: () => Record<string, unknown>;
-  fetchPage: (cursor: string | undefined, size: number) => Promise<CursorPaginationFetchResult<T>>;
+  fetchPage: (
+    cursor: string | undefined,
+    size: number,
+    signal?: AbortSignal,
+  ) => Promise<CursorPaginationFetchResult<T>>;
 }
 
 export interface CursorPaginationState<T> {
@@ -50,6 +54,15 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   return i;
 }
 
+function isAbortError(err: unknown): boolean {
+  const candidate = err as { name?: string; code?: string } | null;
+  return (
+    candidate?.name === "AbortError" ||
+    candidate?.name === "CanceledError" ||
+    candidate?.code === "ERR_CANCELED"
+  );
+}
+
 export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
   const route = useRoute();
   const router = useRouter();
@@ -67,6 +80,10 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
 
   let abortController: AbortController | null = null;
   let lastLoadedFullPath = "";
+  // Monotonic counter: only the newest load may write to the state, so an
+  // aborted (stale) request cannot clear the loading flag or the rows of
+  // the request that superseded it.
+  let loadSeq = 0;
 
   function getFilters(): Record<string, unknown> {
     return options.filters ? options.filters() : {};
@@ -121,15 +138,17 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
 
   async function fetchWith(cursor: string | undefined, size: number): Promise<CursorPaginationFetchResult<T>> {
     abortController?.abort();
-    abortController = new AbortController();
+    const controller = new AbortController();
+    abortController = controller;
     try {
-      return await options.fetchPage(cursor, size);
+      return await options.fetchPage(cursor, size, controller.signal);
     } finally {
-      abortController = null;
+      if (abortController === controller) abortController = null;
     }
   }
 
   async function loadPage(page?: number): Promise<void> {
+    const seq = ++loadSeq;
     state.error = "";
     const clampedSize = syncSizeFromQuery();
     const targetPage = page ?? syncPageFromQuery();
@@ -157,6 +176,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
 
       if (cached !== null) {
         const resp = await fetchWith(cached, state.size);
+        if (seq !== loadSeq) return;
         state.data = resp.data as never;
         state.hasNext = resp.hasMore;
         if (resp.nextCursor) {
@@ -167,6 +187,7 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
         let reachedPage = 0;
         for (let i = 1; i <= targetPage; i++) {
           lastResp = await fetchWith(cursor, state.size);
+          if (seq !== loadSeq) return;
           reachedPage = i;
           if (lastResp.nextCursor) {
             sessionStorage.setItem(k(i), lastResp.nextCursor);
@@ -188,11 +209,12 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
       }
       state.hasPrev = targetPage > 1;
     } catch (err) {
-      if ((err as { name?: string })?.name === "AbortError") return;
+      if (isAbortError(err)) return;
+      if (seq !== loadSeq) return;
       state.error = err instanceof Error ? err.message : "Error cargando datos";
       clearCacheForFilterSet(stableHash(filters));
     } finally {
-      state.loading = false;
+      if (seq === loadSeq) state.loading = false;
     }
   }
 
@@ -235,6 +257,9 @@ export function useCursorPagination<T>(options: UseCursorPaginationOptions<T>) {
     state.page = 1;
     state.hasPrev = false;
     state.hasNext = false;
+    // The rows collected for the previous filter set no longer apply:
+    // drop them so a failed or slow reload cannot show stale results.
+    state.data = [] as never;
     await writeQuery(state.page, state.size, newFilters);
     await loadPage(1);
   }

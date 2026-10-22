@@ -15,10 +15,11 @@ const editModal = ref<typeof apkEditUrlModal>();
 const pagination = useCursorPagination<ApkVersionInfo>({
   routeName: "ApkAdmin",
   defaultSize: 10,
-  fetchPage: async (cursor, size) => {
+  fetchPage: async (cursor, size, signal) => {
     const page: ApkPageResponse = await apkApiService.listVersionsPage(
       cursor,
       size,
+      signal,
     );
     return {
       data: page.data,

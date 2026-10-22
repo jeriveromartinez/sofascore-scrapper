@@ -26,13 +26,14 @@ export class TournamentsApiService extends BaseApiService {
   async getTournamentPage(
     cursor?: string,
     limit?: number,
+    signal?: AbortSignal,
   ): Promise<TournamentPageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
-    return this.get(url, TournamentPage);
+    return this.get(url, TournamentPage, signal);
   }
 
   async getTournament(id: number): Promise<Tournament> {

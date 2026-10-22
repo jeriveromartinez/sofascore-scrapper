@@ -27,13 +27,14 @@ export class DomainsApiService extends BaseApiService {
   async getDomainPage(
     cursor?: string,
     limit?: number,
+    signal?: AbortSignal,
   ): Promise<DomainPageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
-    return this.get(url, DomainPage);
+    return this.get(url, DomainPage, signal);
   }
 
   async getDomain(id: number): Promise<Domain> {

@@ -74,7 +74,7 @@ describe("useCursorPagination", () => {
     await composable.loadPage();
     await nextTick();
 
-    expect(fetch).toHaveBeenCalledWith("cached-cursor-1", 10);
+    expect(fetch).toHaveBeenCalledWith("cached-cursor-1", 10, expect.any(AbortSignal));
     expect(composable.state.data).toEqual([{ id: 1 }]);
   });
 
@@ -89,8 +89,8 @@ describe("useCursorPagination", () => {
     await nextTick();
 
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls[0]).toEqual([undefined, 10]);
-    expect(fetch.mock.calls[1]).toEqual(["c-1", 10]);
+    expect(fetch.mock.calls[0]).toEqual([undefined, 10, expect.any(AbortSignal)]);
+    expect(fetch.mock.calls[1]).toEqual(["c-1", 10, expect.any(AbortSignal)]);
     expect(sessionStorage.getItem("pagination:Test:default:10:page-2")).toBe("c-2");
   });
 
@@ -126,8 +126,8 @@ describe("useCursorPagination", () => {
 
     expect(composable.state.page).toBe(1);
     expect(router.currentRoute.value.query.page).toBe("1");
-    expect(fetch.mock.calls[0]).toEqual(["c-0", 10]);
-    expect(fetch.mock.calls[1]).toEqual([undefined, 10]);
+    expect(fetch.mock.calls[0]).toEqual(["c-0", 10, expect.any(AbortSignal)]);
+    expect(fetch.mock.calls[1]).toEqual([undefined, 10, expect.any(AbortSignal)]);
   });
 
   it("setSize resets to page 1, clears the cache, updates URL", async () => {
@@ -163,8 +163,8 @@ describe("useCursorPagination", () => {
     await nextTick();
 
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls[0]).toEqual(["c-0", 10]);
-    expect(fetch.mock.calls[1]).toEqual(["c-0", 10]);
+    expect(fetch.mock.calls[0]).toEqual(["c-0", 10, expect.any(AbortSignal)]);
+    expect(fetch.mock.calls[1]).toEqual(["c-0", 10, expect.any(AbortSignal)]);
     expect(composable.state.data).toEqual([{ id: 2, fresh: true }]);
   });
 
@@ -181,6 +181,36 @@ describe("useCursorPagination", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(composable.state.page).toBe(2);
     expect(router.currentRoute.value.query.page).toBe("2");
+    expect(composable.state.data).toEqual([{ id: 2 }]);
+  });
+
+  it("keeps the loading flag up while a newer request is still in flight", async () => {
+    // The aborted request settles first; it must not clear the loading flag
+    // of the request that superseded it.
+    let rejectFirst: (err: unknown) => void = () => {};
+    const fetch = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => { rejectFirst = reject; }),
+      )
+      .mockImplementationOnce(async () => ({
+        data: [{ id: 2 }],
+        nextCursor: "",
+        hasMore: false,
+      }));
+
+    const { composable } = await mountComposable({ path: "/?page=1&size=10", fetch });
+
+    const first = composable.loadPage(1);
+    const second = composable.loadPage(2);
+
+    rejectFirst(Object.assign(new Error("canceled"), { name: "AbortError" }));
+    await first;
+
+    expect(composable.state.loading).toBe(true);
+
+    await second;
+    expect(composable.state.loading).toBe(false);
     expect(composable.state.data).toEqual([{ id: 2 }]);
   });
 });

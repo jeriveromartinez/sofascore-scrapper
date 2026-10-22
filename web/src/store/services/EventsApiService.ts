@@ -32,6 +32,7 @@ export class EventsApiService extends BaseApiService {
     cursor?: string,
     limit?: number,
     filters: EventsPageFilters = {},
+    signal?: AbortSignal,
   ): Promise<EventPageResponse> {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
@@ -45,7 +46,7 @@ export class EventsApiService extends BaseApiService {
     if (filters.team) params.set("team", filters.team);
     const qs = params.toString();
     const url = qs ? `/page?${qs}` : "/page";
-    return this.get(url, EventPage);
+    return this.get(url, EventPage, signal);
   }
 }
 
