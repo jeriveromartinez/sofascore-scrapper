@@ -3,6 +3,7 @@
 package tournaments
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -65,13 +66,13 @@ func TestDeviceAssignments_ReassignAfterRemove_MariaDB(t *testing.T) {
 	}
 
 	repo := NewDeviceAssignmentsRepository(db)
-	if _, err := repo.Assign(device.ID, tournamentID); err != nil {
+	if _, err := repo.Assign(context.Background(), device.ID, tournamentID); err != nil {
 		t.Fatalf("first assign: %v", err)
 	}
-	if err := repo.Remove(device.ID, tournamentID); err != nil {
+	if err := repo.Remove(context.Background(), device.ID, tournamentID); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	if _, err := repo.Assign(device.ID, tournamentID); err != nil {
+	if _, err := repo.Assign(context.Background(), device.ID, tournamentID); err != nil {
 		t.Fatalf("re-assign after remove: %v", err)
 	}
 }

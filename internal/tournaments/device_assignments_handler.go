@@ -106,7 +106,7 @@ func (h *DeviceAssignmentsHandler) handleGetPage(c *gin.Context) {
 }
 
 func (h *DeviceAssignmentsHandler) handleGetAll(c *gin.Context) {
-	deviceTournaments, err := h.repo.GetAll()
+	deviceTournaments, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -121,7 +121,7 @@ func (h *DeviceAssignmentsHandler) handleGetByDevice(c *gin.Context) {
 		return
 	}
 
-	deviceTournaments, err := h.repo.GetByDevice(deviceID)
+	deviceTournaments, err := h.repo.GetByDevice(c.Request.Context(), deviceID)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -136,7 +136,7 @@ func (h *DeviceAssignmentsHandler) handleAssign(c *gin.Context) {
 		return
 	}
 
-	deviceTournament, err := h.repo.Assign(uint(req.DeviceId), uint(req.TournamentId))
+	deviceTournament, err := h.repo.Assign(c.Request.Context(), uint(req.DeviceId), uint(req.TournamentId))
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -154,7 +154,7 @@ func (h *DeviceAssignmentsHandler) handleRemove(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Remove(uint(req.DeviceId), uint(req.TournamentId)); err != nil {
+	if err := h.repo.Remove(c.Request.Context(), uint(req.DeviceId), uint(req.TournamentId)); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -182,7 +182,7 @@ func (h *DeviceAssignmentsHandler) handleSet(c *gin.Context) {
 		ids[i] = uint(id)
 	}
 
-	if err := h.repo.Set(deviceID, ids); err != nil {
+	if err := h.repo.Set(c.Request.Context(), deviceID, ids); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

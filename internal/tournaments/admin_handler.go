@@ -126,7 +126,7 @@ func (h *Handler) handleGetTournamentsPage(c *gin.Context) {
 }
 
 func (h *Handler) handleGetTournaments(c *gin.Context) {
-	tournaments, err := h.repo.GetAll()
+	tournaments, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -141,7 +141,7 @@ func (h *Handler) handleGetTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.GetByID(id)
+	tournament, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		server.RespondError(c, http.StatusNotFound, "tournament not found")
 		return
@@ -162,7 +162,7 @@ func (h *Handler) handleCreateTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.Create(req.Name, slug)
+	tournament, err := h.repo.Create(c.Request.Context(), req.Name, slug)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -189,7 +189,7 @@ func (h *Handler) handleUpdateTournament(c *gin.Context) {
 		return
 	}
 
-	tournament, err := h.repo.Update(id, req.Name, slug)
+	tournament, err := h.repo.Update(c.Request.Context(), id, req.Name, slug)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -204,7 +204,7 @@ func (h *Handler) handleDeleteTournament(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Delete(id); err != nil {
+	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
