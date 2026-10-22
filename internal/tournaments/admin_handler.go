@@ -1,6 +1,7 @@
 package tournaments
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -217,4 +218,15 @@ func (h *Handler) handleDeleteTournament(c *gin.Context) {
 func respondInternalError(c *gin.Context, msg string, err error) {
 	slog.ErrorContext(c.Request.Context(), msg, slog.String("error", err.Error()))
 	server.RespondError(c, http.StatusInternalServerError, "internal server error")
+}
+
+// notifyChange runs the post-write hook. The write is already committed,
+// so a hook failure is logged instead of failing the request.
+func notifyChange(c *gin.Context, onChange func(context.Context) error) {
+	if onChange == nil {
+		return
+	}
+	if err := onChange(c.Request.Context()); err != nil {
+		slog.ErrorContext(c.Request.Context(), "tournament change hook failed", slog.String("error", err.Error()))
+	}
 }

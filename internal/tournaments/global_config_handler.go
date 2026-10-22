@@ -58,9 +58,7 @@ func (h *GlobalConfigHandler) handleAdd(c *gin.Context) {
 		respondInternalError(c, "set global tournament config failed", err)
 		return
 	}
-	if h.onChange != nil {
-		_ = h.onChange(c.Request.Context())
-	}
+	notifyChange(c, h.onChange)
 	server.RespondProto(c, http.StatusCreated, &pb.GlobalTournamentConfigList{Configs: GlobalConfigPtrsToProto(configs)})
 }
 
@@ -75,8 +73,6 @@ func (h *GlobalConfigHandler) handleRemove(c *gin.Context) {
 		respondInternalError(c, "remove global tournament config failed", err)
 		return
 	}
-	if h.onChange != nil {
-		_ = h.onChange(c.Request.Context())
-	}
+	notifyChange(c, h.onChange)
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament removed from global config"})
 }

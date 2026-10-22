@@ -141,9 +141,7 @@ func (h *DeviceAssignmentsHandler) handleAssign(c *gin.Context) {
 		respondInternalError(c, "assign tournament failed", err)
 		return
 	}
-	if h.onChange != nil {
-		_ = h.onChange(c.Request.Context())
-	}
+	notifyChange(c, h.onChange)
 	server.RespondProto(c, http.StatusCreated, DeviceTournamentToProto(*deviceTournament))
 }
 
@@ -158,9 +156,7 @@ func (h *DeviceAssignmentsHandler) handleRemove(c *gin.Context) {
 		respondInternalError(c, "remove tournament from device failed", err)
 		return
 	}
-	if h.onChange != nil {
-		_ = h.onChange(c.Request.Context())
-	}
+	notifyChange(c, h.onChange)
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament removed from device"})
 }
 
@@ -186,8 +182,6 @@ func (h *DeviceAssignmentsHandler) handleSet(c *gin.Context) {
 		respondInternalError(c, "set device tournaments failed", err)
 		return
 	}
-	if h.onChange != nil {
-		_ = h.onChange(c.Request.Context())
-	}
+	notifyChange(c, h.onChange)
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "device tournaments updated"})
 }
