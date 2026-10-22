@@ -615,9 +615,8 @@ func (s *Service) scheduleNextRecurringFire(ctx context.Context, schedule *Sched
 	return nil
 }
 
-// dispatchToOneDevice is the per-device version of
-// dispatchToAudience: snapshot the single delivery_attempt row,
-// publish the WsPush, and record the outcome.
+// dispatchToOneDevice snapshots the single delivery_attempt row,
+// publishes the WsPush, and records the outcome.
 func (s *Service) dispatchToOneDevice(ctx context.Context, msg *PushMessage, dev devices.Device, payload *pb.PushPayload) error {
 	now := time.Now()
 	frame := buildWsPush(uint64(msg.ID), payload)
@@ -632,46 +631,6 @@ func (s *Service) dispatchToOneDevice(ctx context.Context, msg *PushMessage, dev
 	}
 	s.metrics.IncDispatched(string(msg.Source))
 	return s.publishFrames(ctx, msg.ID, []deviceFrame{{deviceID: dev.ID, frame: frame}})
-}
-
-// audienceFilter is a small helper struct for the audience filter
-// path. Today it only carries domainIDs; future filters (platform,
-// app version, last-seen-recently) extend it.
-type audienceFilter struct {
-	DomainIDs []uint
-}
-
-// dispatchToAudience is the shared path used by both
-// CreateImmediate and DispatchScheduled. It snapshots the
-// audience, inserts delivery_attempts, publishes each frame to
-// the hub, and records per-device outcomes.
-func (s *Service) dispatchToAudience(ctx context.Context, msg *PushMessage, filter audienceFilter, payload *pb.PushPayload) error {
-	audience, err := s.repo.ListAudienceDevicesForDomains(ctx, filter.DomainIDs)
-	if err != nil {
-		return fmt.Errorf("list audience: %w", err)
-	}
-	now := time.Now()
-	// Build push frames first so we can capture the transport
-	// message_id (stored as a string on each delivery_attempt row).
-	frames := make([]deviceFrame, 0, len(audience))
-	attempts := make([]DeliveryAttempt, 0, len(audience))
-	for _, dev := range audience {
-		frame := buildWsPush(uint64(msg.ID), payload)
-		frames = append(frames, deviceFrame{deviceID: dev.ID, frame: frame})
-		attempts = append(attempts, DeliveryAttempt{
-			PushMessageID: msg.ID,
-			DeviceID:      dev.ID,
-			MessageID:     frame.MessageId,
-			State:         StateSent,
-			SentAt:        &now,
-		})
-		s.metrics.IncDispatched(string(msg.Source))
-	}
-	if err := s.repo.InsertDeliveryAttempts(ctx, attempts); err != nil {
-		return fmt.Errorf("insert delivery attempts: %w", err)
-	}
-	_ = s.publishFrames(ctx, msg.ID, frames)
-	return nil
 }
 
 // payloadFromSchedule converts a schedule's denormalized payload
