@@ -2,6 +2,8 @@ import http from "k6/http";
 import { check } from "k6";
 import {
   BASE_URL,
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
   checkStatus200,
   makeAuthHeaders,
   makeDeviceHeaders,
@@ -22,7 +24,7 @@ export const options = {
 const DEVICE_BASE = "k6-multi-inst-";
 
 export function setup() {
-  const token = loginUser(http, "admin@example.com", "admin123");
+  const token = loginUser(http, ADMIN_EMAIL, ADMIN_PASSWORD);
 
   const devices = [];
   for (let i = 0; i < 10; i++) {

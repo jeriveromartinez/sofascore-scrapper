@@ -2,6 +2,8 @@ import http from "k6/http";
 import { check } from "k6";
 import {
   BASE_URL,
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
   thresholds,
   HEADERS_PROTOBUF,
   makeAuthHeaders,
@@ -11,6 +13,9 @@ import {
   encodeSetUserRoleRequest,
   decodeProtoStringField,
   decodeProtoVarintField,
+  AUTH_ID_FIELD,
+  AUTH_TOKEN_FIELD,
+  INVITE_TOKEN_FIELD,
 } from "./common.js";
 
 export { thresholds };
@@ -20,16 +25,11 @@ export { thresholds };
 // controlled arrival rate that stays under the aggregate budget
 // (POOL_SIZE * 300/min), which lets us measure endpoint latency under
 // sustained concurrency instead of just probing that they respond.
-const PASSWORD = "Password1!";
+const PASSWORD = ADMIN_PASSWORD;
 const INVITE_TOKEN = __ENV.INVITE_TOKEN || "";
 // Bounded by the auth rate limit (10 registrations/min per IP) consumed while
 // seeding: one bootstrap admin + (POOL_SIZE - 1) invited-then-promoted admins.
 const POOL_SIZE = 6;
-
-// AuthResponse: id=1, token=3. InvitationResponse: token=1.
-const AUTH_ID_FIELD = 1;
-const AUTH_TOKEN_FIELD = 3;
-const INVITE_TOKEN_FIELD = 1;
 
 export const options = {
   scenarios: {
@@ -64,7 +64,7 @@ function bootstrapAdminToken() {
   if (INVITE_TOKEN) {
     const reg = http.post(
       `${BASE_URL}/api/web/v1/users/register`,
-      encodeAuthRequest("admin@example.com", PASSWORD, INVITE_TOKEN),
+      encodeAuthRequest(ADMIN_EMAIL, PASSWORD, INVITE_TOKEN),
       params,
     );
     if (reg.status === 201) {
@@ -74,7 +74,7 @@ function bootstrapAdminToken() {
 
   const login = http.post(
     `${BASE_URL}/api/web/v1/users/login`,
-    encodeLoginRequest("admin@example.com", PASSWORD),
+    encodeLoginRequest(ADMIN_EMAIL, PASSWORD),
     params,
   );
   if (login.status === 200) {

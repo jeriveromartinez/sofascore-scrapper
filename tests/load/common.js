@@ -1,5 +1,21 @@
 export const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
 
+// Account the load scripts authenticate as. Override with
+// -e ADMIN_EMAIL=... / -e ADMIN_PASSWORD=... when the target deployment
+// uses different credentials. The defaults are the administrator that the
+// test stack seeds on first boot (internal/seeder), the only account with
+// admin rights on a fresh stack.
+export const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || "admin@local";
+export const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || "E2eStackAdminPass1!";
+
+// Field numbers from proto/api.proto. The API speaks application/x-protobuf
+// (see internal/server/protobuf.go), so every response body has to be
+// decoded from the wire format, never parsed as JSON.
+export const AUTH_ID_FIELD = 1; // AuthResponse.id
+export const AUTH_TOKEN_FIELD = 3; // AuthResponse.token
+export const INVITE_TOKEN_FIELD = 1; // InvitationResponse.token
+export const UPLOAD_ID_FIELD = 1; // UploadBeginResponse.upload_id
+
 export const thresholds = {
   http_req_failed: ["rate<0.01"],
   "http_req_duration{kind:read}": ["p(95)<250"],
@@ -52,14 +68,17 @@ export function makeDeviceHeaders(deviceToken) {
   });
 }
 
+// Varints are unsigned and may exceed 2^31 (timestamps, file sizes), so
+// they are built with arithmetic instead of the 32-bit bitwise operators.
 function encodeVarint(value) {
   const bytes = [];
+  let remaining = value;
   do {
-    let b = value & 0x7f;
-    value >>>= 7;
-    if (value !== 0) b |= 0x80;
+    let b = remaining % 128;
+    remaining = Math.floor(remaining / 128);
+    if (remaining !== 0) b += 0x80;
     bytes.push(b);
-  } while (value !== 0);
+  } while (remaining !== 0);
   return bytes;
 }
 
@@ -137,6 +156,42 @@ export function encodeLoginRequest(email, password) {
   );
 }
 
+// Decodes a UTF-8 byte range. The k6 runtime exposes neither TextDecoder
+// nor Buffer, so the decoding is done by hand.
+function decodeUtf8(bytes, start, end) {
+  let out = "";
+  let i = start;
+  while (i < end) {
+    const lead = bytes[i++];
+    if (lead < 0x80) {
+      out += String.fromCharCode(lead);
+      continue;
+    }
+    let code;
+    let extra;
+    if (lead < 0xe0) {
+      code = lead & 0x1f;
+      extra = 1;
+    } else if (lead < 0xf0) {
+      code = lead & 0x0f;
+      extra = 2;
+    } else {
+      code = lead & 0x07;
+      extra = 3;
+    }
+    for (let k = 0; k < extra && i < end; k++) {
+      code = code * 64 + (bytes[i++] & 0x3f);
+    }
+    if (code > 0xffff) {
+      code -= 0x10000;
+      out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
+    } else {
+      out += String.fromCharCode(code);
+    }
+  }
+  return out;
+}
+
 // Minimal protobuf reader: extracts a length-delimited (string) field by number
 // from a binary response body. Responses are protobuf-only (no JSON mode), so
 // res.json() cannot be used; request with responseType: "binary".
@@ -159,16 +214,12 @@ export function decodeProtoStringField(buffer, targetField) {
       shift = 0;
       while (i < bytes.length) {
         const b = bytes[i++];
-        len |= (b & 0x7f) << shift;
+        len += (b & 0x7f) * Math.pow(2, shift);
         if ((b & 0x80) === 0) break;
         shift += 7;
       }
       if (fieldNum === targetField) {
-        let s = "";
-        for (let j = 0; j < len; j++) {
-          s += String.fromCharCode(bytes[i + j]);
-        }
-        return s;
+        return decodeUtf8(bytes, i, i + len);
       }
       i += len;
     } else if (wireType === 0) {
@@ -215,7 +266,7 @@ export function decodeProtoVarintField(buffer, targetField) {
       shift = 0;
       while (i < bytes.length) {
         const b = bytes[i++];
-        len |= (b & 0x7f) << shift;
+        len += (b & 0x7f) * Math.pow(2, shift);
         if ((b & 0x80) === 0) break;
         shift += 7;
       }
@@ -286,11 +337,16 @@ export function loginUser(http, email, password) {
   const body = encodeLoginRequest(email, password);
   const res = http.post(`${BASE_URL}/api/web/v1/users/login`, body, {
     headers: HEADERS_PROTOBUF,
+    responseType: "binary",
   });
   if (res.status !== 200) {
-    throw new Error(`login failed: ${res.status} ${res.body}`);
+    throw new Error(`login failed: ${res.status}`);
   }
-  return res.json("token");
+  const token = decodeProtoStringField(res.body, AUTH_TOKEN_FIELD);
+  if (!token) {
+    throw new Error("login response carried no access token");
+  }
+  return token;
 }
 
 export function registerDevice(http, token, platform, name, version) {
