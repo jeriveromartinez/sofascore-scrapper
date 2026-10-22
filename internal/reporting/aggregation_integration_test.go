@@ -3,6 +3,7 @@
 package reporting
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -53,7 +54,7 @@ func TestGenerateDaily_CreatesContentStats(t *testing.T) {
 	createEndedPlaybackLog(db, "channel-a", 3, yesterday.UnixMilli()+1000)
 	createEndedPlaybackLog(db, "channel-a", 4, now.UnixMilli())
 
-	err := repo.GenerateDaily()
+	err := repo.GenerateDaily(context.Background())
 	if err != nil {
 		t.Fatalf("GenerateDaily failed: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestGenerateDaily_DeletesProcessedLogs(t *testing.T) {
 	createEndedPlaybackLog(db, "ch", 1, yesterday.UnixMilli())
 	createEndedPlaybackLog(db, "ch", 2, now.UnixMilli())
 
-	err := repo.GenerateDaily()
+	err := repo.GenerateDaily(context.Background())
 	if err != nil {
 		t.Fatalf("GenerateDaily failed: %v", err)
 	}
@@ -110,7 +111,7 @@ func TestGenerateDaily_MillisecondDuration(t *testing.T) {
 		EndedAt:   yesterdayMs + 1000 + 60000,
 	})
 
-	err := repo.GenerateDaily()
+	err := repo.GenerateDaily(context.Background())
 	if err != nil {
 		t.Fatalf("GenerateDaily failed: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestGenerateDaily_UpsertsExistingPeriodIdempotently(t *testing.T) {
 	}
 	createEndedPlaybackLog(db, "late-channel", 2, begin.Add(time.Hour).UnixMilli())
 
-	if err := repo.GenerateDaily(); err != nil {
+	if err := repo.GenerateDaily(context.Background()); err != nil {
 		t.Fatalf("GenerateDaily with an existing period failed: %v", err)
 	}
 
@@ -155,7 +156,7 @@ func TestGenerateDaily_UpsertsExistingPeriodIdempotently(t *testing.T) {
 		t.Fatalf("updated daily stat: want 30 seconds/1 view, got %d seconds/%d views", stats[0].Seconds, stats[0].Views)
 	}
 
-	if err := repo.GenerateDaily(); err != nil {
+	if err := repo.GenerateDaily(context.Background()); err != nil {
 		t.Fatalf("GenerateDaily retry failed: %v", err)
 	}
 	var afterRetry ContentStat
@@ -185,7 +186,7 @@ func TestGenerateMonthly_UsesPeriodStart(t *testing.T) {
 	dayAfter := ContentStat{ContentHash: "ch1", PeriodType: PeriodTypeDay, PeriodStart: monthBegin.AddDate(0, 1, 0), Seconds: 300, Views: 30}
 	db.Create(&dayAfter)
 
-	err := repo.GenerateMonthly()
+	err := repo.GenerateMonthly(context.Background())
 	if err != nil {
 		t.Fatalf("GenerateMonthly failed: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestGenerateMonthly_HalfOpenRange(t *testing.T) {
 	atNextMonthStart := ContentStat{ContentHash: "ch", PeriodType: PeriodTypeDay, PeriodStart: nextMonthBegin, Seconds: 999, Views: 99}
 	db.Create(&atNextMonthStart)
 
-	err := repo.GenerateMonthly()
+	err := repo.GenerateMonthly(context.Background())
 	if err != nil {
 		t.Fatalf("GenerateMonthly failed: %v", err)
 	}
@@ -238,14 +239,14 @@ func TestGenerateMonthly_Idempotent(t *testing.T) {
 
 	db.Create(&ContentStat{ContentHash: "ch", PeriodType: PeriodTypeDay, PeriodStart: monthBegin, Seconds: 50, Views: 5})
 
-	if err := repo.GenerateMonthly(); err != nil {
+	if err := repo.GenerateMonthly(context.Background()); err != nil {
 		t.Fatalf("first GenerateMonthly call failed: %v", err)
 	}
 
 	var firstResult ContentStat
 	db.Where("period_type = ? AND content_hash = ?", PeriodTypeMonth, "ch").First(&firstResult)
 
-	if err := repo.GenerateMonthly(); err != nil {
+	if err := repo.GenerateMonthly(context.Background()); err != nil {
 		t.Fatalf("second GenerateMonthly (no new data) failed: %v", err)
 	}
 
@@ -277,7 +278,7 @@ func TestGenerateMonthly_DeletesDailyRows(t *testing.T) {
 		})
 	}
 
-	err := repo.GenerateMonthly()
+	err := repo.GenerateMonthly(context.Background())
 	if err != nil {
 		t.Fatalf("GenerateMonthly failed: %v", err)
 	}
@@ -299,12 +300,12 @@ func TestGenerateMonthly_EmptyPeriodDoesNotFail(t *testing.T) {
 	db := setupAggTestDB(t)
 	repo := NewAggregationRepository(db)
 
-	err := repo.GenerateDaily()
+	err := repo.GenerateDaily(context.Background())
 	if err != nil {
 		t.Errorf("GenerateDaily with no logs should not error: %v", err)
 	}
 
-	err = repo.GenerateMonthly()
+	err = repo.GenerateMonthly(context.Background())
 	if err != nil {
 		t.Errorf("GenerateMonthly with no daily data should not error: %v", err)
 	}

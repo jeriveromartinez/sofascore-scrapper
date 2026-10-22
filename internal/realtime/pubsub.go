@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"github.com/redis/go-redis/v9"
@@ -17,6 +18,12 @@ import (
 // `push:fanout` name is the spec default. Tests may use a different
 // name via SubscriberConfig.Channel to keep messages isolated.
 const PubSubChannel = "push:fanout"
+
+// subscribeConfirmTimeout bounds the wait for the SUBSCRIBE confirmation.
+// The app ctx has no deadline and go-redis then reads without one, so a
+// Redis that accepts the connection but never answers would block Start,
+// and with it shutdown, forever.
+const subscribeConfirmTimeout = 5 * time.Second
 
 // SubscriberConfig parameterizes a Subscriber. Channel defaults to
 // PubSubChannel; Logger defaults to slog.Default().
@@ -86,7 +93,10 @@ func (s *Subscriber) Start(ctx context.Context) error {
 		// before publishing anything. Without this, a publish on
 		// the same goroutine immediately after Subscribe can race
 		// the broker and be lost.
-		if _, err := sub.Receive(ctx); err != nil {
+		if _, err := sub.ReceiveTimeout(ctx, subscribeConfirmTimeout); err != nil {
+			if closeErr := sub.Close(); closeErr != nil {
+				s.logger.Warn("pubsub: close failed subscription", slog.String("error", closeErr.Error()))
+			}
 			startErr = fmt.Errorf("subscribe %q: %w", s.cfg.Channel, err)
 			return
 		}
@@ -149,6 +159,7 @@ func (s *Subscriber) run(ctx context.Context, sub *redis.PubSub) {
 	for {
 		select {
 		case <-ctx.Done():
+			s.logger.Info("pubsub: subscriber stopped", slog.String("reason", ctx.Err().Error()))
 			return
 		case <-s.done:
 			return

@@ -20,8 +20,8 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) SaveCrash(report CrashReport) error {
-	return r.db.Create(&report).Error
+func (r *Repository) SaveCrash(ctx context.Context, report CrashReport) error {
+	return r.db.WithContext(ctx).Create(&report).Error
 }
 
 // GetTopEvents returns the most-viewed events by content, ignoring

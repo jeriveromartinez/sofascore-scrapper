@@ -105,6 +105,11 @@ func (r *timersRunner) start(ctx context.Context, tickInterval time.Duration, wg
 const timersLockKey = "scheduler:lock:timers:run"
 const timersLockTTL = 25 * time.Second
 
+// timersTickTimeout bounds one tick so a hung query cannot stall
+// scheduled pushes forever. It stays below timersLockTTL so a stuck tick
+// gives up before its lease would need to outlive the TTL.
+const timersTickTimeout = 20 * time.Second
+
 // timersStaleClaimWindow is how long a timer claim may stay open
 // before the reaper assumes the claiming worker died mid-dispatch.
 //
@@ -157,6 +162,9 @@ func (r *timersRunner) tick(ctx context.Context) {
 			slog.String("error", ErrNoLocker.Error()))
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, timersTickTimeout)
+	defer cancel()
+
 	runner := NewRunner(r.locker, r.log())
 	err := runner.RunLocked(ctx, timersLockKey, r.leaseTTL(), func(jobCtx context.Context) error {
 		r.dispatchDue(jobCtx)

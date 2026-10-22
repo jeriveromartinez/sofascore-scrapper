@@ -16,7 +16,11 @@ import (
 )
 
 type Scheduler struct {
+	// mu orders Run against Shutdown: they run on different goroutines
+	// and every wg.Add must happen before Shutdown's wg.Wait.
+	mu              sync.Mutex
 	cancel          context.CancelFunc
+	stopped         bool
 	wg              sync.WaitGroup
 	db              *gorm.DB
 	scrapeSvc       *scraper.Service
@@ -62,13 +66,22 @@ func (s *Scheduler) SetPushService(svc *push.Service, locker redisplatform.Locke
 	s.batchLimit = batchLimit
 }
 
+// Run starts the jobs and blocks until ctx is cancelled or Shutdown is
+// called. Run after Shutdown returns immediately without starting jobs.
 func (s *Scheduler) Run(ctx context.Context) error {
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
+		return nil
+	}
 	localCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	s.cancel = cancel
 
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg, s.logger)
 	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg, s.logger)
 	startTimersRunner(localCtx, s.pushService, s.tickInterval, s.batchLimit, s.pushLocker, s.logger, &s.wg)
+	s.mu.Unlock()
 
 	<-localCtx.Done()
 	s.wg.Wait()
@@ -76,8 +89,13 @@ func (s *Scheduler) Run(ctx context.Context) error {
 }
 
 func (s *Scheduler) Shutdown() {
-	if s.cancel != nil {
-		s.cancel()
+	s.mu.Lock()
+	s.stopped = true
+	cancel := s.cancel
+	s.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
 	}
 	s.wg.Wait()
 }

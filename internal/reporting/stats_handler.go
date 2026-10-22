@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -33,7 +34,8 @@ func (h *StatsHandler) handleTopEvents(c *gin.Context) {
 	}
 	stats, err := h.repo.GetTopEvents(c.Request.Context(), limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().Error("reporting: get top events failed", slog.String("error", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.TopEventsResponse{Stats: EventStatsToProto(stats)})

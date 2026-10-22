@@ -108,6 +108,23 @@ func (c *Connection) IsClosed() bool {
 	return c.closedFlag
 }
 
+// trySend queues raw for the writer without blocking. It holds closedMu
+// so it cannot interleave with Close: once Close has returned nothing
+// more is queued, and a frame is never reported sent to a dead socket.
+func (c *Connection) trySend(raw []byte) (sent, closed bool) {
+	c.closedMu.Lock()
+	defer c.closedMu.Unlock()
+	if c.closedFlag {
+		return false, true
+	}
+	select {
+	case c.send <- raw:
+		return true, false
+	default:
+		return false, false
+	}
+}
+
 // Close shuts the connection down exactly once. It closes the send
 // channel (causing the writer goroutine to exit), invokes the
 // closeHook, and (if a real socket was wired in) closes the gorilla

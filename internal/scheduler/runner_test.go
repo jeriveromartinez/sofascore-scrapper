@@ -12,8 +12,10 @@ import (
 )
 
 type fakeLease struct {
-	renewErr error
-	renews   atomic.Int32
+	renewErr      error
+	renews        atomic.Int32
+	releaseCtx    context.Context
+	releaseCtxErr error
 }
 
 func (l *fakeLease) Key() string   { return "fake-lock" }
@@ -24,7 +26,11 @@ func (l *fakeLease) Renew(ctx context.Context, ttl time.Duration) error {
 	return l.renewErr
 }
 
-func (l *fakeLease) Release(ctx context.Context) error { return nil }
+func (l *fakeLease) Release(ctx context.Context) error {
+	l.releaseCtx = ctx
+	l.releaseCtxErr = ctx.Err()
+	return nil
+}
 
 type fakeLocker struct {
 	lease     *fakeLease
@@ -114,5 +120,37 @@ func TestRunLockedReportsRenewFailure(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("RunLocked did not return after the lease renewal failed")
+	}
+}
+
+type runnerCtxKey struct{}
+
+// TestRunLockedReleaseKeepsContextValues asserts the release runs on a
+// context derived from the caller's (values preserved) that survives
+// the caller's cancellation and is still bounded by a deadline.
+func TestRunLockedReleaseKeepsContextValues(t *testing.T) {
+	lease := &fakeLease{}
+	runner := NewRunner(&fakeLocker{lease: lease, acquired: true}, slog.Default())
+
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), runnerCtxKey{}, "trace-1"))
+	err := runner.RunLocked(ctx, "test:release", time.Minute, func(context.Context) error {
+		cancel()
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("RunLocked: %v", err)
+	}
+
+	if lease.releaseCtx == nil {
+		t.Fatal("lease was not released")
+	}
+	if got := lease.releaseCtx.Value(runnerCtxKey{}); got != "trace-1" {
+		t.Fatalf("release ctx value = %v, want trace-1", got)
+	}
+	if lease.releaseCtxErr != nil {
+		t.Fatalf("release ctx inherited the caller's cancellation: %v", lease.releaseCtxErr)
+	}
+	if _, ok := lease.releaseCtx.Deadline(); !ok {
+		t.Fatal("release ctx has no deadline")
 	}
 }
