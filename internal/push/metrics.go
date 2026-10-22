@@ -209,13 +209,3 @@ func FromRealtimeFailureReason(err error) FailureReason {
 	}
 	return FailureInternalError
 }
-
-// IncFailedError is a convenience wrapper: maps the error to a
-// FailureReason and bumps the counter. Used by the service's
-// dispatch loop.
-func (m *Metrics) IncFailedError(err error) {
-	if m == nil {
-		return
-	}
-	m.IncFailed(FromRealtimeFailureReason(err))
-}

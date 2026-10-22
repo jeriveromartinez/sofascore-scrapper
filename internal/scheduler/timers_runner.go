@@ -233,11 +233,9 @@ func (r *timersRunner) dispatchOne(ctx context.Context, timer push.ScheduledPush
 	return r.svc.DispatchTimer(ctx, sched, timer)
 }
 
-// firedCount and failedCount surface the atomic counters so the
-// integration test can assert the runner did its work without
-// scraping logs.
-func (r *timersRunner) firedCount() int64  { return r.firedTotal.Load() }
-func (r *timersRunner) failedCount() int64 { return r.failedTotal.Load() }
+// firedCount surfaces the atomic counter so the integration test
+// can assert the runner did its work without scraping logs.
+func (r *timersRunner) firedCount() int64 { return r.firedTotal.Load() }
 
 // RunOnce exposes the tick to the integration test so the cron
 // clock is not in the loop.

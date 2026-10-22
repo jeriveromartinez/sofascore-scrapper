@@ -4,8 +4,6 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
-
-	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 )
 
 // ErrDeviceNotConnected is returned by DeliverToLocal when the
@@ -167,19 +165,4 @@ func (h *Hub) DeliverToLocal(deviceID uint64, payload FramePayload) error {
 		c.Close(1011, "send buffer full")
 		return ErrDeviceNotConnected
 	}
-}
-
-// DeliverPushToLocal is a typed convenience wrapper around
-// DeliverToLocal for the common case of a WsPush.
-func (h *Hub) DeliverPushToLocal(deviceID uint64, push *pb.WsPush) error {
-	return h.DeliverToLocal(deviceID, &wsPushPayload{push: push})
-}
-
-// wsPushPayload adapts *pb.WsPush to the FramePayload interface.
-type wsPushPayload struct {
-	push *pb.WsPush
-}
-
-func (w *wsPushPayload) encode() ([]byte, error) {
-	return encodeFrame(&pb.WsFrame{Payload: &pb.WsFrame_Push{Push: w.push}})
 }
