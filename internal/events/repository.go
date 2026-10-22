@@ -118,38 +118,51 @@ func NewRepositoryWithLogoScheduler(db *gorm.DB, scheduler TeamLogoScheduler) *R
 	return repository
 }
 
-func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
-	var teams []Team
-	if err := r.db.WithContext(ctx).Find(&teams).Error; err != nil {
-		return fmt.Errorf("load teams for logo reconciliation: %w", err)
-	}
+const reconcileTeamLogosBatchSize = 500
 
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, team := range teams {
-			localURL := TeamLogoAPIPath(team.TeamId)
-			if team.LogoUrl == localURL {
-				continue
-			}
-			if err := tx.Model(&Team{}).Where("team_id = ?", team.TeamId).Update("logo_url", localURL).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
+// teamLogoAPIPathSQL is the SQL equivalent of TeamLogoAPIPath for the
+// team_id column. sqlite has no CONCAT and MariaDB only treats || as
+// concatenation under PIPES_AS_CONCAT, so the expression is per dialect.
+func teamLogoAPIPathSQL(db *gorm.DB) clause.Expr {
+	if db.Dialector.Name() == "sqlite" {
+		return gorm.Expr("? || CAST(team_id AS TEXT)", teamLogoAPIPrefix)
+	}
+	return gorm.Expr("CONCAT(?, team_id)", teamLogoAPIPrefix)
+}
+
+func (r *Repository) ReconcileTeamLogos(ctx context.Context) error {
+	db := r.db.WithContext(ctx)
+	localURL := teamLogoAPIPathSQL(db)
+	if err := db.Model(&Team{}).
+		Where("logo_url IS NULL OR logo_url <> ?", localURL).
+		Update("logo_url", localURL).Error; err != nil {
 		return fmt.Errorf("normalize team logo URLs: %w", err)
 	}
 
-	for _, team := range teams {
-		if _, err := os.Stat(TeamLogoLocalPath(team.TeamId)); err == nil {
-			continue
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("inspect logo for team %d: %w", team.TeamId, err)
-		}
-		r.scheduleLogo(r.db, LogoJob{
-			TeamID:     team.TeamId,
-			TeamName:   team.Name,
-			PrimaryURL: TeamLogoSourceURL(team.TeamId),
-		})
+	var batch []Team
+	var inspectErr error
+	err := db.Select("id", "team_id", "name").
+		FindInBatches(&batch, reconcileTeamLogosBatchSize, func(_ *gorm.DB, _ int) error {
+			for _, team := range batch {
+				if _, err := os.Stat(TeamLogoLocalPath(team.TeamId)); err == nil {
+					continue
+				} else if !errors.Is(err, os.ErrNotExist) {
+					inspectErr = fmt.Errorf("inspect logo for team %d: %w", team.TeamId, err)
+					return inspectErr
+				}
+				r.scheduleLogo(r.db, LogoJob{
+					TeamID:     team.TeamId,
+					TeamName:   team.Name,
+					PrimaryURL: TeamLogoSourceURL(team.TeamId),
+				})
+			}
+			return nil
+		}).Error
+	if inspectErr != nil {
+		return inspectErr
+	}
+	if err != nil {
+		return fmt.Errorf("load teams for logo reconciliation: %w", err)
 	}
 	return nil
 }
