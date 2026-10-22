@@ -308,6 +308,7 @@ describe("pushes.vue error recovery", () => {
       error: string;
     };
     createSchedule: () => Promise<void>;
+    togglePushExpansion: (p: { id: number }) => Promise<void>;
   };
 
   async function mountPushes() {
@@ -341,6 +342,20 @@ describe("pushes.vue error recovery", () => {
     expect(vm.scheduleForm.loading).toBe(false);
     expect(vm.scheduleForm.error).not.toBe("");
     expect(pushesApiService.createSchedule).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("retries loading campaign metrics after a failed attempt", async () => {
+    vi.mocked(pushesApiService.getCampaignMetrics).mockRejectedValueOnce(new Error("down"));
+    const wrapper = await mountPushes();
+    const vm = wrapper.vm as unknown as PushesVm;
+    const push = { id: 5 };
+
+    await vm.togglePushExpansion(push);
+    await vm.togglePushExpansion(push);
+    await vm.togglePushExpansion(push);
+
+    expect(pushesApiService.getCampaignMetrics).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 });
