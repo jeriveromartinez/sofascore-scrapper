@@ -463,11 +463,13 @@ func (s *UploadStateStore) ListExpired(ctx context.Context, before time.Time, li
 		return nil, nil
 	}
 
-	raw, err := s.client.ZRangeByScore(ctx, uploadExpiresSet, &goredis.ZRangeBy{
-		Min:    "0",
-		Max:    strconv.FormatInt(before.UnixMilli(), 10),
-		Offset: 0,
-		Count:  int64(limit),
+	raw, err := s.client.ZRangeArgs(ctx, goredis.ZRangeArgs{
+		Key:     uploadExpiresSet,
+		Start:   "0",
+		Stop:    strconv.FormatInt(before.UnixMilli(), 10),
+		ByScore: true,
+		Offset:  0,
+		Count:   int64(limit),
 	}).Result()
 	if err != nil {
 		return nil, fmt.Errorf("list expired: %w", err)
