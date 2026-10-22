@@ -2,6 +2,7 @@ package events
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -122,7 +123,8 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 
 	events, hasMore, err := h.repo.ListPage(c.Request.Context(), filter)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

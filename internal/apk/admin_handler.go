@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -83,7 +84,8 @@ func (h *AdminHandler) handleListVersionsPage(c *gin.Context) {
 
 	versions, hasMore, err := h.repo.ListPage(c.Request.Context(), createdAtStr, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -450,7 +452,8 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 func (h *AdminHandler) handleListVersions(c *gin.Context) {
 	versions, err := h.repo.ListAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -478,7 +481,8 @@ func (h *AdminHandler) handleUpdateVersion(c *gin.Context) {
 			server.RespondError(c, http.StatusNotFound, "APK version not found")
 			return
 		}
-		server.RespondError(c, http.StatusInternalServerError, "could not update APK URL: "+err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
