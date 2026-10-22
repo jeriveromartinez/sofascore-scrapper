@@ -250,10 +250,20 @@ func downloadTeamLogoWithContext(ctx context.Context, teamID int64, sourceURL st
 	}
 	tmpPath := f.Name()
 
-	if _, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxLogoBytes)); copyErr != nil {
+	// Read one byte past the cap. io.LimitReader alone would stop at
+	// exactly maxLogoBytes and silently persist the truncated prefix
+	// as if it were a complete logo, so a chunked response (no
+	// Content-Length to check up front) would slip through.
+	written, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxLogoBytes+1))
+	if copyErr != nil {
 		f.Close()
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("could not write image data: %w", copyErr)
+	}
+	if written > maxLogoBytes {
+		f.Close()
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("logo body too large: more than %d bytes for team %d", maxLogoBytes, teamID)
 	}
 
 	if err := f.Close(); err != nil {
