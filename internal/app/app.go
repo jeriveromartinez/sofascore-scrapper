@@ -55,10 +55,6 @@ type App struct {
 	// flip delivery_attempts to DELIVERED on the same database
 	// the REST handlers read.
 	pushService *push.Service
-	// pushMetrics exports the push counters/gauges/histograms to
-	// the project's Prometheus registry. nil-safe so tests can
-	// skip wiring it.
-	pushMetrics *push.Metrics
 	ready       atomic.Bool
 	batchSize   int
 	concur      int
@@ -141,7 +137,6 @@ func New(cfg config.Config) (*App, error) {
 		Logger:    logger,
 	})
 	pushMetrics := push.NewMetrics(observability.Registerer())
-	app.pushMetrics = pushMetrics
 	pushRepo := push.NewRepository(db)
 	domainRepoPush := domains.NewRepository(db)
 	userRepoPush := users.NewRepository(db)
