@@ -3,7 +3,6 @@ package push
 import (
 	"errors"
 
-	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -197,15 +196,4 @@ func (m *Metrics) SetActiveSchedules(n int64) {
 		return
 	}
 	m.active.Set(float64(n))
-}
-
-// FromRealtimeFailureReason maps the realtime package's
-// ErrDeviceNotConnected sentinel to the failure reason used by
-// the metrics layer. Kept here (rather than in realtime) so the
-// push feature owns its own metric labels.
-func FromRealtimeFailureReason(err error) FailureReason {
-	if err == realtime.ErrDeviceNotConnected {
-		return FailureDeviceOffline
-	}
-	return FailureInternalError
 }

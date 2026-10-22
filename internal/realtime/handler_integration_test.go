@@ -257,26 +257,6 @@ func (c *dartLikeClient) readFrame(t *testing.T, timeout time.Duration) []byte {
 	}
 }
 
-// sendAck writes a WsPushAck application frame (BinaryMessage).
-// Mirrors _sendAck in the Flutter client.
-func (c *dartLikeClient) sendAck(t *testing.T, messageID string) {
-	t.Helper()
-	ack := &pbWsFrame{
-		PushAck: &pb.WsPushAck{
-			MessageId: messageID,
-			AckedAt:   time.Now().UnixMilli(),
-		},
-	}
-	raw, err := encodeFrame(ack.toProto())
-	if err != nil {
-		t.Fatalf("encode ack: %v", err)
-	}
-	_ = c.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-	if err := c.conn.WriteMessage(websocket.BinaryMessage, raw); err != nil {
-		t.Fatalf("write ack: %v", err)
-	}
-}
-
 // sendPong writes a WsPong application frame. This is how the real
 // Flutter client answers a server ping (realtime_service.dart:257).
 func (c *dartLikeClient) sendPong(t *testing.T) {
