@@ -78,9 +78,11 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 	// users.Repository.CreateAndMaybeBootstrapAdmin), so two
 	// concurrent registrations on a fresh install cannot both
 	// observe "count == 1" and both promote themselves, and a slow
-	// DB cannot land the operator with role='user'. The returned
-	// 'promoted' flag is informational.
-	_ = promoted
+	// DB cannot land the operator with role='user'.
+	if promoted {
+		slog.Default().Info("auth: first account promoted to admin",
+			slog.Uint64("user_id", uint64(user.ID)))
+	}
 	response, err := h.buildAuthResponse(c.Request.Context(), user.ID, user.Email)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "token generation failed")
