@@ -147,9 +147,12 @@ func (h *Hub) DeliverToLocal(deviceID uint64, payload FramePayload) error {
 	// Non-blocking send: if the writer is behind, the connection is
 	// probably dead. We close it and report the failure so the
 	// delivery is recorded as ws_disconnected, not silently dropped.
-	select {
-	case c.send <- raw:
+	sent, closed := c.trySend(raw)
+	switch {
+	case sent:
 		return nil
+	case closed:
+		return ErrDeviceNotConnected
 	default:
 		// Send buffer saturated — log it so operators can correlate
 		// with a slow client (the most common cause). The push

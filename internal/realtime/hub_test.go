@@ -173,3 +173,40 @@ func TestHub_DeliverToClosedConnectionReportsNotConnected(t *testing.T) {
 		t.Fatalf("%d frames queued on a closed connection", n)
 	}
 }
+
+// TestHub_NoEnqueueAfterCloseReturns hammers Close against
+// DeliverToLocal: once Close has returned, no frame may land on the
+// send queue, otherwise it is reported delivered but never written.
+func TestHub_NoEnqueueAfterCloseReturns(t *testing.T) {
+	const rounds = 2000
+	const deliverers = 4
+	payload := &testPush{ID: 1, MessageID: "1"}
+
+	for round := 0; round < rounds; round++ {
+		hub := NewHub()
+		conn := newTestConnection(t, 42, 1, 1)
+		hub.Register(42, conn)
+
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i := 0; i < deliverers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				for j := 0; j < 3; j++ {
+					_ = hub.DeliverToLocal(42, payload)
+				}
+			}()
+		}
+
+		close(start)
+		conn.Close(1000, "client gone")
+		queuedAtClose := len(conn.send)
+		wg.Wait()
+
+		if got := len(conn.send); got != queuedAtClose {
+			t.Fatalf("round %d: %d frames enqueued after Close returned", round, got-queuedAtClose)
+		}
+	}
+}
