@@ -9,6 +9,8 @@ import {
   ApiError,
   refreshAuth,
   BaseApiService,
+  REQUEST_TIMEOUT_MS,
+  UPLOAD_TIMEOUT_MS,
 } from "./BaseApiService";
 import { StatusMessage } from "../../proto/api";
 
@@ -253,5 +255,81 @@ describe("BaseApiService empty protobuf body", () => {
 
     expect(result).toEqual({ message: "" });
     expect(result).not.toBeUndefined();
+  });
+});
+
+describe("BaseApiService timeouts", () => {
+  class UploadService extends BaseApiService {
+    constructor() {
+      super("/test");
+    }
+
+    upload(form: FormData): Promise<StatusMessage> {
+      return this.postMultipart("", form, StatusMessage);
+    }
+
+    uploadJSON(form: FormData): Promise<unknown> {
+      return this.postMultipartJSON("", form);
+    }
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    clearAuthStorage();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("creates its axios instance with a finite request timeout", () => {
+    const create = vi.spyOn(axios, "create");
+    new UploadService();
+    expect(REQUEST_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ timeout: REQUEST_TIMEOUT_MS }));
+  });
+
+  it("gives multipart uploads a longer explicit timeout", async () => {
+    const post = vi.fn(async () => ({ data: new ArrayBuffer(0), status: 200, headers: {} }));
+    vi.spyOn(axios, "create").mockReturnValue({
+      post,
+      interceptors: { response: { use: vi.fn() } },
+    } as never);
+    const service = new UploadService();
+
+    await service.upload(new FormData());
+    await service.uploadJSON(new FormData());
+
+    expect(UPLOAD_TIMEOUT_MS).toBeGreaterThan(REQUEST_TIMEOUT_MS);
+    for (const call of post.mock.calls as unknown as Array<[string, unknown, { timeout?: number }]>) {
+      expect(call[2].timeout).toBe(UPLOAD_TIMEOUT_MS);
+    }
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("bounds the refresh request with the request timeout", async () => {
+    writeAuthStorage({ id: 1, email: "a@b.com", token: "t", refreshToken: "r" }, false);
+    const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 401, data: new ArrayBuffer(0) });
+
+    await refreshAuth();
+
+    expect(post).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      expect.objectContaining({ timeout: REQUEST_TIMEOUT_MS }),
+    );
+  });
+
+  it("starts a new refresh after a timed-out one instead of reusing it", async () => {
+    writeAuthStorage({ id: 1, email: "a@b.com", token: "t", refreshToken: "r" }, false);
+    const post = vi
+      .spyOn(axios, "post")
+      .mockRejectedValueOnce(Object.assign(new Error("timeout of 30000ms exceeded"), { code: "ECONNABORTED" }))
+      .mockResolvedValueOnce({ status: 401, data: new ArrayBuffer(0) });
+
+    await expect(refreshAuth()).rejects.toThrow("timeout");
+    await expect(refreshAuth()).resolves.toBeNull();
+
+    expect(post).toHaveBeenCalledTimes(2);
   });
 });

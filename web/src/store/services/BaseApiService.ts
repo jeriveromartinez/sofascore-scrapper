@@ -9,6 +9,10 @@ import { readAuthStorage, clearAuthStorage } from "../authStorage";
 
 const PROTO_CONTENT_TYPE = "application/x-protobuf";
 
+export const REQUEST_TIMEOUT_MS = 30_000;
+// Upload bodies reach 10 MiB (one APK chunk), far beyond what slow links move in REQUEST_TIMEOUT_MS.
+export const UPLOAD_TIMEOUT_MS = 10 * 60_000;
+
 let refreshPromise: Promise<UserAuthModel | null> | null = null;
 
 export interface ProtoCodec<T> {
@@ -84,6 +88,7 @@ export async function refreshAuth(): Promise<UserAuthModel | null> {
         },
         responseType: "arraybuffer",
         validateStatus: () => true,
+        timeout: REQUEST_TIMEOUT_MS,
       },
     );
 
@@ -125,7 +130,7 @@ export abstract class BaseApiService {
   protected readonly pathApi: string;
 
   constructor(pathApi: string) {
-    this.http = axios.create({ baseURL: API_BASE_URL });
+    this.http = axios.create({ baseURL: API_BASE_URL, timeout: REQUEST_TIMEOUT_MS });
     this.pathApi = pathApi;
     this.setupInterceptors();
   }
@@ -380,6 +385,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      timeout: UPLOAD_TIMEOUT_MS,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
@@ -406,6 +412,7 @@ export abstract class BaseApiService {
       {
         headers,
         validateStatus: () => true,
+        timeout: UPLOAD_TIMEOUT_MS,
       },
     );
 
