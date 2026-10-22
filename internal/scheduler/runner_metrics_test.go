@@ -2,13 +2,25 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+// metricsJobSeq disambiguates the job label used by the metric tests.
+// The collectors are process-wide, so a fixed label would accumulate
+// across repeated runs of the same test and make the assertions
+// depend on how many times the package had already run.
+var metricsJobSeq atomic.Uint64
+
+func metricsJob(prefix string) string {
+	return fmt.Sprintf("%s:%d", prefix, metricsJobSeq.Add(1))
+}
 
 // jobMetric gathers collector through a private registry and returns
 // the counter value or histogram sample count of the series for job.
@@ -39,7 +51,7 @@ func jobMetric(t *testing.T, collector prometheus.Collector, job string) float64
 }
 
 func TestRunLockedRecordsJobRunMetrics(t *testing.T) {
-	const job = "test:metrics:run"
+	job := metricsJob("test:metrics:run")
 	runner := NewRunner(&fakeLocker{lease: &fakeLease{}, acquired: true}, slog.Default())
 
 	if err := runner.RunLocked(context.Background(), job, time.Minute, func(context.Context) error { return nil }); err != nil {
@@ -58,7 +70,7 @@ func TestRunLockedRecordsJobRunMetrics(t *testing.T) {
 }
 
 func TestRunLockedWithoutLockerRecordsJobRunMetrics(t *testing.T) {
-	const job = "test:metrics:nolocker"
+	job := metricsJob("test:metrics:nolocker")
 	runner := NewRunner(nil, slog.Default())
 
 	if err := runner.RunLocked(context.Background(), job, time.Minute, func(context.Context) error { return nil }); err != nil {
@@ -74,7 +86,7 @@ func TestRunLockedWithoutLockerRecordsJobRunMetrics(t *testing.T) {
 }
 
 func TestRunLockedRecordsLockContention(t *testing.T) {
-	const job = "test:metrics:contention"
+	job := metricsJob("test:metrics:contention")
 	runner := NewRunner(&fakeLocker{lease: &fakeLease{}, acquired: false}, slog.Default())
 
 	ran := false
