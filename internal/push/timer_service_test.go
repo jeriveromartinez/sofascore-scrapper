@@ -17,13 +17,13 @@ import (
 )
 
 // timerFixture holds the wiring a test needs to exercise
-//// per-device timezone scheduling without booting the whole app.
+// // per-device timezone scheduling without booting the whole app.
 type timerFixture struct {
-	db        *gorm.DB
-	repo      *Repository
-	uid       uint
-	domainID  uint
-	devices   []devices.Device
+	db       *gorm.DB
+	repo     *Repository
+	uid      uint
+	domainID uint
+	devices  []devices.Device
 }
 
 func newTimerFixture(t *testing.T) *timerFixture {
