@@ -117,8 +117,7 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 		// fails (network wedge, client tore down the socket right
 		// after the upgrade handshake, etc.) the connection is
 		// useless: register nothing, log the failure so it shows
-		// up in dashboards, and let the socket be garbage-collected
-		// by the underlying server. (Bug fix: B2 — previously the
+		// up in dashboards, and close the socket. (Bug fix: B2 — previously the
 		// error was discarded and a doomed connection was still
 		// registered, which silently stranded every subsequent push.)
 		// The Connection is only built once the hello is out: its ack
