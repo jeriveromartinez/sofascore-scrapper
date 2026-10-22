@@ -2,6 +2,7 @@ package devices
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -38,10 +39,11 @@ func escapeLike(s string) string {
 	return b.String()
 }
 
-func (r *Repository) Register(userID *uint, token, platform, name, version, packageId, timezone string) (*Device, error) {
+func (r *Repository) Register(ctx context.Context, userID *uint, token, platform, name, version, packageId, timezone string) (*Device, error) {
 	if packageId == "" || token == "" || name == "" {
 		return nil, gorm.ErrInvalidData
 	}
+	db := r.db.WithContext(ctx)
 
 	var apkDev apk.ApkVersion
 	// Match APK by exact package_name (not LIKE). packageId comes from
@@ -49,7 +51,10 @@ func (r *Repository) Register(userID *uint, token, platform, name, version, pack
 	// otherwise send "%" and bind the device to whichever APK row the
 	// planner picks first — leaking the chosen domain as the device's
 	// future push audience.
-	if err := r.db.Model(&apk.ApkVersion{}).Where("package_name = ?", packageId).First(&apkDev).Error; err != nil || apkDev.ID == 0 || apkDev.IPTVUrl == "" {
+	if err := db.Model(&apk.ApkVersion{}).Where("package_name = ?", packageId).First(&apkDev).Error; err != nil {
+		return nil, invalidDataUnlessDBError(err)
+	}
+	if apkDev.IPTVUrl == "" {
 		return nil, gorm.ErrInvalidData
 	}
 
@@ -69,15 +74,25 @@ func (r *Repository) Register(userID *uint, token, platform, name, version, pack
 	// the escape guards against is apkDev.IPTVUrl itself: an operator
 	// that registers a domain containing "_" or "%" would otherwise
 	// silently widen the match.
-	if err := r.db.Model(&domains.Domain{}).Where("domain LIKE ? ESCAPE '\\'", "%"+escapeLike(domainStr)).First(&domain).Error; err != nil || domain.ID == 0 {
-		return nil, gorm.ErrInvalidData
+	if err := db.Model(&domains.Domain{}).Where("domain LIKE ? ESCAPE '\\'", "%"+escapeLike(domainStr)).First(&domain).Error; err != nil {
+		return nil, invalidDataUnlessDBError(err)
 	}
 
 	device := &Device{UserID: userID, Token: token, Platform: platform, Name: name, Version: version, LastSeen: time.Now().Unix(), PackageId: packageId, DomainID: &domain.ID, Timezone: timezone}
 	assign := Device{UserID: userID, Platform: platform, Name: name, LastSeen: device.LastSeen, Version: version, PackageId: packageId, DomainID: &domain.ID, Timezone: timezone}
 
-	result := r.db.Where(Device{Token: token}).Assign(assign).FirstOrCreate(device)
+	result := db.Where(Device{Token: token}).Assign(assign).FirstOrCreate(device)
 	return device, result.Error
+}
+
+// invalidDataUnlessDBError keeps "no matching row" reported as invalid
+// registration data while letting real failures (a cancelled request,
+// a lost connection) surface as themselves.
+func invalidDataUnlessDBError(err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return gorm.ErrInvalidData
+	}
+	return err
 }
 
 func (r *Repository) UpdateLastSeen(ctx context.Context, token string) error {
@@ -105,9 +120,9 @@ func (r *Repository) GetDevices(ctx context.Context, page, limit uint) ([]Device
 	return devices, total, result.Error
 }
 
-func (r *Repository) GetAll() ([]Device, error) {
+func (r *Repository) GetAll(ctx context.Context) ([]Device, error) {
 	var devices []Device
-	result := r.db.Order("id DESC").Limit(maxAllDevices).Find(&devices)
+	result := r.db.WithContext(ctx).Order("id DESC").Limit(maxAllDevices).Find(&devices)
 	return devices, result.Error
 }
 

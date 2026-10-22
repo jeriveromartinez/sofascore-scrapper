@@ -137,7 +137,7 @@ func (h *AdminHandler) handleGetDevices(c *gin.Context) {
 }
 
 func (h *AdminHandler) handleGetAllDevices(c *gin.Context) {
-	devices, err := h.repo.GetAll()
+	devices, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return

@@ -43,3 +43,27 @@ func TestGetDevicesHonoursCancelledContext(t *testing.T) {
 		t.Fatalf("GetDevices with cancelled ctx: want context.Canceled, got %v", err)
 	}
 }
+
+func TestRegisterHonoursCancelledContext(t *testing.T) {
+	repo := NewRepository(newDevicesTestDB(t))
+
+	if _, err := repo.Register(cancelledContext(), nil, "tok", "android", "Box", "1.0", "com.example.app", ""); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Register with cancelled ctx: want context.Canceled, got %v", err)
+	}
+}
+
+func TestRegisterRejectsUnknownPackageAsInvalidData(t *testing.T) {
+	repo := NewRepository(newDevicesTestDB(t))
+
+	if _, err := repo.Register(context.Background(), nil, "tok", "android", "Box", "1.0", "com.unknown.app", ""); !errors.Is(err, gorm.ErrInvalidData) {
+		t.Fatalf("Register with unknown package: want gorm.ErrInvalidData, got %v", err)
+	}
+}
+
+func TestGetAllHonoursCancelledContext(t *testing.T) {
+	repo := NewRepository(newDevicesTestDB(t))
+
+	if _, err := repo.GetAll(cancelledContext()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetAll with cancelled ctx: want context.Canceled, got %v", err)
+	}
+}
