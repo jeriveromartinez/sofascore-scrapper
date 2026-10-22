@@ -89,7 +89,6 @@ onUnmounted(() => {
             <!-- /Search -->
 
             <ul class="navbar-nav flex-row align-items-center ms-md-auto">
-              <!-- Place this tag where you want the button to render. -->
               <theme-selector />
 
               <!-- User -->
@@ -198,41 +197,6 @@ onUnmounted(() => {
                     v-if="buildInfo.loaded"
                     class="text-body-secondary ms-2"
                   >· v{{ buildInfo.version }} · {{ buildInfo.commit }}</small>
-                </div>
-                <div class="d-none d-lg-inline-block">
-                  <!-- <a
-                    href="https://themeselection.com/item/category/admin-templates/"
-                    target="_blank"
-                    class="footer-link me-4"
-                    >Admin Templates</a
-                  >
-
-                  <a
-                    href="https://themeselection.com/license/"
-                    class="footer-link me-4"
-                    target="_blank"
-                    >License</a
-                  >
-                  <a
-                    href="https://themeselection.com/item/category/bootstrap-admin-templates/"
-                    target="_blank"
-                    class="footer-link me-4"
-                    >Bootstrap Dashboard</a
-                  >
-
-                  <a
-                    href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/documentation/"
-                    target="_blank"
-                    class="footer-link me-4"
-                    >Documentation</a
-                  >
-
-                  <a
-                    href="https://github.com/themeselection/sneat-bootstrap-html-admin-template-free/issues"
-                    target="_blank"
-                    class="footer-link"
-                    >Support</a
-                  > -->
                 </div>
               </div>
             </div>
