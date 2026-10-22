@@ -15,30 +15,41 @@ Their alert-rule names are the canonical keys.
 
 | Alert | First action |
 |---|---|
-| `scores365_health_probe_failure` | The `/health/ready` probe has been failing for 2 minutes. `curl -fs http://127.0.0.1:8080/health/ready` from the host. If 503, jump to [Troubleshooting → DB or Redis unreachable](troubleshooting.md#db-or-redis-unreachable). |
-| `scores365_scrape_failure_rate` | `>5%` error ratio over 5 minutes. `curl -fs -H 'Referer: https://www.365scores.com/' 'https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=21/10/2026&endDate=21/10/2026&onlyMajorGames=false&withTop=true' \| head -c 200` from the host. 200 = upstream OK; 503/429 = upstream degraded; 404 = endpoint removed (escalate). |
+| `scores365_health_probe_failure` | Prometheus has failed to scrape a backend's `/metrics` for 2 minutes (`up{job="scores365-backends"} == 0`). `sudo systemctl status iptv.service` and `curl -fs http://127.0.0.1:8080/health/ready` from the host. If 503, jump to [Troubleshooting → DB or Redis unreachable](troubleshooting.md#db-or-redis-unreachable). |
+| `scores365_scrape_failure_rate` | `>5%` of league scrapes failed over 5 minutes (`scrape_requests_total{status="error"}`). `curl -fs -H 'Referer: https://www.365scores.com/' 'https://webws.365scores.com/web/games/allscores/?appTypeId=5&langId=29&timezoneName=UTC&userCountryId=116&startDate=21/10/2026&endDate=21/10/2026&onlyMajorGames=false&withTop=true' \| head -c 200` from the host. 200 = upstream OK; 503/429 = upstream degraded; 404 = endpoint removed (escalate). |
 | `scores365_goroutine_leak_high` | `go_goroutines` trending up by >5/10m and currently >200. Restart the service to recover: `sudo systemctl restart iptv.service`. Then look for recent code changes that opened goroutines without canceling them. |
 | `scores365_db_connection_pool_exhausted` | `sql_in_use_connections == sql_open_connections` and waiters accumulating. `SHOW FULL PROCESSLIST` to find blocking queries; `KILL <id>` to clear them. If chronic, lower `DB_MAX_OPEN_CONNS` per backend or raise MariaDB's `max_connections`. |
 
 ### Alert: scores365_health_probe_failure
 
-`/health/ready` has been failing for 2 minutes. The readiness probe
-(`internal/server/health.go`) checks both MariaDB and Redis.
+Prometheus has failed to scrape `/metrics` on the instance for 2
+minutes (`up{job="scores365-backends"} == 0`; no blackbox_exporter
+is deployed). The process is down, crash-looping or unreachable from
+Prometheus.
 
 ```bash
-curl -fs http://127.0.0.1:8080/health/ready
+sudo systemctl status iptv.service
 sudo journalctl -u iptv.service -n 50 --no-pager
+curl -fs http://127.0.0.1:8080/health/ready
 ```
 
-A 503 means a dependency is unreachable — jump to
-[Troubleshooting → DB or Redis unreachable](troubleshooting.md#db-or-redis-unreachable).
-A 200 means the probe target itself is stale; check the blackbox
-scrape configuration.
+If the service is down, read the journal for the startup error and
+restart it. A 503 from `/health/ready` means a dependency is
+unreachable — jump to
+[Troubleshooting → DB or Redis unreachable](troubleshooting.md#db-or-redis-unreachable)
+(the readiness probe in `internal/server/health.go` checks MariaDB
+and Redis). A 200 with the alert still firing means Prometheus cannot
+reach the target: check the `scores365-backends` targets in
+`deployments/docker/prometheus.yml` and the network between them.
 
 ### Alert: scores365_scrape_failure_rate
 
-More than 5% of scrape requests failed over 5 minutes. Check the
-upstream from the host:
+More than 5% of league scrapes failed over 5 minutes. The scraper
+counts one `scrape_requests_total` sample per league and day,
+labelled `sport` and `status` (`ok`/`error`); a failed bulk day
+fetch counts as an error for every league of that source. Break it
+down with `sum by (sport) (rate(scrape_requests_total{status="error"}[5m]))`.
+Check the upstream from the host:
 
 ```bash
 curl -fs -H 'Referer: https://www.365scores.com/' \
