@@ -49,14 +49,16 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 		}
 
 		result := s.currentSF.DoChan(key, func() (interface{}, error) {
-			// Derive the worker ctx from the caller's ctx so
-			// client disconnects propagate into the in-flight DB
-			// query (previously WithoutCancel meant the worker
-			// happily kept running for the full 30 s flight
-			// timeout even after the originating HTTP request had
-			// gone away; under a sudden burst on a hot match day
-			// this left orphan DB queries per stale-flight key).
-			flightCtx, cancel := context.WithTimeout(ctx, currentEventsFlightTimeout)
+			// The shared load must not inherit the caller's
+			// cancellation. Every concurrent caller waits on this
+			// one flight, so a single client disconnecting would
+			// otherwise abort the database query and make the
+			// other callers fail with "context canceled" even
+			// though they are still connected. The worker keeps
+			// the caller's context values and is bounded by the
+			// flight timeout; the disconnected caller itself
+			// returns ctx.Err() through the select below.
+			flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), currentEventsFlightTimeout)
 			defer cancel()
 
 			// The single-flight worker re-checks the cache under

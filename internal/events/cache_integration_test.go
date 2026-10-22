@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/glebarez/sqlite"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
+	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -53,52 +55,29 @@ func (c *fakeCache) Set(ctx context.Context, key string, value []byte, ttl time.
 	return nil
 }
 
-type missBarrierCache struct {
-	cache   *fakeCache
-	total   int
-	mu      sync.Mutex
-	arrived int
-	release chan struct{}
-}
+// newTestEpochStore returns an EpochStore backed by an in-process
+// Redis that already holds a non-zero epoch, plus the epoch value
+// the cache keys are built from. The service bypasses the cache
+// while the epoch is 0 (every device would otherwise share one
+// key), so the cache tests need a live epoch to reach the cached
+// path at all.
+func newTestEpochStore(t *testing.T) (*EpochStore, int64) {
+	t.Helper()
 
-func newMissBarrierCache(total int) *missBarrierCache {
-	return &missBarrierCache{cache: newFakeCache(), total: total, release: make(chan struct{})}
-}
-
-func (c *missBarrierCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
-	c.mu.Lock()
-	c.arrived++
-	if c.arrived == c.total {
-		close(c.release)
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
 	}
-	release := c.release
-	c.mu.Unlock()
+	t.Cleanup(mr.Close)
 
-	select {
-	case <-release:
-		return c.cache.Get(ctx, key)
-	case <-ctx.Done():
-		return nil, false, ctx.Err()
+	client := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { client.Close() })
+
+	const epoch = int64(1)
+	if err := client.Set(context.Background(), epochKey, epoch, 0).Err(); err != nil {
+		t.Fatalf("seed epoch: %v", err)
 	}
-}
-
-func (c *missBarrierCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	return c.cache.Set(ctx, key, value, ttl)
-}
-
-type fakeEpoch struct {
-	val   int64
-	calls int
-}
-
-func (e *fakeEpoch) Get(ctx context.Context) (int64, error) {
-	e.calls++
-	return e.val, nil
-}
-
-func (e *fakeEpoch) Increment(ctx context.Context) (int64, error) {
-	e.val++
-	return e.val, nil
+	return NewEpochStore(client), epoch
 }
 
 func setupCacheTestDB(t *testing.T) *gorm.DB {
@@ -162,13 +141,13 @@ func TestService_GetCurrentAndUpcoming_CacheHit(t *testing.T) {
 	createTestEvent(repo, 1, "inprogress", 1710000000000, 1710000000000)
 
 	fake := newFakeCache()
-	_ = &fakeEpoch{val: 0}
+	epochStore, epoch := newTestEpochStore(t)
 
-	svc := NewService(repo, fake, &EpochStore{client: nil})
+	svc := NewService(repo, fake, epochStore)
 
 	cached := []Event{{ExternalMatchId: "999", Sport: "from-cache"}}
 	cachedData, _ := json.Marshal(cached)
-	fake.data[BuildCacheKey(0, []uint{1}, 6)] = cachedData
+	fake.data[BuildCacheKey(epoch, []uint{1}, 6)] = cachedData
 
 	events, err := svc.GetCurrentAndUpcoming(context.Background(), 0, 6)
 	if err != nil {
@@ -200,8 +179,9 @@ func TestService_GetCurrentAndUpcoming_CacheMissFills(t *testing.T) {
 	createTestEvent(repo, 1, "inprogress", 1710000000000, 1710000000000)
 
 	fake := newFakeCache()
+	epochStore, epoch := newTestEpochStore(t)
 
-	svc := NewService(repo, fake, &EpochStore{client: nil})
+	svc := NewService(repo, fake, epochStore)
 
 	events, err := svc.GetCurrentAndUpcoming(context.Background(), 0, 6)
 	if err != nil {
@@ -218,7 +198,7 @@ func TestService_GetCurrentAndUpcoming_CacheMissFills(t *testing.T) {
 		t.Error("cache Set should have been called on miss")
 	}
 
-	key := BuildCacheKey(0, []uint{1}, 6)
+	key := BuildCacheKey(epoch, []uint{1}, 6)
 	if _, ok := fake.data[key]; !ok {
 		t.Error("cache should have been populated on miss")
 	}
@@ -232,10 +212,11 @@ func TestService_GetCurrentAndUpcoming_CorruptCacheRepopulates(t *testing.T) {
 	createTestEvent(repo, 2, "inprogress", 1710000000000, 1710000000000)
 
 	fake := newFakeCache()
+	epochStore, epoch := newTestEpochStore(t)
 
-	svc := NewService(repo, fake, &EpochStore{client: nil})
+	svc := NewService(repo, fake, epochStore)
 
-	fake.data[BuildCacheKey(0, []uint{1}, 6)] = []byte("not-valid-json")
+	fake.data[BuildCacheKey(epoch, []uint{1}, 6)] = []byte("not-valid-json")
 
 	events, err := svc.GetCurrentAndUpcoming(context.Background(), 0, 6)
 	if err != nil {
@@ -249,7 +230,7 @@ func TestService_GetCurrentAndUpcoming_CorruptCacheRepopulates(t *testing.T) {
 		t.Errorf("expected DB event after corrupt cache, got externalMatchID=%s", events[0].ExternalMatchId)
 	}
 
-	key := BuildCacheKey(0, []uint{1}, 6)
+	key := BuildCacheKey(epoch, []uint{1}, 6)
 	newData, ok := fake.data[key]
 	if !ok {
 		t.Error("cache should be repopulated after corrupt read")
@@ -268,8 +249,9 @@ func TestService_GetCurrentAndUpcoming_RedisErrorFallsBackToDB(t *testing.T) {
 
 	fake := newFakeCache()
 	fake.getErr = errors.New("redis connection refused")
+	epochStore, _ := newTestEpochStore(t)
 
-	svc := NewService(repo, fake, &EpochStore{client: nil})
+	svc := NewService(repo, fake, epochStore)
 
 	events, err := svc.GetCurrentAndUpcoming(context.Background(), 0, 6)
 	if err != nil {
@@ -291,7 +273,8 @@ func TestService_GetCurrentAndUpcoming_NoCacheFallsBackToDB(t *testing.T) {
 	db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1})
 	createTestEvent(repo, 4, "inprogress", 1710000000000, 1710000000000)
 
-	svc := NewService(repo, nil, &EpochStore{client: nil})
+	epochStore, _ := newTestEpochStore(t)
+	svc := NewService(repo, nil, epochStore)
 
 	events, err := svc.GetCurrentAndUpcoming(context.Background(), 0, 6)
 	if err != nil {
@@ -316,7 +299,8 @@ func TestService_GetCurrentAndUpcoming_DeviceTournamentsPreferred(t *testing.T) 
 	createTestEvent(repo, 1, "inprogress", 1710000000000, 1710000000000)
 	createTestEventWithLeague(repo, 2, 2, "inprogress", 1710000000000, 1710000000000)
 
-	svc := NewService(repo, nil, &EpochStore{client: nil})
+	epochStore, _ := newTestEpochStore(t)
+	svc := NewService(repo, nil, epochStore)
 
 	events, err := svc.GetCurrentAndUpcoming(context.Background(), 42, 6)
 	if err != nil {
@@ -358,8 +342,9 @@ func TestService_GetCurrentAndUpcoming_CoalescesConcurrentCacheMisses(t *testing
 		t.Fatalf("register query callback: %v", err)
 	}
 
-	cache := newMissBarrierCache(callers)
-	service := NewService(NewRepository(db), cache, &EpochStore{client: nil})
+	cache := newFakeCache()
+	epochStore, _ := newTestEpochStore(t)
+	service := NewService(NewRepository(db), cache, epochStore)
 	start := make(chan struct{})
 	type result struct {
 		events []Event
@@ -396,11 +381,11 @@ func TestService_GetCurrentAndUpcoming_CoalescesConcurrentCacheMisses(t *testing
 	if got := eventQueries.Load(); got != 1 {
 		t.Fatalf("event database queries: want 1, got %d", got)
 	}
-	cache.cache.mu.Lock()
-	getCalls := cache.cache.getCalls
-	cache.cache.mu.Unlock()
-	if getCalls != callers+1 {
-		t.Fatalf("cache gets: want %d outer checks plus one flight revalidation, got %d", callers+1, getCalls)
+	cache.mu.Lock()
+	getCalls := cache.getCalls
+	cache.mu.Unlock()
+	if getCalls != 1 {
+		t.Fatalf("cache gets: want only the in-flight worker to consult the cache, got %d", getCalls)
 	}
 }
 
@@ -428,7 +413,8 @@ func TestService_GetCurrentAndUpcoming_CanceledCallerDoesNotCancelSharedLoad(t *
 		t.Fatalf("register query callback: %v", err)
 	}
 
-	service := NewService(NewRepository(db), newFakeCache(), &EpochStore{client: nil})
+	epochStore, _ := newTestEpochStore(t)
+	service := NewService(NewRepository(db), newFakeCache(), epochStore)
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
 	leaderResult := make(chan error, 1)
 	go func() {
