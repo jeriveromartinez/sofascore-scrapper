@@ -176,7 +176,7 @@ type ScheduledPush struct {
 	CronExpr     string       `gorm:"column:cron_expr;size:64"`
 	NextFireAt   time.Time    `gorm:"column:next_fire_at;not null;index:idx_schedules_active_next,priority:2"`
 	LastFiredAt  *time.Time   `gorm:"column:last_fired_at;null"`
-	IsActive     bool         `gorm:"column:is_active;not null;default:true;index:idx_schedules_active_next,priority:1"`
+	IsActive     bool         `gorm:"column:is_active;not null;index:idx_schedules_active_next,priority:1"`
 	TimezoneMode TimezoneMode `gorm:"column:timezone_mode;size:16;not null;default:'shared'"`
 	Timezone     string       `gorm:"column:timezone;size:64;not null;default:'UTC'"`
 	Category     Category     `gorm:"column:category;size:32;not null"`
