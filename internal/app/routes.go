@@ -219,6 +219,8 @@ func NewRouter(db *gorm.DB, redisClient *goredis.Client, cfg config.Config, toke
 		// completion against a closed connection.
 		pushSvc := pushSvc
 		ackHandler = func(ctx context.Context, messageID string) {
+			// OnAck reports a failed persistence itself; the ack
+			// handler has no way to return an error to the client.
 			_ = pushSvc.OnAck(ctx, messageID)
 		}
 	}
