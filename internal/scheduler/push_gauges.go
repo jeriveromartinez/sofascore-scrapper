@@ -40,8 +40,14 @@ func startPushGauges(ctx context.Context, svc *push.Service, interval time.Durat
 		defer ticker.Stop()
 		for {
 			if err := svc.RefreshGauges(ctx); err != nil {
-				logger.Warn("scheduler: refresh push gauges failed",
-					slog.String("error", err.Error()))
+				// A cancelled context aborts the query, so the
+				// shutdown path always reports an error. Logging
+				// it would put a warning in every stop sequence
+				// for what is an expected cancellation.
+				if ctx.Err() == nil {
+					logger.Warn("scheduler: refresh push gauges failed",
+						slog.String("error", err.Error()))
+				}
 			}
 			select {
 			case <-ctx.Done():
