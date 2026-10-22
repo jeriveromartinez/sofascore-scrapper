@@ -4,8 +4,19 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
+)
+
+const (
+	// ackQueueSize bounds the number of acknowledgements buffered per
+	// connection. Acks beyond it are dropped: the delivery stays in
+	// the sent state, which is the same outcome as a lost ack.
+	ackQueueSize = 64
+	// ackTimeout bounds the database round trip of a single
+	// acknowledgement.
+	ackTimeout = 10 * time.Second
 )
 
 // AckHandler is invoked when the client sends a WsPushAck back to the
@@ -14,15 +25,17 @@ import (
 // client-side transport UUID v4 that uniquely identifies the delivery
 // attempt (future Tasks 8-9); the server looks up the row by it.
 //
-// The ctx is the per-connection context; it is cancelled when the
-// connection is torn down, so handlers can stop any background work
-// (DB lookups, retries) the moment the socket goes away.
+// The ctx bounds the handler with ackTimeout and is NOT tied to the
+// socket lifetime: an acknowledgement that reached the server must be
+// persisted even when the client disconnects right after sending it.
 type AckHandler func(ctx context.Context, messageID string)
 
 // CloseHandler is invoked exactly once when the connection is being
 // torn down (either by the server, by the client, or because of an
-// error). It must be safe to call from any goroutine.
-type CloseHandler func(reason string)
+// error). It must be safe to call from any goroutine. It receives the
+// closing connection so the hub can tell whether it is still the one
+// registered for the device.
+type CloseHandler func(c *Connection, reason string)
 
 // Connection wraps a single WebSocket. It owns:
 //   - the gorilla socket pointer (may be nil in unit tests)
@@ -46,11 +59,10 @@ type Connection struct {
 
 	ackHandler AckHandler
 	closeHook  CloseHandler
-	// ctx is cancelled when the connection closes; ack handlers and
-	// anything else tied to the lifetime of the socket should
-	// select on it so they do not outlive the connection.
-	ctx        context.Context
-	ctxCancel  context.CancelFunc
+	// ackQueue buffers the acknowledgements received from the client
+	// so the reader goroutine never blocks on the ack handler, which
+	// performs a database round trip.
+	ackQueue chan string
 	// logger is used for WS send-path diagnostics (e.g. the hub
 	// logs when the send buffer saturates and a connection is
 	// force-closed). nil-safe: callers may pass nil in unit tests
@@ -61,8 +73,7 @@ type Connection struct {
 // newConnection constructs a Connection. ws may be nil in unit tests
 // that exercise the hub without a real socket.
 func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn, ack AckHandler, closeHook CloseHandler, logger *slog.Logger) *Connection {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &Connection{
+	conn := &Connection{
 		deviceID:   deviceID,
 		userID:     userID,
 		domainID:   domainID,
@@ -71,10 +82,11 @@ func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn,
 		closed:     make(chan struct{}),
 		ackHandler: ack,
 		closeHook:  closeHook,
-		ctx:        ctx,
-		ctxCancel:  cancel,
+		ackQueue:   make(chan string, ackQueueSize),
 		logger:     logger,
 	}
+	go conn.ackLoop()
+	return conn
 }
 
 // DeviceID exposes the device_id for logging and metrics.
@@ -110,17 +122,13 @@ func (c *Connection) Close(code int, reason string) {
 	close(c.closed)
 	c.closedMu.Unlock()
 
-	if c.ctxCancel != nil {
-		c.ctxCancel()
-	}
-
 	if c.ws != nil {
 		msg := websocket.FormatCloseMessage(code, reason)
 		_ = c.ws.WriteControl(websocket.CloseMessage, msg, _deadlineSoon())
 		_ = c.ws.Close()
 	}
 	if c.closeHook != nil {
-		c.closeHook(reason)
+		c.closeHook(c, reason)
 	}
 }
 
@@ -130,11 +138,55 @@ func (c *Connection) Close(code int, reason string) {
 func (c *Connection) Closed() <-chan struct{} { return c.closed }
 
 // onAck is called by the connection's reader loop when the client
-// sends a WsPushAck. It dispatches to the ackHandler installed at
-// construction time, passing the per-connection ctx so the handler
-// can be cancelled when the socket goes away.
+// sends a WsPushAck. It only enqueues the acknowledgement: the
+// handler runs on the connection's ack worker so a slow database
+// round trip cannot stall the socket reads.
 func (c *Connection) onAck(messageID string) {
-	if c.ackHandler != nil {
-		c.ackHandler(c.ctx, messageID)
+	if c.ackHandler == nil {
+		return
 	}
+	select {
+	case c.ackQueue <- messageID:
+	default:
+		if c.logger != nil {
+			c.logger.Warn("realtime: ack queue full, dropping ack",
+				slog.Uint64("device_id", c.deviceID))
+		}
+	}
+}
+
+// ackLoop processes the acknowledgements queued by onAck. It stops
+// when the connection is closed, after draining whatever is still
+// buffered so a client that acknowledges and disconnects in the same
+// breath does not lose the ack.
+func (c *Connection) ackLoop() {
+	for {
+		select {
+		case <-c.closed:
+			c.drainAcks()
+			return
+		case messageID := <-c.ackQueue:
+			c.handleAck(messageID)
+		}
+	}
+}
+
+func (c *Connection) drainAcks() {
+	for {
+		select {
+		case messageID := <-c.ackQueue:
+			c.handleAck(messageID)
+		default:
+			return
+		}
+	}
+}
+
+func (c *Connection) handleAck(messageID string) {
+	if c.ackHandler == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), ackTimeout)
+	defer cancel()
+	c.ackHandler(ctx, messageID)
 }

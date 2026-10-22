@@ -22,7 +22,12 @@ const PubSubChannel = "push:fanout"
 // PubSubChannel; Logger defaults to slog.Default().
 type SubscriberConfig struct {
 	Channel string
-	Logger  *slog.Logger
+	// KeyPrefix namespaces the fanout channel so two deployments
+	// sharing one Redis instance do not receive each other's pushes.
+	// go-redis writes SUBSCRIBE straight to the connection, so the
+	// Redis key prefix hook cannot rewrite the channel for us.
+	KeyPrefix string
+	Logger    *slog.Logger
 }
 
 // Subscriber is the per-backend Redis pub/sub consumer. It subscribes
@@ -49,6 +54,7 @@ func NewSubscriber(client *redis.Client, hub *Hub, cfg SubscriberConfig) *Subscr
 	if cfg.Channel == "" {
 		cfg.Channel = PubSubChannel
 	}
+	cfg.Channel = cfg.KeyPrefix + cfg.Channel
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}

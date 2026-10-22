@@ -102,6 +102,56 @@ func TestSubscriber_RoundTripsPushMessage(t *testing.T) {
 	}
 }
 
+// TestSubscriber_KeyPrefixIsolatesChannels asserts that two
+// deployments sharing one Redis instance do not receive each other's
+// pushes. go-redis writes SUBSCRIBE straight to the connection, so the
+// Redis key prefix hook cannot rewrite the channel: the subscriber
+// has to namespace the channel itself.
+func TestSubscriber_KeyPrefixIsolatesChannels(t *testing.T) {
+	client, _ := newTestRedis(t)
+	hubA := NewHub()
+	hubB := NewHub()
+
+	connA := newTestConnection(t, 42, 1, 1)
+	hubA.Register(42, connA)
+	connB := newTestConnection(t, 42, 1, 1)
+	hubB.Register(42, connB)
+
+	subA := NewSubscriber(client, hubA, SubscriberConfig{Channel: "push:fanout", KeyPrefix: "tenant-a:"})
+	subB := NewSubscriber(client, hubB, SubscriberConfig{Channel: "push:fanout", KeyPrefix: "tenant-b:"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := subA.Start(ctx); err != nil {
+		t.Fatalf("start a: %v", err)
+	}
+	if err := subB.Start(ctx); err != nil {
+		t.Fatalf("start b: %v", err)
+	}
+	t.Cleanup(subA.Stop)
+	t.Cleanup(subB.Stop)
+	time.Sleep(50 * time.Millisecond)
+
+	push := &pb.WsPush{PushId: 1, MessageId: "1", Title: "x", Body: "y"}
+	if err := subA.Publish(ctx, 42, push); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	select {
+	case got := <-connA.send:
+		if len(got) == 0 {
+			t.Fatal("conn A received empty bytes")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("conn A did not receive the frame")
+	}
+
+	select {
+	case got := <-connB.send:
+		t.Fatalf("conn B received a frame from another deployment: %d bytes", len(got))
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
 // TestSubscriber_IgnoresOtherInstances publishes a message that
 // targets a device that is NOT connected to this hub's backend. The
 // Subscriber should still receive the message (because Redis delivers

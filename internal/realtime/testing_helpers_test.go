@@ -39,19 +39,7 @@ func (p *testPush) encode() ([]byte, error) {
 func newTestConnection(t *testing.T, deviceID uint64, userID, domainID uint32) *Connection {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	c := &Connection{
-		deviceID:   deviceID,
-		userID:     userID,
-		domainID:   domainID,
-		send:       make(chan []byte, 16),
-		closed:     make(chan struct{}),
-		ackHandler: func(context.Context, string) {},
-		ctx:        ctx,
-		ctxCancel:  cancel,
-		ws:         nil, // tests don't write through gorilla
-		logger:     nil,
-	}
+	c := newConnection(deviceID, userID, domainID, nil, func(context.Context, string) {}, nil, nil)
 	c.closedMu.Lock()
 	c.closedFlag = false
 	c.closedMu.Unlock()
