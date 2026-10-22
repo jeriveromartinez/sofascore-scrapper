@@ -83,6 +83,21 @@ func AutoMigrateAll(db *gorm.DB) error {
 				reflect.TypeOf(model).Elem().Name(), i, err)
 		}
 	}
+	// The catalog's unique index cannot be installed by AutoMigrate:
+	// a legacy deployment already carries an index of the same name
+	// covering source_league_id alone, and AutoMigrate never replaces
+	// an index that exists. The migration swaps it for the composite
+	// one, so it has to run after the table exists.
+	if err := catalog.MigrateSourceLeagueIndex(db); err != nil {
+		return fmt.Errorf("migrate catalog source league index: %w", err)
+	}
+	// The FotMob id shift left the tournaments table with a duplicate
+	// row per league the pre-shift code path had written. The repair
+	// needs the tournaments, events, device assignment and global
+	// config tables, so it runs after the AutoMigrate loop.
+	if err := MigrateFotMobTournamentDuplicates(db); err != nil {
+		return fmt.Errorf("migrate fotmob tournament duplicates: %w", err)
+	}
 	return nil
 }
 
@@ -97,10 +112,12 @@ func AutoMigrateAll(db *gorm.DB) error {
 // duplicate-key error because every "" collides with every other "".
 //
 // The helper only touches rows where external_match_id is the empty
-// string. Fresh rows (already populated) are left alone. Rows whose
-// external_match_id column does not yet exist (i.e. the events table
-// itself has not been migrated) are skipped — the function is a no-op
-// against a fresh DB.
+// string or NULL. Fresh rows (already populated) are left alone.
+//
+// Deployments that predate the FotMob reset have the events table but
+// not the external_match_id column, so the helper adds the column
+// first; without it the backfill below fails with "Unknown column"
+// and the boot aborts.
 //
 // It is safe to call before the events table is AutoMigrated; it is
 // also a no-op on an empty database. AutoMigrateAll calls this helper
@@ -113,14 +130,43 @@ func PreMigrateLegacyEvents(db *gorm.DB) error {
 	if !db.Migrator().HasTable(&events.Event{}) {
 		return nil
 	}
-	// Use gorm.Expr with the || string-concat operator instead of
-	// CONCAT() so the SQL stays portable between MySQL (production)
-	// and SQLite (unit tests). id is the primary key and is non-null,
-	// so the result is always a non-empty string.
+	if !db.Migrator().HasColumn(&events.Event{}, "external_match_id") {
+		if err := db.Migrator().AddColumn(&legacyEventColumn{}, "external_match_id"); err != nil {
+			return fmt.Errorf("add legacy external_match_id column: %w", err)
+		}
+	}
+	// id is the primary key and is non-null, so the result is always a
+	// non-empty string.
 	if err := db.Model(&events.Event{}).
+		Unscoped().
 		Where("external_match_id = ? OR external_match_id IS NULL", "").
-		Update("external_match_id", gorm.Expr("'legacy-' || id")).Error; err != nil {
+		Update("external_match_id", gorm.Expr(legacyExternalMatchIDExpr(db.Dialector.Name()))).Error; err != nil {
 		return fmt.Errorf("backfill legacy external_match_id: %w", err)
 	}
 	return nil
+}
+
+// legacyEventColumn is a minimal projection of the events table used
+// to add the external_match_id column to deployments that predate it.
+// The field is deliberately nullable: SQLite refuses to add a NOT NULL
+// column to a table that already holds rows, and the AutoMigrate that
+// runs afterwards tightens the column to NOT NULL.
+type legacyEventColumn struct {
+	ID              uint    `gorm:"column:id;primaryKey"`
+	ExternalMatchID *string `gorm:"column:external_match_id;size:64"`
+}
+
+func (legacyEventColumn) TableName() string { return "events" }
+
+// legacyExternalMatchIDExpr returns the SQL expression that prefixes
+// the row id with "legacy-". MySQL and MariaDB parse "||" as logical
+// OR unless PIPES_AS_CONCAT is part of sql_mode — which would give
+// every row the same value and break the unique index — so those
+// dialects need CONCAT(). SQLite and Postgres use "||" for string
+// concatenation.
+func legacyExternalMatchIDExpr(dialect string) string {
+	if dialect == "mysql" {
+		return "CONCAT('legacy-', id)"
+	}
+	return "'legacy-' || id"
 }
