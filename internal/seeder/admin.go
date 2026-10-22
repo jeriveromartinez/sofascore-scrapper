@@ -2,8 +2,12 @@ package seeder
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
@@ -16,16 +20,21 @@ const (
 	// DefaultAdminEmail is the email seeded on first boot.
 	DefaultAdminEmail = "admin@local"
 
-	// DefaultAdminPassword is the plaintext password seeded on first
-	// boot. It is bcrypt-hashed before being persisted. Operators
-	// MUST change it on first login.
-	DefaultAdminPassword = "admin1234"
+	// DefaultAdminPasswordEnvVar is the environment variable that holds
+	// the password of the seeded admin account. When it is set, its
+	// value is used; otherwise a random password is generated.
+	DefaultAdminPasswordEnvVar = "DEFAULT_ADMIN_PASSWORD"
 
 	// defaultAdminBcryptCost matches auth.BcryptCost so the seeded
 	// admin password lands at the current cost without a lazy rehash
 	// on first login.
 	defaultAdminBcryptCost = auth.BcryptCost
 )
+
+// DefaultAdminPassword holds the plaintext password of the seeded
+// admin account once SeedDefaultAdmin ran. It is empty before the
+// first seed. The value must never be logged or returned to a client.
+var DefaultAdminPassword string
 
 // SeedDefaultAdmin runs the first-boot seed. On the first boot after
 // the FotMob model reset, it detects legacy SofaScore events (rows
@@ -42,8 +51,10 @@ const (
 //
 // Called automatically from app.New on every boot when SKIP_MIGRATE
 // is not set, and from cmd/server/main.go for the migrate-only
-// command-line path. See docs/operations/runbook.md for changing the
-// default password.
+// command-line path. The password of the seeded account comes from the
+// DEFAULT_ADMIN_PASSWORD environment variable; when it is not set a
+// random password is generated. See docs/operations/runbook.md for
+// changing the default password.
 func SeedDefaultAdmin(ctx context.Context, db *gorm.DB) error {
 	// Legacy-data guard. HasTable is a no-op fast path when the
 	// events table hasn't been migrated yet (e.g. unit tests that
@@ -77,13 +88,38 @@ func SeedDefaultAdmin(ctx context.Context, db *gorm.DB) error {
 	if count > 0 {
 		return nil
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(DefaultAdminPassword), defaultAdminBcryptCost)
+	password, generated, err := resolveAdminPassword()
+	if err != nil {
+		return fmt.Errorf("resolve default admin password: %w", err)
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), defaultAdminBcryptCost)
 	if err != nil {
 		return fmt.Errorf("hash default admin password: %w", err)
+	}
+	DefaultAdminPassword = password
+	if generated {
+		slog.Default().Warn("seeder: no admin password configured, a random one was generated for the default admin account. Set "+DefaultAdminPasswordEnvVar+" and recreate the account, or reset the password from the admin API. The generated password is not logged.",
+			slog.String("email", DefaultAdminEmail))
 	}
 	return db.WithContext(ctx).Create(&users.User{
 		Email:    DefaultAdminEmail,
 		Password: string(hashed),
 		Role:     users.RoleAdmin,
 	}).Error
+}
+
+// resolveAdminPassword returns the password of the seeded admin
+// account. It comes from the DEFAULT_ADMIN_PASSWORD environment
+// variable when set; otherwise a random password is generated and the
+// second return value reports it, so the caller can warn the
+// operator. The generated password is never logged.
+func resolveAdminPassword() (string, bool, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(DefaultAdminPasswordEnvVar)); fromEnv != "" {
+		return fromEnv, false, nil
+	}
+	raw := make([]byte, 18)
+	if _, err := rand.Read(raw); err != nil {
+		return "", false, err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), true, nil
 }
