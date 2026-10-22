@@ -134,9 +134,7 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 		  AND delivery_attempts.sent_at >= ? AND delivery_attempts.sent_at < ?
 		GROUP BY hour
 	`, userID, startOfDay, startOfDay.AddDate(0, 0, 1)).Scan(&peaks).Error; err != nil {
-		slog.Default().Warn("push: audience peak query failed",
-			slog.Uint64("user_id", uint64(userID)),
-			slog.String("error", err.Error()))
+		logSnapshotQueryError("audience peak", err, slog.Uint64("user_id", uint64(userID)))
 	} else {
 		var maxN int64
 		for _, p := range peaks {
@@ -165,7 +163,9 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 		GROUP BY devices.platform, devices.version
 		ORDER BY count DESC
 		LIMIT 5
-	`, userID).Scan(&platformRows).Error; err == nil {
+	`, userID).Scan(&platformRows).Error; err != nil {
+		logSnapshotQueryError("top platforms", err, slog.Uint64("user_id", uint64(userID)))
+	} else {
 		seen := map[string]bool{}
 		for _, p := range platformRows {
 			if !seen[p.Platform] {
@@ -193,9 +193,7 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 		  AND delivery_attempts.sent_at >= ?
 		GROUP BY hour
 	`, userID, now.Add(-30*24*time.Hour)).Scan(&hourly).Error; err != nil {
-		slog.Default().Warn("push: hourly histogram query failed",
-			slog.Uint64("user_id", uint64(userID)),
-			slog.String("error", err.Error()))
+		logSnapshotQueryError("hourly histogram", err, slog.Uint64("user_id", uint64(userID)))
 	} else {
 		// Sort by hour for stable output.
 		sort.Slice(hourly, func(i, j int) bool { return hourly[i].Hour < hourly[j].Hour })
@@ -213,11 +211,20 @@ func buildAggregateSnapshot(ctx context.Context, db *gorm.DB, userID uint) (*pb.
 		Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Limit(1).
-		Pluck("created_at", &lastAt).Error; err == nil && lastAt != nil {
+		Pluck("created_at", &lastAt).Error; err != nil {
+		logSnapshotQueryError("last push", err, slog.Uint64("user_id", uint64(userID)))
+	} else if lastAt != nil {
 		out.LastPushAt = lastAt.Format(time.RFC3339)
 	}
 
 	return out, nil
+}
+
+// logSnapshotQueryError reports a failed breakdown query. Breakdowns
+// are best effort: the rest of the snapshot is still served, with
+// the failed breakdown left empty.
+func logSnapshotQueryError(query string, err error, attrs ...any) {
+	slog.Default().Warn("push: "+query+" query failed", append(attrs, slog.String("error", err.Error()))...)
 }
 
 // sentAtHourExpr returns the SQL expression extracting the hour of
@@ -282,7 +289,9 @@ func buildCampaignSnapshot(ctx context.Context, db *gorm.DB, pushID, userID uint
 	var lats []latRow
 	if err := db.WithContext(ctx).Model(&DeliveryAttempt{}).
 		Where("push_message_id = ? AND state = ? AND latency_ms IS NOT NULL", pushID, StateDelivered).
-		Pluck("latency_ms", &lats).Error; err == nil && len(lats) > 0 {
+		Pluck("latency_ms", &lats).Error; err != nil {
+		logSnapshotQueryError("campaign latency", err, slog.Uint64("push_id", uint64(pushID)))
+	} else if len(lats) > 0 {
 		// Sort ascending; the p50 is the middle element, p95 the
 		// element at 0.95 * len.
 		sort.Slice(lats, func(i, j int) bool { return lats[i].LatencyMS < lats[j].LatencyMS })
@@ -302,7 +311,9 @@ func buildCampaignSnapshot(ctx context.Context, db *gorm.DB, pushID, userID uint
 		Select("failure_reason AS reason, COUNT(*) AS count").
 		Where("push_message_id = ? AND state = ?", pushID, StateFailed).
 		Group("failure_reason").
-		Scan(&fails).Error; err == nil {
+		Scan(&fails).Error; err != nil {
+		logSnapshotQueryError("campaign failures", err, slog.Uint64("push_id", uint64(pushID)))
+	} else {
 		for _, f := range fails {
 			out.FailuresByReason = append(out.FailuresByReason, &pb.FailureBreakdown{
 				Reason: failureReasonToProto(f.Reason),
