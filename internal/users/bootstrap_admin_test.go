@@ -2,10 +2,12 @@ package users
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
 
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -51,12 +53,11 @@ func TestCreateAndMaybeBootstrapAdminDoesNotPromoteWhenAdminExists(t *testing.T)
 
 func TestCreateAndMaybeBootstrapAdminConcurrentRegistrationsYieldOneAdmin(t *testing.T) {
 	db := newUsersTestDBShared(t)
-	assertConcurrentBootstrapYieldsOneAdmin(t, db, NewRepository(db))
+	assertConcurrentBootstrapYieldsOneAdmin(t, db, NewRepository(db), 8)
 }
 
-func assertConcurrentBootstrapYieldsOneAdmin(t *testing.T, db *gorm.DB, repo *Repository) {
+func assertConcurrentBootstrapYieldsOneAdmin(t *testing.T, db *gorm.DB, repo *Repository, registrations int) {
 	t.Helper()
-	const registrations = 8
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	promotedCount := make(chan bool, registrations)
@@ -102,5 +103,22 @@ func assertAdminCount(t *testing.T, db *gorm.DB, want int64) {
 	}
 	if admins != want {
 		t.Fatalf("admins = %d, want %d", admins, want)
+	}
+}
+
+func TestIsDeadlockMatchesOnlyInnoDBDeadlocks(t *testing.T) {
+	cases := map[string]struct {
+		err  error
+		want bool
+	}{
+		"deadlock":         {&mysql.MySQLError{Number: 1213}, true},
+		"wrapped deadlock": {fmt.Errorf("tx: %w", &mysql.MySQLError{Number: 1213}), true},
+		"duplicate key":    {&mysql.MySQLError{Number: 1062}, false},
+		"other error":      {errors.New("boom"), false},
+	}
+	for name, tc := range cases {
+		if got := isDeadlock(tc.err); got != tc.want {
+			t.Errorf("%s: isDeadlock = %v, want %v", name, got, tc.want)
+		}
 	}
 }

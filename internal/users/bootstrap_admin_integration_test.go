@@ -59,5 +59,13 @@ func openScratchMariaDB(t *testing.T) *gorm.DB {
 
 func TestCreateAndMaybeBootstrapAdminConcurrentRegistrationsYieldOneAdmin_MariaDB(t *testing.T) {
 	db := openScratchMariaDB(t)
-	assertConcurrentBootstrapYieldsOneAdmin(t, db, NewRepository(db))
+	repo := NewRepository(db)
+	// InnoDB lock contention between the racers is timing dependent, so
+	// several fresh-install rounds are needed to hit it reliably.
+	for round := range 5 {
+		if err := db.Exec("DELETE FROM users").Error; err != nil {
+			t.Fatalf("round %d: reset users: %v", round, err)
+		}
+		assertConcurrentBootstrapYieldsOneAdmin(t, db, repo, 16)
+	}
 }
