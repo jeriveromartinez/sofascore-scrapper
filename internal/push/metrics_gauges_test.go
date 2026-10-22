@@ -98,9 +98,8 @@ func TestRefreshGaugesPublishesRealCounts(t *testing.T) {
 		if err := db.Create(s).Error; err != nil {
 			t.Fatalf("seed schedule: %v", err)
 		}
-		// The column carries default:true, so GORM inserts a false
-		// zero value as the default. Pausing has to go through an
-		// explicit UPDATE.
+		// The insert always seeds an active schedule, so a paused one
+		// has to go through an explicit UPDATE.
 		if !active {
 			if err := db.Model(&ScheduledPush{}).Where("id = ?", s.ID).
 				Update("is_active", false).Error; err != nil {
