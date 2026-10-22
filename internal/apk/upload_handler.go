@@ -60,7 +60,7 @@ func (h *UploadHandler) handleBegin(c *gin.Context) {
 
 	resp, err := h.service.Begin(c.Request.Context(), userID, &req)
 	if err != nil {
-		server.RespondError(c, http.StatusConflict, err.Error())
+		respondClientError(c, http.StatusConflict, "could not start upload", err)
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *UploadHandler) handleStatus(c *gin.Context) {
 
 	resp, err := h.service.Status(c.Request.Context(), id, userID)
 	if err != nil {
-		server.RespondError(c, http.StatusNotFound, err.Error())
+		respondClientError(c, http.StatusNotFound, "could not load upload status", err)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *UploadHandler) handlePutChunk(c *gin.Context) {
 
 	resp, err := h.service.PutChunk(c.Request.Context(), id, index, userID, c.Request.Body)
 	if err != nil {
-		server.RespondError(c, http.StatusConflict, err.Error())
+		respondClientError(c, http.StatusConflict, "could not store chunk", err)
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *UploadHandler) handleComplete(c *gin.Context) {
 
 	resp, err := h.service.Complete(c.Request.Context(), id, userID)
 	if err != nil {
-		server.RespondError(c, http.StatusConflict, err.Error())
+		respondClientError(c, http.StatusConflict, "could not complete upload", err)
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *UploadHandler) handleAbort(c *gin.Context) {
 	}
 
 	if err := h.service.Abort(c.Request.Context(), id, userID); err != nil {
-		server.RespondError(c, http.StatusConflict, err.Error())
+		respondClientError(c, http.StatusConflict, "could not abort upload", err)
 		return
 	}
 

@@ -49,13 +49,13 @@ func NewUploadService(store *UploadStateStore, chunkStore *ChunkStore, repo *Rep
 
 func (s *UploadService) Begin(ctx context.Context, userID uint, req *pb.UploadBeginRequest) (*pb.UploadBeginResponse, error) {
 	if req.TotalChunks <= 0 || req.TotalChunks > MaxTotalChunks {
-		return nil, fmt.Errorf("total_chunks must be between 1 and %d", MaxTotalChunks)
+		return nil, validationErrorf("total_chunks must be between 1 and %d", MaxTotalChunks)
 	}
 	if req.FileSize <= 0 || req.FileSize > MaxAggregate {
-		return nil, fmt.Errorf("file_size must be between 1 and %d", MaxAggregate)
+		return nil, validationErrorf("file_size must be between 1 and %d", MaxAggregate)
 	}
 	if req.FileName == "" {
-		return nil, fmt.Errorf("file_name is required")
+		return nil, validationErrorf("file_name is required")
 	}
 
 	session, err := s.store.Begin(ctx, BeginUploadRequest{
@@ -88,7 +88,7 @@ func (s *UploadService) Status(ctx context.Context, uploadID uuid.UUID, userID u
 		return nil, err
 	}
 	if session.UserID != userID {
-		return nil, fmt.Errorf("owner mismatch")
+		return nil, validationErrorf("owner mismatch")
 	}
 
 	return &pb.UploadStatusResponse{
@@ -112,14 +112,14 @@ func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkI
 		return nil, err
 	}
 	if session.UserID != userID {
-		return nil, fmt.Errorf("owner mismatch")
+		return nil, validationErrorf("owner mismatch")
 	}
 
 	if session.Status != StatusReceiving {
-		return nil, fmt.Errorf("upload is not in receiving state")
+		return nil, validationErrorf("upload is not in receiving state")
 	}
 	if chunkIndex < 0 || chunkIndex >= session.TotalChunks {
-		return nil, fmt.Errorf("chunk index %d out of range [0, %d)", chunkIndex, session.TotalChunks)
+		return nil, validationErrorf("chunk index %d out of range [0, %d)", chunkIndex, session.TotalChunks)
 	}
 
 	// The chunk is staged first and published only once the upload
@@ -148,7 +148,7 @@ func (s *UploadService) PutChunk(ctx context.Context, uploadID uuid.UUID, chunkI
 		return nil, fmt.Errorf("verify chunk: %w", err)
 	}
 	if !verified {
-		return nil, fmt.Errorf("published chunk does not match the recorded hash")
+		return nil, validationErrorf("published chunk does not match the recorded hash")
 	}
 	observability.UploadBytes.Add(float64(staged.ByteSize))
 
@@ -169,7 +169,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	}
 
 	if session.UserID != userID {
-		return nil, fmt.Errorf("owner mismatch")
+		return nil, validationErrorf("owner mismatch")
 	}
 
 	if err := s.store.BeginAssembly(ctx, uploadID, uint(session.TotalChunks)); err != nil {
@@ -229,7 +229,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	if err := ValidatePackageName(apkInfo.PackageName); err != nil {
 		os.Remove(tmpPath)
 		s.markPublicationFailed(ctx, pub.ID)
-		return nil, fmt.Errorf("invalid package: %w", err)
+		return nil, validationErrorf("invalid package: %s", err.Error())
 	}
 
 	version := session.Version
@@ -239,7 +239,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	if version == "" || !semverPattern.MatchString(version) {
 		os.Remove(tmpPath)
 		s.markPublicationFailed(ctx, pub.ID)
-		return nil, fmt.Errorf("invalid version format")
+		return nil, validationErrorf("invalid version format")
 	}
 
 	fileName := fmt.Sprintf("%s-%s.apk", apkInfo.PackageName, version)
@@ -247,6 +247,9 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 	if err != nil {
 		os.Remove(tmpPath)
 		s.markPublicationFailed(ctx, pub.ID)
+		if errors.Is(err, ErrPathTraversal) {
+			return nil, validationErrorf("invalid destination: %s", err.Error())
+		}
 		return nil, fmt.Errorf("invalid destination: %w", err)
 	}
 
@@ -254,7 +257,7 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 		os.Remove(tmpPath)
 		s.markPublicationFailed(ctx, pub.ID)
 		if errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("APK version already exists")
+			return nil, validationErrorf("APK version already exists")
 		}
 		return nil, fmt.Errorf("publish: %w", err)
 	}
@@ -327,7 +330,7 @@ func (s *UploadService) Abort(ctx context.Context, uploadID uuid.UUID, userID ui
 	}
 
 	if session.UserID != userID {
-		return fmt.Errorf("owner mismatch")
+		return validationErrorf("owner mismatch")
 	}
 
 	s.chunkStore.RemoveChunks(session.ID)

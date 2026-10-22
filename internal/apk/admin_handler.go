@@ -38,10 +38,13 @@ type AdminHandlerDeps struct {
 
 type AdminHandler struct {
 	repo *Repository
+	// parseAPKInfo is a seam so the upload routes can be exercised
+	// without a real signed APK fixture.
+	parseAPKInfo func(path string) (*APKInfo, error)
 }
 
 func NewAdminHandler(repo *Repository) *AdminHandler {
-	return &AdminHandler{repo: repo}
+	return &AdminHandler{repo: repo, parseAPKInfo: ParseAPKInfo}
 }
 
 func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerDeps) {
@@ -135,7 +138,7 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 		return
 	}
 
-	apkInfo, parseErr := ParseAPKInfo(tmpPath)
+	apkInfo, parseErr := h.parseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
 		server.RespondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
@@ -187,7 +190,7 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		server.RespondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
+		respondClientError(c, http.StatusConflict, "could not save APK version", err)
 		return
 	}
 
@@ -375,7 +378,7 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 
 	_ = os.RemoveAll(chunkDir)
 
-	apkInfo, parseErr := ParseAPKInfo(tmpPath)
+	apkInfo, parseErr := h.parseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
 		server.RespondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
@@ -429,7 +432,7 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		server.RespondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
+		respondClientError(c, http.StatusConflict, "could not save APK version", err)
 		return
 	}
 
