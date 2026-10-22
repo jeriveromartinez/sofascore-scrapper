@@ -116,6 +116,7 @@ func TestReconcilePublicationsBulkFailsStaleRowsWithPagedScan(t *testing.T) {
 	if err := s.db.Create(&rows).Error; err != nil {
 		t.Fatalf("seed publications: %v", err)
 	}
+	ageAssembling(t, s.db, rows[3].ID, rows[4].ID, rows[5].ID)
 	rec.reset()
 
 	if err := s.ReconcilePublications(markedContext()); err != nil {

@@ -97,6 +97,7 @@ func TestReconcilePublicationsCountsFailures(t *testing.T) {
 	if err := s.db.Create(&rows).Error; err != nil {
 		t.Fatalf("seed publications: %v", err)
 	}
+	ageAssembling(t, s.db, rows[0].ID)
 	before := metricValue(t, observability.UploadFailures)
 
 	if err := s.ReconcilePublications(context.Background()); err != nil {

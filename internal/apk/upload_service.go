@@ -381,10 +381,16 @@ func removeUploadTemp(path string) {
 
 const reconcilePublicationsBatchSize = 100
 
+// publicationStaleAfter is how long an assembling publication may go
+// without an update before reconcile treats its Complete as dead.
+// Complete writes the row once when assembly starts and again when it
+// persists, so a younger row may still be assembling in another request.
+const publicationStaleAfter = time.Hour
+
 func (s *UploadService) ReconcilePublications(ctx context.Context) error {
 	var batch []UploadPublication
 	return s.db.WithContext(ctx).
-		Where("status IN ?", []string{"assembling", "published"}).
+		Where("status = ? OR (status = ? AND updated_at < ?)", "published", "assembling", time.Now().Add(-publicationStaleAfter)).
 		FindInBatches(&batch, reconcilePublicationsBatchSize, func(_ *gorm.DB, _ int) error {
 			return s.reconcilePublicationBatch(ctx, batch)
 		}).Error
