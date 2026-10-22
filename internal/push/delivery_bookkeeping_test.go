@@ -113,3 +113,50 @@ func TestRepository_MarkDeliveriesFailed_OnlyTouchesSentRows(t *testing.T) {
 		t.Fatalf("attempts = %v, want one failed and one delivered", got)
 	}
 }
+
+// disconnectingPusher cancels the request context on the first
+// publish, like a client dropping the HTTP connection mid fan-out,
+// and reports every device as connected to another instance.
+type disconnectingPusher struct {
+	cancel   context.CancelFunc
+	liveCtx  atomic.Int64
+	attempts atomic.Int64
+}
+
+func (p *disconnectingPusher) PublishPush(ctx context.Context, _ uint64, _ *pb.WsPush) error {
+	if p.attempts.Add(1) == 1 {
+		p.cancel()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p.liveCtx.Add(1)
+	return realtime.ErrDeviceNotConnected
+}
+
+// TestService_CreateImmediate_SurvivesRequestCancellation proves a
+// client disconnect does not abort the fan-out: every device is still
+// published to and every failure is still recorded.
+func TestService_CreateImmediate_SurvivesRequestCancellation(t *testing.T) {
+	f := newTimerFixture(t)
+	timerTestingT = t
+	for _, tok := range []string{"cancel-1", "cancel-2", "cancel-3"} {
+		f.addDevice(tok, "UTC")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pusher := &disconnectingPusher{cancel: cancel}
+
+	msg, _, err := f.serviceWithPusher(pusher).CreateImmediate(ctx, f.uid, f.uid, []uint{f.domainID}, adminPayload())
+	if err != nil {
+		t.Fatalf("CreateImmediate: %v", err)
+	}
+
+	if n := pusher.liveCtx.Load(); n != 3 {
+		t.Errorf("publishes on a live context = %d, want 3", n)
+	}
+	got := attemptsByState(t, f.db, msg.ID)
+	if got[StateFailed][FailureDeviceOffline] != 3 {
+		t.Fatalf("attempts = %v, want 3 failed device_offline", got)
+	}
+}

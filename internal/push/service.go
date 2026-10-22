@@ -173,6 +173,10 @@ func (s *Service) CreateImmediate(ctx context.Context, callerID, ownerID uint, d
 	return msg, deviceIDs, nil
 }
 
+// fanOutTimeout bounds a detached fan-out (publishes plus failure
+// bookkeeping) so it cannot outlive its caller indefinitely.
+const fanOutTimeout = 30 * time.Second
+
 // deviceFrame pairs a WsPush frame with the device it is addressed to.
 type deviceFrame struct {
 	deviceID uint
@@ -186,6 +190,11 @@ type deviceFrame struct {
 // internal_error and the first one is returned so single-device
 // callers can surface it.
 func (s *Service) publishFrames(ctx context.Context, pushID uint, frames []deviceFrame) error {
+	// The delivery_attempts rows already exist in state sent: a client
+	// disconnect must not abort the fan-out or its bookkeeping, or
+	// those rows would never leave sent.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fanOutTimeout)
+	defer cancel()
 	failed := make(map[FailureReason][]string)
 	var firstErr error
 	for _, f := range frames {
