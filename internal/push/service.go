@@ -607,10 +607,23 @@ func (s *Service) scheduleNextRecurringFire(ctx context.Context, schedule *Sched
 	}
 	// Bump the schedule's NextFireAt if this row is now the
 	// earliest pending timer. Cheap: take MIN over pending
-	// timers. Skipped on error to avoid masking the insert error.
+	// timers. A failure here leaves the schedule header stale;
+	// the pending timer row still drives the dispatch, so it is
+	// reported instead of failing the fire.
 	earliest, err := s.repo.EarliestPendingTimer(ctx, schedule.ID)
-	if err == nil && !earliest.IsZero() {
-		_ = s.repo.UpdateScheduledPushNextFireAt(ctx, schedule.ID, earliest)
+	if err != nil {
+		s.logger.Warn("push: could not read the earliest pending timer",
+			slog.Uint64("schedule_id", uint64(schedule.ID)),
+			slog.String("error", err.Error()))
+		return nil
+	}
+	if earliest.IsZero() {
+		return nil
+	}
+	if err := s.repo.UpdateScheduledPushNextFireAt(ctx, schedule.ID, earliest); err != nil {
+		s.logger.Warn("push: failed to update the schedule next fire time",
+			slog.Uint64("schedule_id", uint64(schedule.ID)),
+			slog.String("error", err.Error()))
 	}
 	return nil
 }
