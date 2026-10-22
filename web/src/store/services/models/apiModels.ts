@@ -9,10 +9,7 @@ import type {
   Device as ProtoDevice,
   DeviceList,
   DevicePage as ProtoDevicePage,
-  DeviceRegisterRequest,
   DeviceTournament as ProtoDeviceTournament,
-  DeviceTournamentPage as ProtoDeviceTournamentPage,
-  EventsList,
   EventPage as ProtoEventPage,
   GlobalTournamentConfig as ProtoGlobalTournamentConfig,
   PlaybackLog as ProtoPlaybackLog,
@@ -22,7 +19,6 @@ import type {
   TournamentPage as ProtoTournamentPage,
   TournamentRequest,
   SetTournamentIdsRequest,
-  AssignTournamentRequest,
   EventStats as ProtoEventStats,
   User as ProtoUser,
   UserPage as ProtoUserPage,
@@ -42,21 +38,12 @@ import type {
 } from "../../../proto/api";
 
 export type ExternalEvent = ProtoExternalEvent;
-export type EventsResponse = EventsList;
 export type EventPageResponse = ProtoEventPage;
 export type DeviceResponse = DeviceList;
 export type DevicePageResponse = ProtoDevicePage;
 export type UserPageResponse = ProtoUserPage;
 export type DomainPageResponse = ProtoDomainPage;
 export type TournamentPageResponse = ProtoTournamentPage;
-export type DeviceTournamentPageResponse = ProtoDeviceTournamentPage;
-
-export interface EventsQuery {
-  date?: string;
-  sport?: string;
-  page?: number;
-  limit?: number;
-}
 
 export interface EventsPageFilters {
   direction?: "asc" | "desc";
@@ -69,7 +56,6 @@ export interface EventsPageFilters {
 }
 
 export type Device = ProtoDevice;
-export type RegisterDevicePayload = DeviceRegisterRequest;
 export type PlaybackLog = ProtoPlaybackLog;
 export type PlaybackPageResponse = ProtoPlaybackPage;
 
@@ -90,7 +76,6 @@ export type CreateDomainPayload = DomainRequest;
 export type UpdateDomainPayload = DomainRequest;
 export type CreateTournamentPayload = TournamentRequest;
 export type UpdateTournamentPayload = TournamentRequest;
-export type AssignTournamentPayload = AssignTournamentRequest;
 export type SetDeviceTournamentsPayload = SetTournamentIdsRequest;
 
 export type UploadApkResponse = ProtoApkUploadResponse;
