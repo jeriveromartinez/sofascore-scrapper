@@ -137,7 +137,7 @@ func (h *Hub) Count() int {
 // returns as soon as the bytes are enqueued on the send channel.
 func (h *Hub) DeliverToLocal(deviceID uint64, payload FramePayload) error {
 	c, ok := h.Get(deviceID)
-	if !ok {
+	if !ok || c.IsClosed() {
 		return ErrDeviceNotConnected
 	}
 	raw, err := payload.encode()
