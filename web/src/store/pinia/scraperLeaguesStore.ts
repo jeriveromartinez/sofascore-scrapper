@@ -52,9 +52,6 @@ export const useScraperLeaguesStore = defineStore('scraperLeagues', {
       await svc.update(id, fields)
       await this.fetch()
     },
-    async toggleEnabled(item: ScraperLeague) {
-      await this.update(item.id, { enabled: !item.enabled })
-    },
     async remove(id: number) {
       const svc = this._service ?? new ScraperLeagueService()
       await svc.delete(id)

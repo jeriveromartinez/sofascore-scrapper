@@ -50,4 +50,3 @@ export class AuthApiService extends BaseApiService {
 }
 
 export const authApiService = new AuthApiService();
-export default authApiService;

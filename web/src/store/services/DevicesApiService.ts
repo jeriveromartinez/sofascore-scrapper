@@ -1,34 +1,13 @@
 import { BaseApiService } from "./BaseApiService";
 import {
-  Device as ProtoDeviceMessage,
   DeviceList,
   DevicePage,
-  DeviceRegisterRequest,
 } from "../../proto/api";
-import type { Device, DeviceResponse, DevicePageResponse, RegisterDevicePayload } from "./models";
+import type { DeviceResponse, DevicePageResponse } from "./models";
 
 export class DevicesApiService extends BaseApiService {
   constructor() {
     super("/devices");
-  }
-
-  async updateDevice(payload: RegisterDevicePayload): Promise<Device> {
-    return this.put<Device, RegisterDevicePayload>(
-      "",
-      payload,
-      DeviceRegisterRequest,
-      ProtoDeviceMessage,
-    );
-  }
-
-  async getDevices({
-    page,
-    limit,
-  }: {
-    page: number;
-    limit: number;
-  }): Promise<DeviceResponse> {
-    return this.get<DeviceResponse>(`?page=${page}&limit=${limit}`, DeviceList);
   }
 
   async getDevicePage(

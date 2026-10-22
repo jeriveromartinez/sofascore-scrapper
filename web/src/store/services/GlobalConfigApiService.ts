@@ -2,12 +2,10 @@ import { BaseApiService } from "./BaseApiService";
 import {
   GlobalTournamentConfigList,
   SetTournamentIdsRequest,
-  StatusMessage,
 } from "../../proto/api";
 import type {
   GlobalTournamentConfig,
   SetDeviceTournamentsPayload,
-  StatusResponse,
 } from "./models";
 
 export class GlobalConfigApiService extends BaseApiService {
@@ -20,10 +18,6 @@ export class GlobalConfigApiService extends BaseApiService {
       configs: [],
     };
     return resp.configs ?? [];
-  }
-
-  async removeGlobalConfig(tournamentId: number): Promise<StatusResponse> {
-    return this.delete(`/${tournamentId}`, StatusMessage);
   }
 
   async setGlobalConfig(

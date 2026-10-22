@@ -37,10 +37,6 @@ export class DomainsApiService extends BaseApiService {
     return this.get(url, DomainPage, signal);
   }
 
-  async getDomain(id: number): Promise<Domain> {
-    return this.get(`/${id}`, ProtoDomainMessage);
-  }
-
   async createDomain(payload: CreateDomainPayload): Promise<Domain> {
     return this.post("", payload, DomainRequest, ProtoDomainMessage);
   }
