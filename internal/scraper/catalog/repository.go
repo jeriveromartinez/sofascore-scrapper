@@ -167,12 +167,6 @@ func (r *Repository) ActiveLeaguesBySource(ctx context.Context, source string) (
 	return out, nil
 }
 
-// SearchLocalByName looks up entries already in scraper_leagues
-// whose name matches the search term. It returns only live (non-soft-
-// deleted) rows. Used by Service.SearchLeagues to prefer the
-// verified-on-this-deployment IDs over the upstream FotMob search
-// results, which can be stale. The match is case-insensitive and
-// requires the term to appear anywhere in the name.
 // EnsureLeague upserts a league row for the given
 // (source, source_league_id) pair. Returns (true, nil) when a
 // new row was inserted and (false, nil) when a row already
@@ -256,7 +250,9 @@ func (r *Repository) ExistsBySourceLeagueID(ctx context.Context, source, sourceL
 }
 
 // SearchLocalByName is a free-text match against the Name
-// column. Used by the admin catalog search box; the backend
+// column. The match is case-insensitive and the term may appear
+// anywhere in the name; only live (non-soft-deleted) rows are
+// returned. Used by the admin catalog search box; the backend
 // keeps its scope narrow (LIKE %q%) so it works without
 // indexes and is safe to call on every keystroke.
 func (r *Repository) SearchLocalByName(ctx context.Context, query string) ([]scraper.LeagueRef, error) {
