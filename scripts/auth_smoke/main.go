@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -14,16 +16,36 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	envBaseURL        = "SMOKE_BASE_URL"
+	envInvitation     = "SMOKE_INVITATION_TOKEN"
+	envPassword       = "SMOKE_PASSWORD"
+	defaultBaseURL    = "http://localhost:8080"
+	passwordAlphabet  = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%"
+	passwordMinLength = 20
+)
+
 func main() {
-	base := "http://localhost:8080"
+	base := os.Getenv(envBaseURL)
+	if base == "" {
+		base = defaultBaseURL
+	}
+
+	invitation := strings.TrimSpace(os.Getenv(envInvitation))
+	if invitation == "" {
+		fmt.Fprintf(os.Stderr, "%s is required: create an invitation from an admin account and export it\n", envInvitation)
+		os.Exit(2)
+	}
+
 	email := fmt.Sprintf("admin-%d@test.local", time.Now().Unix())
-	password := "CorrectHorseBatteryStaple!9"
-	invitation := "FUZ_TeA3rFVByKolpH0fbuHGCb8Zf9Vc3BUK4k3wpz8"
+	password := os.Getenv(envPassword)
+	if password == "" {
+		password = randomPassword()
+	}
 
 	if len(os.Args) > 1 {
 		email = os.Args[1]
 	}
-	_ = email
 
 	// 1. Register
 	regReq := &pb.AuthRequest{
@@ -45,7 +67,7 @@ func main() {
 
 	authResp := &pb.AuthResponse{}
 	_ = proto.Unmarshal(regResp.body, authResp)
-	fmt.Println("REGISTER ok: id=", authResp.Id, "email=", authResp.Email, "access_token=", authResp.Token[:32]+"...", "refresh_token=", authResp.RefreshToken[:32]+"...")
+	fmt.Println("REGISTER ok: id=", authResp.Id, "email=", authResp.Email, "access_token=", preview(authResp.Token), "refresh_token=", preview(authResp.RefreshToken))
 
 	// 2. Authenticated call: GET /api/web/v1/users
 	req, _ := http.NewRequest("GET", base+"/api/web/v1/users", nil)
@@ -101,6 +123,29 @@ func main() {
 type httpResp struct {
 	status int
 	body   []byte
+}
+
+// randomPassword builds a throwaway password that satisfies the account
+// policy. The smoke account is disposable, so a random value keeps the
+// credential out of the repository.
+func randomPassword() string {
+	out := make([]byte, passwordMinLength)
+	for i := range out {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(passwordAlphabet))))
+		if err != nil {
+			out[i] = passwordAlphabet[i%len(passwordAlphabet)]
+			continue
+		}
+		out[i] = passwordAlphabet[n.Int64()]
+	}
+	return string(out)
+}
+
+func preview(token string) string {
+	if len(token) <= 32 {
+		return token
+	}
+	return token[:32] + "..."
 }
 
 func postProto(ctx context.Context, url string, body []byte) (*httpResp, error) {
