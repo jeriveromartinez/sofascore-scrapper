@@ -7,6 +7,14 @@ export default [
         ignores: [ "dist/**", "node_modules/**", "src/assets/vendor/**" ],
     },
     {
+        // The protobuf types are generated, so the blanket disable comment
+        // the generator writes cannot be edited away. Reporting it as an
+        // unused directive would make the lint gate fail on a file nobody
+        // is allowed to change.
+        files: [ "src/proto/**" ],
+        linterOptions: { reportUnusedDisableDirectives: "off" },
+    },
+    {
         files: [ "**/*.{ts,vue}" ],
         languageOptions: {
             parser: vueParser,
