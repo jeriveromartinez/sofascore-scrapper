@@ -299,42 +299,6 @@ func (r *Repository) InsertTimer(ctx context.Context, t *ScheduledPushTimer) err
 	return r.db.WithContext(ctx).Create(t).Error
 }
 
-// RemovePendingTimersForSchedule deletes every undispatched timer
-// for a schedule. Used when the operator deletes the schedule or
-// the user toggles notifications off.
-func (r *Repository) RemovePendingTimersForSchedule(ctx context.Context, scheduleID uint) error {
-	return r.db.WithContext(ctx).
-		Where("scheduled_push_id = ? AND dispatched_at IS NULL", scheduleID).
-		Delete(&ScheduledPushTimer{}).Error
-}
-
-// AllPendingTimers returns every undispatched timer across all
-// active schedules. Used by the worker on startup to rebuild the
-// Redis ZSET index from the durable DB.
-func (r *Repository) AllPendingTimers(ctx context.Context) ([]ScheduledPushTimer, error) {
-	var rows []ScheduledPushTimer
-	err := r.db.WithContext(ctx).
-		Joins("JOIN scheduled_pushes ON scheduled_pushes.id = scheduled_push_timers.scheduled_push_id").
-		Where("scheduled_pushes.is_active = ? AND scheduled_push_timers.dispatched_at IS NULL", true).
-		Order("scheduled_push_timers.fire_at ASC").
-		Find(&rows).Error
-	return rows, err
-}
-
-// ListDueScheduledPushes is the schedule-level (deprecated) view.
-// It is kept around because the metrics aggregator still polls it
-// for active-schedule counts, but the worker now reads per-timer
-// rows. New code should call ListDueTimers.
-func (r *Repository) ListDueScheduledPushes(ctx context.Context, now time.Time, limit int) ([]ScheduledPush, error) {
-	var rows []ScheduledPush
-	err := r.db.WithContext(ctx).
-		Where("is_active = ? AND next_fire_at <= ?", true, now).
-		Order("next_fire_at ASC").
-		Limit(limit).
-		Find(&rows).Error
-	return rows, err
-}
-
 // FindDeviceByID is a thin wrapper so the service can load a
 // device's timezone when computing the next recurring fire.
 func (r *Repository) FindDeviceByID(ctx context.Context, id uint) (devices.Device, error) {

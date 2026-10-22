@@ -175,22 +175,6 @@ func prepareTeamLogo(team *Team) LogoJob {
 	return pending
 }
 
-func (r *Repository) upsertTeam(ctx context.Context, team *Team) error {
-	pending := prepareTeamLogo(team)
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "team_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"name", "logo_url", "primary_color", "secondary_color", "text_color",
-		}),
-	}).Create(team).Error; err != nil {
-		return err
-	}
-	if pending.PrimaryURL != "" && !isProxiedLogoURL(pending.PrimaryURL) {
-		r.scheduleLogo(r.db, pending)
-	}
-	return nil
-}
-
 func (r *Repository) UpsertScrapeBatch(ctx context.Context, batch ScrapeBatch, batchSize int) error {
 	if batchSize <= 0 {
 		batchSize = 500

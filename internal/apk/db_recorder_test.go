@@ -31,10 +31,10 @@ type dbRecorder struct {
 	stmts []dbStatement
 }
 
-func (r *dbRecorder) LogMode(logger.LogLevel) logger.Interface      { return r }
-func (r *dbRecorder) Info(context.Context, string, ...interface{})  {}
-func (r *dbRecorder) Warn(context.Context, string, ...interface{})  {}
-func (r *dbRecorder) Error(context.Context, string, ...interface{}) {}
+func (r *dbRecorder) LogMode(logger.LogLevel) logger.Interface { return r }
+func (r *dbRecorder) Info(context.Context, string, ...any)     {}
+func (r *dbRecorder) Warn(context.Context, string, ...any)     {}
+func (r *dbRecorder) Error(context.Context, string, ...any)    {}
 
 func (r *dbRecorder) Trace(ctx context.Context, _ time.Time, fc func() (string, int64), _ error) {
 	sql, _ := fc()

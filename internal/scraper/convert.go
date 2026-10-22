@@ -129,20 +129,6 @@ func ToEvent(source Match, sport string) (events.Event, error) {
 	}, nil
 }
 
-// parseScoreStr previously parsed "2-1" strings out of
-// MatchStatus.ScoreStr. PR #124 moved the source of truth to
-// Match.HomeScore and Match.AwayScore (FotMob /api/data/matches
-// exposes per-team int scores directly), so this helper is no
-// longer called. It is retained here as a build target so that the
-// parseScoreStr-related symbols (strings, strconv) are not
-// dropped from the import list by accident — the body is dead
-// code guarded by an unconditional panic if anything ever calls
-// it, which makes the regression loud.
-// Deprecated: use Match.HomeScore / Match.AwayScore directly.
-func parseScoreStr(string) (int, int) {
-	panic("scraper.parseScoreStr is deprecated; use Match.HomeScore/Match.AwayScore (PR #124)")
-}
-
 // normalizeStatus rewrites the FotMob (started, finished, cancelled)
 // bool triple into the values the events repository queries against.
 // The repository only selects events with status_type in

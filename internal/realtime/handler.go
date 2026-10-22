@@ -303,7 +303,3 @@ func userIDPtrToUint32(p *uint) uint32 {
 	}
 	return uint32(*p)
 }
-
-// Compile-time guard so an unused import of "context" is avoided
-// when the file is read in isolation by tooling.
-var _ = context.Background

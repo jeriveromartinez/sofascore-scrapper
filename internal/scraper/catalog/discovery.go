@@ -77,17 +77,12 @@ const discoveryTimeout = 45 * time.Second
 // var only so tests can shrink it.
 var discoveryPersistTimeout = 2 * time.Minute
 
-// Discovery pulls the upstream 365scores competition catalog and
+// DiscoverySports pulls the upstream 365scores competition catalog and
 // upserts every row into `scraper_leagues`. Idempotent: re-running
 // against the same catalog is a no-op (the unique key on
 // (source, source_league_id) blocks duplicates and EnsureLeague
-// skips already-present rows).
-func Discovery(ctx context.Context, repo *Repository, client *scores365.Client, logger *slog.Logger) (DiscoveryResult, error) {
-	return DiscoverySports(ctx, repo, client, DefaultSportSlugs, logger)
-}
-
-// DiscoverySports is Discovery with an explicit sport-slug list, so
-// a deployment can widen or narrow the sweep from configuration.
+// skips already-present rows). The sport-slug list is explicit so a
+// deployment can widen or narrow the sweep from configuration.
 func DiscoverySports(
 	ctx context.Context,
 	repo *Repository,

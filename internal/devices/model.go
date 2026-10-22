@@ -2,7 +2,6 @@ package devices
 
 import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
-	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
 )
 
@@ -15,7 +14,6 @@ type Device struct {
 	PackageId string          `gorm:"column:package_id;type:longtext"`
 	LastSeen  int64           `gorm:"column:last_seen"`
 	Version   string          `gorm:"column:version;type:longtext"`
-	Manager   *users.User     `gorm:"foreignKey:UserID;references:ID"`
 	DomainID  *uint           `gorm:"column:domain_id;index:idx_devices_domain_id;null;foreignKey:DomainID;references:ID;constraint:OnDelete:SET_NULL,OnUpdate:CASCADE"`
 	Domain    *domains.Domain `gorm:"foreignKey:DomainID;references:ID"`
 	// Timezone is an IANA TZ string (e.g. "America/Mexico_City") the

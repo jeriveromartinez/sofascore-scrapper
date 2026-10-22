@@ -42,8 +42,7 @@ type timersRunner struct {
 	lockTTL          time.Duration
 	staleClaimWindow time.Duration
 
-	firedTotal  atomic.Int64
-	failedTotal atomic.Int64
+	firedTotal atomic.Int64
 }
 
 // startTimersRunner installs the timers runner as a background
@@ -182,14 +181,12 @@ func (r *timersRunner) dispatchDue(ctx context.Context) {
 	r.reapStaleClaims(ctx)
 	dueTimers, err := r.popDue(ctx)
 	if err != nil {
-		r.failedTotal.Add(1)
 		r.log().Error("timers runner: pop due",
 			slog.String("error", err.Error()))
 		return
 	}
 	for _, t := range dueTimers {
 		if err := r.dispatchOne(ctx, t); err != nil {
-			r.failedTotal.Add(1)
 			r.log().Error("timers runner: dispatch timer",
 				slog.Uint64("timer_id", uint64(t.ID)),
 				slog.String("error", err.Error()))
@@ -233,11 +230,9 @@ func (r *timersRunner) dispatchOne(ctx context.Context, timer push.ScheduledPush
 	return r.svc.DispatchTimer(ctx, sched, timer)
 }
 
-// firedCount and failedCount surface the atomic counters so the
-// integration test can assert the runner did its work without
-// scraping logs.
-func (r *timersRunner) firedCount() int64  { return r.firedTotal.Load() }
-func (r *timersRunner) failedCount() int64 { return r.failedTotal.Load() }
+// firedCount surfaces the atomic counter so the integration test
+// can assert the runner did its work without scraping logs.
+func (r *timersRunner) firedCount() int64 { return r.firedTotal.Load() }
 
 // RunOnce exposes the tick to the integration test so the cron
 // clock is not in the loop.
