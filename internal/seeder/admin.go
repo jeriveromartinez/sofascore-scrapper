@@ -14,6 +14,7 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -96,16 +97,28 @@ func SeedDefaultAdmin(ctx context.Context, db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("hash default admin password: %w", err)
 	}
+	// Backends booting together all see an empty users table; the
+	// unique email lets exactly one insert win and the rest no-op
+	// instead of failing on the duplicate key and exiting.
+	result := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&users.User{
+		Email:    DefaultAdminEmail,
+		Password: string(hashed),
+		Role:     users.RoleAdmin,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		slog.Default().Info("seeder: default admin already exists, skipping",
+			slog.String("email", DefaultAdminEmail))
+		return nil
+	}
 	DefaultAdminPassword = password
 	if generated {
 		slog.Default().Warn("seeder: no admin password configured, a random one was generated for the default admin account. Set "+DefaultAdminPasswordEnvVar+" and recreate the account, or reset the password from the admin API. The generated password is not logged.",
 			slog.String("email", DefaultAdminEmail))
 	}
-	return db.WithContext(ctx).Create(&users.User{
-		Email:    DefaultAdminEmail,
-		Password: string(hashed),
-		Role:     users.RoleAdmin,
-	}).Error
+	return nil
 }
 
 // resolveAdminPassword returns the password of the seeded admin
