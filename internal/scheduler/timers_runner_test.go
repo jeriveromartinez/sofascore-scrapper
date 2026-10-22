@@ -15,6 +15,7 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/devices"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/domains"
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
+	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
 	"gorm.io/gorm"
@@ -321,5 +322,44 @@ func TestTimersRunnerDoesNotRefireCompletedDispatches(t *testing.T) {
 	}
 	if row.DispatchedAt == nil {
 		t.Error("a completed dispatch was re-armed")
+	}
+}
+
+type ctxRecordingLocker struct {
+	mu  sync.Mutex
+	ctx context.Context
+}
+
+func (l *ctxRecordingLocker) Acquire(ctx context.Context, _ string, _ time.Duration) (redisplatform.Lease, bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.ctx = ctx
+	return nil, false, nil
+}
+
+// TestTimersRunnerTickIsBounded guards against a hung query stalling
+// scheduled pushes forever: the root ctx has no deadline, so each tick
+// must bring its own budget, shorter than the lease TTL.
+func TestTimersRunnerTickIsBounded(t *testing.T) {
+	locker := &ctxRecordingLocker{}
+	runner := &timersRunner{
+		locker: locker,
+		logger: slog.New(slog.NewTextHandler(&syncBuffer{}, nil)),
+	}
+
+	before := time.Now()
+	runner.RunOnce(context.Background())
+
+	locker.mu.Lock()
+	defer locker.mu.Unlock()
+	if locker.ctx == nil {
+		t.Fatal("tick never tried to acquire the lease")
+	}
+	deadline, ok := locker.ctx.Deadline()
+	if !ok {
+		t.Fatal("tick ctx has no deadline")
+	}
+	if budget := deadline.Sub(before); budget > timersLockTTL {
+		t.Fatalf("tick budget %s exceeds the lease TTL %s", budget, timersLockTTL)
 	}
 }
