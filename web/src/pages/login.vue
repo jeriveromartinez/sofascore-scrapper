@@ -177,6 +177,7 @@ onMounted(() => checkAuth());
                 <div class="input-group input-group-merge">
                   <input
                     :type="states.revealPassword ? 'text' : 'password'"
+                    id="password"
                     class="form-control"
                     name="password"
                     placeholder="&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;"

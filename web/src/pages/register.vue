@@ -24,6 +24,14 @@ const states = reactive({
 const goToLogin = () => router.resolve({ name: "Login" }).href;
 
 const doRegister = async () => {
+  if (!states.email.trim() || !states.password) {
+    toast.error("Email and password are required");
+    return;
+  }
+  if (!states.agree) {
+    toast.error("You must accept the privacy policy & terms");
+    return;
+  }
   try {
     const user = await authApiService.register(states.email, states.password, states.invitationToken);
     if (!user.token) throw new Error("Invalid credentials");
@@ -168,6 +176,7 @@ onMounted(() => checkAuth());
                   name="email"
                   placeholder="Enter your email"
                   v-model="states.email"
+                  required
                 />
               </div>
               <div class="form-password-toggle">
@@ -180,6 +189,7 @@ onMounted(() => checkAuth());
                     name="password"
                     placeholder="&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;"
                     v-model="states.password"
+                    required
                   />
                   <button
                     type="button"
@@ -213,6 +223,7 @@ onMounted(() => checkAuth());
                     id="terms-conditions"
                     name="terms"
                     v-model="states.agree"
+                    required
                   />
                   <label class="form-check-label" for="terms-conditions">
                     I agree to

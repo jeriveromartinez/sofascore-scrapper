@@ -3,6 +3,7 @@ import axios from "axios";
 import { setActivePinia, createPinia } from "pinia";
 import { writeAuthStorage, clearAuthStorage } from "../authStorage";
 import { createAuthJsonAxios } from "./axiosAuth";
+import { REQUEST_TIMEOUT_MS } from "./BaseApiService";
 
 // The refreshAuth() helper decodes the protobuf AuthResponse with the real
 // codec. We override `decode` to a JSON parser so we can return a known
@@ -29,6 +30,10 @@ describe("createAuthJsonAxios", () => {
     setActivePinia(createPinia());
     clearAuthStorage();
     vi.restoreAllMocks();
+  });
+
+  it("sets a finite request timeout on the instance", () => {
+    expect(createAuthJsonAxios().defaults.timeout).toBe(REQUEST_TIMEOUT_MS);
   });
 
   it("retries a failed request with the refreshed bearer token after a 401", async () => {

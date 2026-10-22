@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, it, expect } from 'vitest'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import ConfirmDelete from './ConfirmDelete.vue'
 import type { ScraperLeague } from '../../store/pinia/scraperLeaguesStore'
 
@@ -15,6 +15,8 @@ const item: ScraperLeague = {
   created_at: '',
   updated_at: '',
 }
+
+enableAutoUnmount(afterEach)
 
 describe('ConfirmDelete', () => {
   it("renders item.name inside the message", () => {
@@ -54,5 +56,22 @@ describe('ConfirmDelete', () => {
     const wrapper = mount(ConfirmDelete, { props: { item } })
     const modal = wrapper.find('.modal-visible')
     expect(modal.exists()).toBe(true)
+  })
+
+  it('is a modal dialog labelled by its title', () => {
+    const wrapper = mount(ConfirmDelete, { props: { item } })
+    const dialog = wrapper.find('.modal')
+    expect(dialog.attributes('role')).toBe('dialog')
+    expect(dialog.attributes('aria-modal')).toBe('true')
+    const labelledBy = dialog.attributes('aria-labelledby')
+    expect(labelledBy).toBeTruthy()
+    expect(wrapper.find(`[id="${labelledBy}"]`).text()).toBe('Delete league')
+  })
+
+  it('emits cancel on Escape and locks page scroll while mounted', async () => {
+    const wrapper = mount(ConfirmDelete, { props: { item }, attachTo: document.body })
+    expect(document.body.style.overflow).toBe('hidden')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(wrapper.emitted('cancel')).toHaveLength(1)
   })
 })

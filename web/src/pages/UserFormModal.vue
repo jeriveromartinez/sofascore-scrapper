@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { reactive, ref, useId } from "vue";
+import { useModal } from "../composables/useModal";
 import type { User } from "../store/services/models";
 
-const props = withDefaults(defineProps<{ autoCloseModal?: boolean }>(), {
-  autoCloseModal: true,
-});
+type UserFormPayload = { id: number | null; email: string; password: string; role: string };
 
-const emit = defineEmits<{
-  submit: [payload: { id: number | null; email: string; password: string; role: string }];
-}>();
+const props = withDefaults(
+  defineProps<{
+    autoCloseModal?: boolean;
+    // A prop instead of an emit so the modal can await the parent's request.
+    onSubmit?: (payload: UserFormPayload) => Promise<void> | void;
+  }>(),
+  { autoCloseModal: true },
+);
+
+const formId = useId();
+const titleId = useId();
+const dialog = ref<HTMLElement | null>(null);
 
 const modal = reactive({
   open: false,
@@ -33,6 +41,7 @@ function open(entity?: User): void {
 }
 
 async function submit(): Promise<void> {
+  if (modal.loading) return;
   if (!modal.form.email) {
     modal.error = "El email es requerido";
     return;
@@ -43,29 +52,26 @@ async function submit(): Promise<void> {
   }
   modal.loading = true;
   try {
-    emit("submit", {
+    await props.onSubmit?.({
       id: modal.form.id,
       email: modal.form.email,
       password: modal.form.password,
       role: modal.form.role,
     });
     if (props.autoCloseModal) reset();
+  } catch (err) {
+    modal.error = err instanceof Error && err.message ? err.message : "No se pudo guardar el usuario";
   } finally {
     modal.loading = false;
   }
 }
 
-watch(
-  () => modal.open,
-  (isOpen) => {
-    document.body.classList.toggle("modal-open", isOpen);
-    document.body.style.overflow = isOpen ? "hidden" : "";
+useModal({
+  isOpen: () => modal.open,
+  container: dialog,
+  onClose: () => {
+    if (!modal.loading) reset();
   },
-);
-
-onBeforeUnmount(() => {
-  document.body.classList.remove("modal-open");
-  document.body.style.overflow = "";
 });
 
 defineExpose({ open, reset });
@@ -74,22 +80,24 @@ defineExpose({ open, reset });
 <template>
   <div
     v-if="modal.open"
+    ref="dialog"
     class="modal fade show"
     tabindex="-1"
     style="display: block"
     aria-modal="true"
     role="dialog"
+    :aria-labelledby="titleId"
   >
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">
+          <h5 :id="titleId" class="modal-title">
             {{ modal.form.id ? "Editar usuario" : "Crear usuario" }}
           </h5>
           <button type="button" class="btn-close" aria-label="Close" @click="reset"></button>
         </div>
         <div class="modal-body">
-          <form class="row g-3" @submit.prevent="submit">
+          <form :id="formId" class="row g-3" @submit.prevent="submit">
             <div class="col-12">
               <label class="form-label">Email *</label>
               <input v-model="modal.form.email" type="email" class="form-control" required />
@@ -133,7 +141,7 @@ defineExpose({ open, reset });
             type="submit"
             class="btn btn-primary"
             :disabled="modal.loading"
-            @click="submit"
+            :form="formId"
           >
             {{ modal.form.id ? "Actualizar" : "Crear" }}
           </button>

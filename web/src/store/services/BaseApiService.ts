@@ -9,6 +9,10 @@ import { readAuthStorage, clearAuthStorage } from "../authStorage";
 
 const PROTO_CONTENT_TYPE = "application/x-protobuf";
 
+export const REQUEST_TIMEOUT_MS = 30_000;
+// APK transfers (10 MiB upload chunks, whole-APK downloads) need far longer than REQUEST_TIMEOUT_MS on slow links.
+export const UPLOAD_TIMEOUT_MS = 10 * 60_000;
+
 let refreshPromise: Promise<UserAuthModel | null> | null = null;
 
 export interface ProtoCodec<T> {
@@ -57,8 +61,10 @@ export function headerString(headers: unknown, name: string): string {
  * Exchange the stored refresh token for a fresh access token. On success
  * the new user is written to the same storage (session vs local) the refresh
  * token came from, and the Pinia auth store is updated so subsequent reads
- * see the new token. Returns `null` if the refresh is not possible (no
- * stored token, network error, or non-200 response).
+ * see the new token. Returns `null` when the session cannot be refreshed (no
+ * stored refresh token or a non-200 response), which logs the user out.
+ * Network errors and timeouts reject instead, so a transient failure surfaces
+ * as a request error without ending the session.
  *
  * Exported for testing; production code should rely on the 401 interceptor
  * installed by {@link BaseApiService}.
@@ -84,6 +90,7 @@ export async function refreshAuth(): Promise<UserAuthModel | null> {
         },
         responseType: "arraybuffer",
         validateStatus: () => true,
+        timeout: REQUEST_TIMEOUT_MS,
       },
     );
 
@@ -125,7 +132,7 @@ export abstract class BaseApiService {
   protected readonly pathApi: string;
 
   constructor(pathApi: string) {
-    this.http = axios.create({ baseURL: API_BASE_URL });
+    this.http = axios.create({ baseURL: API_BASE_URL, timeout: REQUEST_TIMEOUT_MS });
     this.pathApi = pathApi;
     this.setupInterceptors();
   }
@@ -275,6 +282,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -286,6 +294,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
       transformRequest: [(data) => data],
     });
 
@@ -298,6 +307,7 @@ export abstract class BaseApiService {
     url: string,
     decoder: ProtoCodec<T>,
     extraHeaders?: Record<string, string>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = { ...this.getHeaders(), ...extraHeaders };
     const {
@@ -308,6 +318,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
@@ -320,6 +331,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -331,6 +343,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
       transformRequest: [(data) => data],
     });
 
@@ -344,6 +357,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -355,6 +369,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
       transformRequest: [(data) => data],
     });
 
@@ -367,6 +382,7 @@ export abstract class BaseApiService {
     url: string,
     formData: FormData,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = { Accept: PROTO_CONTENT_TYPE };
@@ -380,6 +396,8 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
+      timeout: UPLOAD_TIMEOUT_MS,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
@@ -395,6 +413,7 @@ export abstract class BaseApiService {
   protected async postMultipartJSON<T>(
     url: string,
     formData: FormData,
+    signal?: AbortSignal,
   ): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = {};
@@ -406,6 +425,8 @@ export abstract class BaseApiService {
       {
         headers,
         validateStatus: () => true,
+        signal,
+        timeout: UPLOAD_TIMEOUT_MS,
       },
     );
 
@@ -423,12 +444,13 @@ export abstract class BaseApiService {
     return data;
   }
 
-  protected async getBinary(url: string): Promise<Blob> {
+  protected async getBinary(url: string, signal?: AbortSignal): Promise<Blob> {
     const headers = this.getHeaders();
     const response = await this.http.get<ArrayBuffer>(`${this.pathApi}${url}`, {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     const contentType = headerString(response.headers, "content-type");
@@ -446,7 +468,11 @@ export abstract class BaseApiService {
     });
   }
 
-  protected async delete<T>(url: string, decoder: ProtoCodec<T>): Promise<T> {
+  protected async delete<T>(
+    url: string,
+    decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const headers = this.getHeaders();
     const {
       data,
@@ -456,6 +482,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
@@ -468,6 +495,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -480,6 +508,7 @@ export abstract class BaseApiService {
       data: payload,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));

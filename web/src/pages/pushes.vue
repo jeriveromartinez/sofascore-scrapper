@@ -281,6 +281,13 @@ async function createSchedule(): Promise<void> {
     return;
   }
   if (
+    scheduleForm.scheduleType === PushScheduleType.PUSH_SCHEDULE_TYPE_ONE_SHOT &&
+    Number.isNaN(Date.parse(scheduleForm.runAt))
+  ) {
+    scheduleForm.error = "runAt is not a valid date";
+    return;
+  }
+  if (
     scheduleForm.scheduleType === PushScheduleType.PUSH_SCHEDULE_TYPE_RECURRING &&
     scheduleForm.cronExpr.trim() === ""
   ) {
@@ -372,7 +379,7 @@ const recentPushes = ref<PushMessage[]>([]);
 const recentPushesLoading = ref(false);
 const recentPushesError = ref("");
 const expandedPushId = ref<number | null>(null);
-const campaignMetricsById = reactive<Record<number, PushMetricsByCampaign | null>>({});
+const campaignMetricsById = reactive<Record<number, PushMetricsByCampaign>>({});
 const campaignMetricsLoading = reactive<Record<number, boolean>>({});
 
 function formatPercent(value: number): string {
@@ -426,7 +433,8 @@ async function togglePushExpansion(p: PushMessage): Promise<void> {
   try {
     campaignMetricsById[p.id] = await pushesApiService.getCampaignMetrics(p.id);
   } catch {
-    campaignMetricsById[p.id] = null;
+    // Leave the entry unset so expanding the row again retries the load.
+    delete campaignMetricsById[p.id];
     toast.error("Could not load campaign metrics");
   } finally {
     campaignMetricsLoading[p.id] = false;
