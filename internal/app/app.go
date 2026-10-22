@@ -24,7 +24,6 @@ import (
 	"github.com/jeriveromartinez/scores365-scrapper/internal/seeder"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/users"
-	"github.com/prometheus/client_golang/prometheus"
 	goredis "github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
@@ -138,9 +137,10 @@ func New(cfg config.Config) (*App, error) {
 		logger:        logger,
 	}
 	app.realtimeSubscriber = realtime.NewSubscriber(redisClient, app.realtimeHub, realtime.SubscriberConfig{
-		Logger: logger,
+		KeyPrefix: cfg.Redis.KeyPrefix,
+		Logger:    logger,
 	})
-	pushMetrics := push.NewMetrics(prometheus.DefaultRegisterer)
+	pushMetrics := push.NewMetrics(observability.Registerer())
 	app.pushMetrics = pushMetrics
 	pushRepo := push.NewRepository(db)
 	domainRepoPush := domains.NewRepository(db)
@@ -156,16 +156,15 @@ func New(cfg config.Config) (*App, error) {
 	app.realtimeHub.SetMetrics(pushMetrics)
 	app.ready.Store(true)
 
-	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler, app.realtimeHub, app.pushService)
-	router.Use(server.ReadinessMiddleware(&app.ready))
+	router := NewRouter(db, redisClient, cfg, tokens, logoScheduler, app.realtimeHub, app.pushService, &app.ready)
 
 	app.HTTP = &http.Server{
 		Addr:              cfg.APIAddr,
 		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		ReadTimeout:       15 * time.Minute,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		WriteTimeout:      cfg.HTTP.WriteTimeout,
+		IdleTimeout:       cfg.HTTP.IdleTimeout,
 		MaxHeaderBytes:    1 << 20,
 	}
 
@@ -184,9 +183,6 @@ func (a *App) Run(ctx context.Context) error {
 	a.Scheduler.SetCleanupJob(buildCleanupJobFromApp(a), a.Redis)
 	a.Scheduler.SetDownloadCounter(apk.NewDownloadCounter(a.Redis, a.DB))
 	a.Scheduler.SetPushService(a.pushService, redisplatform.NewLocker(a.Redis), a.Cfg.PushTimerTickInterval, a.Cfg.PushTimerBatchLimit)
-	if a.Redis != nil {
-		a.Scheduler.SetPushTimerStore(redisplatform.NewTimerStore(a.Redis))
-	}
 
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {

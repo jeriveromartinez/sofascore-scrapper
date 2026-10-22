@@ -16,6 +16,13 @@ func Register(c prometheus.Collector) error {
 	return reg.Register(c)
 }
 
+// Registerer returns the registry the /metrics endpoint serves.
+// Collectors must be registered here instead of on
+// prometheus.DefaultRegisterer, which is not exposed.
+func Registerer() prometheus.Registerer {
+	return reg
+}
+
 func Gatherer() prometheus.Gatherer {
 	return reg
 }
