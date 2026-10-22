@@ -2,6 +2,7 @@ package devices
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -67,7 +68,7 @@ func (h *AdminHandler) handleGetDevicesPage(c *gin.Context) {
 
 	devices, hasMore, err := h.repo.ListPage(c.Request.Context(), id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list devices page failed", err)
 		return
 	}
 
@@ -122,7 +123,7 @@ func (h *AdminHandler) handleGetDevices(c *gin.Context) {
 
 	devices, total, err := h.repo.GetDevices(c.Request.Context(), uint(page), uint(limit))
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list devices failed", err)
 		return
 	}
 
@@ -139,7 +140,7 @@ func (h *AdminHandler) handleGetDevices(c *gin.Context) {
 func (h *AdminHandler) handleGetAllDevices(c *gin.Context) {
 	devices, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list all devices failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.DeviceList{Data: DevicesToProto(devices)})
@@ -159,9 +160,16 @@ func (h *AdminHandler) handleUpdateDevice(c *gin.Context) {
 
 	updatedDevice, err := h.repo.Update(req.Token, req.Platform, req.Name, req.PackageId, req.Timezone)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "update device failed", err)
 		return
 	}
 
 	server.RespondProto(c, http.StatusOK, DeviceToProto(*updatedDevice))
+}
+
+// respondInternalError logs the cause server-side and keeps driver and
+// schema details out of the response body.
+func respondInternalError(c *gin.Context, msg string, err error) {
+	slog.ErrorContext(c.Request.Context(), msg, slog.String("error", err.Error()))
+	server.RespondError(c, http.StatusInternalServerError, "internal server error")
 }

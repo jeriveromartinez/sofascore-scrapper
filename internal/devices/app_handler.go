@@ -29,7 +29,7 @@ func (h *AppHandler) handleRegisterDevice(c *gin.Context) {
 
 	device, err := h.repo.Register(c.Request.Context(), nil, req.Token, req.Platform, req.Name, req.Version, req.PackageId, req.Timezone)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "register device failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, DeviceToProto(*device))

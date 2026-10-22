@@ -78,7 +78,7 @@ func (h *DeviceAssignmentsHandler) handleGetPage(c *gin.Context) {
 
 	deviceTournaments, hasMore, err := h.repo.ListPage(c.Request.Context(), deviceID, tournamentID, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list device tournaments page failed", err)
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h *DeviceAssignmentsHandler) handleGetPage(c *gin.Context) {
 func (h *DeviceAssignmentsHandler) handleGetAll(c *gin.Context) {
 	deviceTournaments, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list device tournaments failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.DeviceTournamentList{DeviceTournaments: DeviceTournamentsToProto(deviceTournaments)})
@@ -123,7 +123,7 @@ func (h *DeviceAssignmentsHandler) handleGetByDevice(c *gin.Context) {
 
 	deviceTournaments, err := h.repo.GetByDevice(c.Request.Context(), deviceID)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list tournaments by device failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.DeviceTournamentList{DeviceTournaments: DeviceTournamentsToProto(deviceTournaments)})
@@ -138,7 +138,7 @@ func (h *DeviceAssignmentsHandler) handleAssign(c *gin.Context) {
 
 	deviceTournament, err := h.repo.Assign(c.Request.Context(), uint(req.DeviceId), uint(req.TournamentId))
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "assign tournament failed", err)
 		return
 	}
 	if h.onChange != nil {
@@ -155,7 +155,7 @@ func (h *DeviceAssignmentsHandler) handleRemove(c *gin.Context) {
 	}
 
 	if err := h.repo.Remove(c.Request.Context(), uint(req.DeviceId), uint(req.TournamentId)); err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "remove tournament from device failed", err)
 		return
 	}
 	if h.onChange != nil {
@@ -183,7 +183,7 @@ func (h *DeviceAssignmentsHandler) handleSet(c *gin.Context) {
 	}
 
 	if err := h.repo.Set(c.Request.Context(), deviceID, ids); err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "set device tournaments failed", err)
 		return
 	}
 	if h.onChange != nil {

@@ -1,6 +1,7 @@
 package tournaments
 
 import (
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -102,7 +103,7 @@ func (h *Handler) handleGetTournamentsPage(c *gin.Context) {
 
 	tournaments, hasMore, err := h.repo.ListPage(c.Request.Context(), slug, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list tournaments page failed", err)
 		return
 	}
 
@@ -128,7 +129,7 @@ func (h *Handler) handleGetTournamentsPage(c *gin.Context) {
 func (h *Handler) handleGetTournaments(c *gin.Context) {
 	tournaments, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list tournaments failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.TournamentList{Tournaments: TournamentsToProto(tournaments)})
@@ -164,7 +165,7 @@ func (h *Handler) handleCreateTournament(c *gin.Context) {
 
 	tournament, err := h.repo.Create(c.Request.Context(), req.Name, slug)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "create tournament failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusCreated, TournamentToProto(*tournament))
@@ -191,7 +192,7 @@ func (h *Handler) handleUpdateTournament(c *gin.Context) {
 
 	tournament, err := h.repo.Update(c.Request.Context(), id, req.Name, slug)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "update tournament failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, TournamentToProto(*tournament))
@@ -205,8 +206,15 @@ func (h *Handler) handleDeleteTournament(c *gin.Context) {
 	}
 
 	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "delete tournament failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "tournament deleted"})
+}
+
+// respondInternalError logs the cause server-side and keeps driver and
+// schema details out of the response body.
+func respondInternalError(c *gin.Context, msg string, err error) {
+	slog.ErrorContext(c.Request.Context(), msg, slog.String("error", err.Error()))
+	server.RespondError(c, http.StatusInternalServerError, "internal server error")
 }

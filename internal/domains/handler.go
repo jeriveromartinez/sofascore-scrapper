@@ -2,6 +2,7 @@ package domains
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -64,7 +65,7 @@ func (h *Handler) handleGetDomainsPage(c *gin.Context) {
 
 	domains, hasMore, err := h.repo.ListPage(c.Request.Context(), domainStr, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list domains page failed", err)
 		return
 	}
 
@@ -90,7 +91,7 @@ func (h *Handler) handleGetDomainsPage(c *gin.Context) {
 func (h *Handler) handleGetDomains(c *gin.Context) {
 	domains, err := h.repo.GetAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "list domains failed", err)
 		return
 	}
 	server.RespondProto(c, http.StatusOK, &pb.DomainList{Domains: DomainsToProto(domains)})
@@ -170,9 +171,16 @@ func (h *Handler) handleDeleteDomain(c *gin.Context) {
 			server.RespondError(c, http.StatusNotFound, "domain not found")
 			return
 		}
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		respondInternalError(c, "delete domain failed", err)
 		return
 	}
 
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "domain deleted"})
+}
+
+// respondInternalError logs the cause server-side and keeps driver and
+// schema details out of the response body.
+func respondInternalError(c *gin.Context, msg string, err error) {
+	slog.ErrorContext(c.Request.Context(), msg, slog.String("error", err.Error()))
+	server.RespondError(c, http.StatusInternalServerError, "internal server error")
 }
