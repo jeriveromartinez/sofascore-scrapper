@@ -33,12 +33,20 @@ func createEndedPlaybackLog(db *gorm.DB, content string, deviceID uint, endedAt 
 	})
 }
 
+// previousLocalMidnight returns the local midnight that opens the
+// previous calendar day. It uses calendar arithmetic on purpose:
+// subtracting 24 hours drifts by an hour across a DST transition and
+// no longer lands on the previous local midnight.
+func previousLocalMidnight(now time.Time) time.Time {
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).AddDate(0, 0, -1)
+}
+
 func TestGenerateDaily_CreatesContentStats(t *testing.T) {
 	db := setupAggTestDB(t)
 	repo := NewAggregationRepository(db)
 
 	now := time.Now()
-	yesterday := now.Add(-24 * time.Hour)
+	yesterday := previousLocalMidnight(now).Add(time.Hour)
 
 	createEndedPlaybackLog(db, "channel-a", 1, yesterday.UnixMilli())
 	createEndedPlaybackLog(db, "channel-b", 2, yesterday.UnixMilli())
@@ -70,7 +78,7 @@ func TestGenerateDaily_DeletesProcessedLogs(t *testing.T) {
 	repo := NewAggregationRepository(db)
 
 	now := time.Now()
-	yesterday := now.Add(-24 * time.Hour)
+	yesterday := previousLocalMidnight(now).Add(time.Hour)
 
 	createEndedPlaybackLog(db, "ch", 1, yesterday.UnixMilli())
 	createEndedPlaybackLog(db, "ch", 2, now.UnixMilli())
@@ -92,7 +100,7 @@ func TestGenerateDaily_MillisecondDuration(t *testing.T) {
 	repo := NewAggregationRepository(db)
 
 	now := time.Now()
-	begin := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).Add(-24 * time.Hour)
+	begin := previousLocalMidnight(now)
 	yesterdayMs := begin.UnixMilli()
 
 	db.Create(&playback.PlaybackLog{
@@ -119,7 +127,7 @@ func TestGenerateDaily_UpsertsExistingPeriodIdempotently(t *testing.T) {
 	repo := NewAggregationRepository(db)
 
 	now := time.Now()
-	begin := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).Add(-24 * time.Hour)
+	begin := previousLocalMidnight(now)
 	existing := ContentStat{
 		ContentHash: "late-channel",
 		PeriodType:  PeriodTypeDay,
@@ -171,7 +179,7 @@ func TestGenerateMonthly_UsesPeriodStart(t *testing.T) {
 	db.Create(&day1)
 	db.Create(&day2)
 
-	dayBefore := ContentStat{ContentHash: "ch1", PeriodType: PeriodTypeDay, PeriodStart: monthBegin.Add(-24 * time.Hour), Seconds: 50, Views: 5}
+	dayBefore := ContentStat{ContentHash: "ch1", PeriodType: PeriodTypeDay, PeriodStart: monthBegin.AddDate(0, 0, -1), Seconds: 50, Views: 5}
 	db.Create(&dayBefore)
 
 	dayAfter := ContentStat{ContentHash: "ch1", PeriodType: PeriodTypeDay, PeriodStart: monthBegin.AddDate(0, 1, 0), Seconds: 300, Views: 30}
