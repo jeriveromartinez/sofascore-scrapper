@@ -115,7 +115,7 @@ func (h *AdminHandler) handleGetPlayback(c *gin.Context) {
 		limit = parsedLimit
 	}
 
-	logs, err := h.repo.GetList(page, limit)
+	logs, err := h.repo.GetList(c.Request.Context(), page, limit)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
