@@ -32,7 +32,7 @@ func TestToEvent_PassesHomeAndAwayScore(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ToEvent(Match{
+			got, err := ToEvent(Match{
 				Source:         "fotmob",
 				SourceMatchId:  "4193492",
 				Slug:           "x",
@@ -48,6 +48,9 @@ func TestToEvent_PassesHomeAndAwayScore(t *testing.T) {
 					ScoreStr: "", // empty: int halves are authoritative
 				},
 			}, "football")
+			if err != nil {
+				t.Fatalf("ToEvent: %v", err)
+			}
 			if got.HomeScore != tc.homeScore {
 				t.Errorf("HomeScore: want %d, got %d", tc.homeScore, got.HomeScore)
 			}
@@ -68,7 +71,7 @@ func TestToEvent_DefaultsZeroScoresOnScheduledMatch(t *testing.T) {
 	away := Team{SourceId: 2, Name: "A"}
 	league := LeagueRef{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "England", Sport: "football"}
 
-	got := ToEvent(Match{
+	got, err := ToEvent(Match{
 		Source:         "fotmob",
 		SourceMatchId:  "4193492",
 		Slug:           "x",
@@ -84,6 +87,9 @@ func TestToEvent_DefaultsZeroScoresOnScheduledMatch(t *testing.T) {
 			ScoreStr: "0-0",
 		},
 	}, "football")
+	if err != nil {
+		t.Fatalf("ToEvent: %v", err)
+	}
 	if got.HomeScore != 0 {
 		t.Errorf("HomeScore: want 0, got %d", got.HomeScore)
 	}

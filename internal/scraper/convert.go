@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,20 +46,57 @@ func LogoURLForSource(sourceID int64, logoURL string) string {
 	return events.TeamLogoSourceURL(sourceID)
 }
 
-func ToTournament(source LeagueRef) tournaments.Tournament {
+// FotMobTournamentIDBase is the base of the reserved id range that
+// holds the FotMob league ids in the tournaments table. The table is
+// shared with the admin UI, whose rows get auto-increment ids
+// starting at 1, so the upstream league ids need a range of their own
+// or an admin-created tournament overwrites the scraped league that
+// carries the same number.
+const FotMobTournamentIDBase uint64 = tournaments.FotMobTournamentIDBase
+
+// TournamentID maps an upstream league onto the primary key of the
+// tournaments table.
+//
+// The 365scores league ids already carry the upstream prefix
+// (scores365.LeagueIDPrefix) and are used as they are; the FotMob ids
+// are shifted into the range reserved for them. Both ranges sit far
+// above the auto-increment ids the admin UI hands out.
+func TournamentID(league LeagueRef) (uint, error) {
+	raw, err := parseLeagueID(league.SourceLeagueId)
+	if err != nil {
+		return 0, err
+	}
+	if league.Source == "scores365" {
+		return uint(raw), nil
+	}
+	return uint(FotMobTournamentIDBase + raw), nil
+}
+
+// ToTournament maps a league onto the tournaments row the events
+// point at. A malformed league id is an error: it used to become the
+// primary key 0, which silently collected every league whose id the
+// upstream failed to publish.
+func ToTournament(source LeagueRef) (tournaments.Tournament, error) {
+	id, err := TournamentID(source)
+	if err != nil {
+		return tournaments.Tournament{}, err
+	}
 	slug := strings.ToLower(strings.ReplaceAll(source.Name, " ", "-"))
 	return tournaments.Tournament{
-		Model:  gorm.Model{ID: parseLeagueID(source.SourceLeagueId)},
+		Model:  gorm.Model{ID: id},
 		Name:   source.Name,
 		Slug:   slug,
 		Region: source.Country,
-	}
+	}, nil
 }
 
-func ToEvent(source Match, sport string) events.Event {
+func ToEvent(source Match, sport string) (events.Event, error) {
 	homeTeam := ToTeam(source.HomeTeam)
 	awayTeam := ToTeam(source.AwayTeam)
-	tournament := ToTournament(source.League)
+	tournament, err := ToTournament(source.League)
+	if err != nil {
+		return events.Event{}, err
+	}
 
 	startTs := source.StartTimestamp.UnixMilli()
 	if startTs < 0 || startTs > 1<<62/1000 {
@@ -87,8 +125,8 @@ func ToEvent(source Match, sport string) events.Event {
 		HomeScore:       homeScore,
 		AwayScore:       awayScore,
 		League:          &tournament,
-		LeagueId:        uint(parseLeagueID(source.League.SourceLeagueId)),
-	}
+		LeagueId:        tournament.ID,
+	}, nil
 }
 
 // parseScoreStr previously parsed "2-1" strings out of
@@ -136,17 +174,21 @@ func normalizeStatus(s MatchStatus) string {
 	}
 }
 
-// parseLeagueID convierte el ID string de FotMob a uint. Si falla, retorna 0
-// (la fila no se podrá relacionar con un league_id válido pero igual se persiste).
-func parseLeagueID(s string) uint {
-	n, err := strconv.ParseUint(s, 10, 64)
+// parseLeagueID parses the string form of an upstream league id. A
+// malformed id is rejected: it used to become 0, which the tournaments
+// table then stored as a primary key of its own.
+func parseLeagueID(s string) (uint64, error) {
+	n, err := strconv.ParseUint(strings.TrimSpace(s), 10, 64)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("scraper: invalid league id %q: %w", s, err)
 	}
-	return uint(n)
+	if n == 0 {
+		return 0, fmt.Errorf("scraper: league id must not be zero")
+	}
+	return n, nil
 }
 
-func ToScrapeBatch(matches []Match, sport string) events.ScrapeBatch {
+func ToScrapeBatch(matches []Match, sport string) (events.ScrapeBatch, error) {
 	teamMap := make(map[int64]events.Team)
 	tournamentMap := make(map[uint]tournaments.Tournament)
 	eventMap := make(map[string]events.Event)
@@ -154,8 +196,14 @@ func ToScrapeBatch(matches []Match, sport string) events.ScrapeBatch {
 	for _, m := range matches {
 		home := ToTeam(m.HomeTeam)
 		away := ToTeam(m.AwayTeam)
-		tournament := ToTournament(m.League)
-		event := ToEvent(m, sport)
+		tournament, err := ToTournament(m.League)
+		if err != nil {
+			return events.ScrapeBatch{}, err
+		}
+		event, err := ToEvent(m, sport)
+		if err != nil {
+			return events.ScrapeBatch{}, err
+		}
 
 		teamMap[home.TeamId] = home
 		teamMap[away.TeamId] = away
@@ -184,5 +232,5 @@ func ToScrapeBatch(matches []Match, sport string) events.ScrapeBatch {
 	}
 	sort.Slice(evts, func(i, j int) bool { return evts[i].ExternalMatchId < evts[j].ExternalMatchId })
 
-	return events.ScrapeBatch{Teams: teams, Tournaments: tours, Events: evts}
+	return events.ScrapeBatch{Teams: teams, Tournaments: tours, Events: evts}, nil
 }

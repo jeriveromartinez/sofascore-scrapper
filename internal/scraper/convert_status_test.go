@@ -39,7 +39,7 @@ func TestToEvent_NormalizesFotMobStatus(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ToEvent(Match{
+			got, err := ToEvent(Match{
 				Source:         "fotmob",
 				SourceMatchId:  "4193492",
 				Slug:           "x",
@@ -49,6 +49,9 @@ func TestToEvent_NormalizesFotMobStatus(t *testing.T) {
 				League:         league,
 				Status:         tc.status,
 			}, "football")
+			if err != nil {
+				t.Fatalf("ToEvent: %v", err)
+			}
 			if got.StatusType != tc.want {
 				t.Errorf("StatusType: want %q, got %q", tc.want, got.StatusType)
 			}

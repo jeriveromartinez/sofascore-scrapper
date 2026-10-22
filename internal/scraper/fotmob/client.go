@@ -199,9 +199,13 @@ func (c *Client) doRequest(ctx context.Context, path string) ([]byte, error) {
 		}
 
 		limited := io.LimitReader(resp.Body, c.responseMaxBytes)
-		body, _ := io.ReadAll(limited)
+		body, readErr := io.ReadAll(limited)
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
+		if readErr != nil {
+			lastErr = fmt.Errorf("fotmob: read response body: %w", readErr)
+			continue
+		}
 
 		switch resp.StatusCode {
 		case http.StatusOK:

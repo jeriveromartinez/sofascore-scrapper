@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"time"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
@@ -23,12 +24,10 @@ const (
 // itself imports this package for the LeagueRef type).
 //
 // ActiveLeaguesBySource is the per-source routing primitive: it
-// returns the enabled leagues whose effective source (i.e.
-// COALESCE(override_source, source)) equals the requested name.
+// returns the enabled leagues that belong to the requested source.
 // The Service uses it to bucket leagues per registered source
 // without grouping by Source post-hoc, which would otherwise
-// mis-route rows where the operator has pinned a league to a
-// different dispatcher via override_source.
+// mis-bucket rows whose override_source names a different source.
 type CatalogSource interface {
 	ActiveLeagues(ctx context.Context) ([]LeagueRef, error)
 	ActiveLeaguesBySource(ctx context.Context, source string) ([]LeagueRef, error)
@@ -98,6 +97,7 @@ type Service struct {
 	concur           int
 	onScrapeComplete func(context.Context) error
 	logger           *slog.Logger
+	now              func() time.Time
 }
 
 // NewService builds a Service that dispatches each league to its
@@ -110,6 +110,9 @@ type Service struct {
 func NewService(repo *events.Repository, dispatcher *SourceDispatcher, catalog CatalogSource, batchSize int, concurrency int, logger *slog.Logger) (*Service, error) {
 	if dispatcher == nil {
 		return nil, fmt.Errorf("scraper: SourceDispatcher is required")
+	}
+	if isNilCatalog(catalog) {
+		return nil, fmt.Errorf("scraper: catalog repository is required")
 	}
 	if concurrency == 0 {
 		concurrency = DefaultScrapeConcurrency
@@ -127,6 +130,7 @@ func NewService(repo *events.Repository, dispatcher *SourceDispatcher, catalog C
 		batchSize:  batchSize,
 		concur:     concurrency,
 		logger:     logger,
+		now:        time.Now,
 	}, nil
 }
 
@@ -135,18 +139,19 @@ func (s *Service) SetOnScrapeComplete(fn func(context.Context) error) {
 }
 
 // ScrapeToday iterates each registered source and dispatches its
-// effective leagues in parallel. Per-source routing uses
-// ActiveLeaguesBySource so an operator-set override_source
-// (which moves a league to a different dispatcher) is honoured
-// without a post-hoc re-group that would otherwise mis-bucket
-// pinned rows under their natural Source field.
+// leagues in parallel. Per-source routing uses ActiveLeaguesBySource
+// so every league reaches the source that published its id.
 //
 // Sources that implement DayMatcher use the bulk-fetch fast
 // path; others iterate their leagues one at a time. Either way,
 // the per-league upsert is shared.
 func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
 	parentCtx := ctx
-	g, ctx := errgroup.WithContext(ctx)
+	// A plain errgroup (no derived context) keeps a failing source
+	// from cancelling its siblings: the first error is still
+	// returned by Wait, but the sources running next to it keep
+	// their own context alive until they finish.
+	var g errgroup.Group
 	g.SetLimit(s.concur)
 	anyLeagues := false
 	for _, srcName := range s.dispatcher.Names() {
@@ -199,11 +204,13 @@ func (s *Service) ScrapeToday(ctx context.Context, date time.Time) {
 // ScrapeToday so override_source routing applies to the
 // lookahead window as well.
 func (s *Service) ScrapeNext7Days(ctx context.Context) {
-	now := time.Now()
+	now := s.now()
 	for i := 1; i <= 7; i++ {
-		date := now.Add(time.Duration(i) * 24 * time.Hour)
+		// Calendar-day arithmetic: adding a fixed 24h skips a day
+		// (or repeats one) across a DST transition.
+		date := addDays(now, i)
 		parentCtx := ctx
-		g, ctx := errgroup.WithContext(ctx)
+		var g errgroup.Group
 		g.SetLimit(s.concur)
 		for _, srcName := range s.dispatcher.Names() {
 			srcName := srcName
@@ -225,7 +232,11 @@ func (s *Service) ScrapeNext7Days(ctx context.Context) {
 				return s.dispatchSource(ctx, src, leagues, date, parentCtx)
 			})
 		}
-		g.Wait()
+		if err := g.Wait(); err != nil {
+			s.logger.ErrorContext(ctx, "scrape next 7 days errors",
+				slog.String("date", date.Format("2006-01-02")),
+				slog.String("error", err.Error()))
+		}
 		if s.onScrapeComplete != nil {
 			if hookErr := s.onScrapeComplete(parentCtx); hookErr != nil {
 				// See ScrapeToday: log rather than swallow so a
@@ -235,6 +246,13 @@ func (s *Service) ScrapeNext7Days(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// addDays advances a timestamp by n calendar days, keeping the
+// wall-clock time. A fixed 24h offset is not the same thing: on the
+// days a DST transition falls in, it lands on the wrong calendar day.
+func addDays(t time.Time, n int) time.Time {
+	return t.AddDate(0, 0, n)
 }
 
 // dispatchSource drives one source's leagues for a single day.
@@ -307,7 +325,10 @@ func (s *Service) dispatchDayMatch(
 			slog.String("source_league_id", id))
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	// The leagues are upserted in parallel; a league that fails
+	// must not cancel the ones running next to it, so the group
+	// runs without a derived context.
+	var g errgroup.Group
 	g.SetLimit(s.concur)
 
 	// Step 1: enabled leagues from the catalog. Their canonical
@@ -403,7 +424,9 @@ func (s *Service) dispatchPerLeague(
 	date time.Time,
 	parentCtx context.Context,
 ) error {
-	g, ctx := errgroup.WithContext(ctx)
+	// As in dispatchDayMatch: the leagues run in parallel and a
+	// failure must not cancel the siblings.
+	var g errgroup.Group
 	g.SetLimit(s.concur)
 	for _, league := range srcLeagues {
 		league := league
@@ -444,9 +467,28 @@ func (s *Service) upsertLeagueMatches(ctx context.Context, league LeagueRef, dat
 	if sport == "" {
 		sport = "football"
 	}
-	batch := ToScrapeBatch(matches, sport)
+	batch, err := ToScrapeBatch(matches, sport)
+	if err != nil {
+		return fmt.Errorf("scraper: build batch for %s on %s: %w", league.SourceLeagueId, date.Format("2006-01-02"), err)
+	}
 	if err := s.repo.UpsertScrapeBatch(ctx, batch, s.batchSize); err != nil {
 		return fmt.Errorf("scraper: upsert %s on %s: %w", league.SourceLeagueId, date.Format("2006-01-02"), err)
 	}
 	return nil
+}
+
+// isNilCatalog reports whether the catalog dependency is missing.
+// A typed nil pointer (e.g. (*catalog.Repository)(nil)) is not equal
+// to a nil interface, so the pointer case is checked explicitly.
+func isNilCatalog(c CatalogSource) bool {
+	if c == nil {
+		return true
+	}
+	v := reflect.ValueOf(c)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
