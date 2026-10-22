@@ -123,6 +123,15 @@ func (c *mapCache) Set(_ context.Context, key string, value []byte, _ time.Durat
 // cached path. It returns the cache key the first device request uses.
 func newCachedService(t *testing.T) (*Service, *mapCache, string) {
 	t.Helper()
+	cache := &mapCache{data: map[string][]byte{}}
+	svc, key := newCachedServiceWithCache(t, cache)
+	return svc, cache, key
+}
+
+// newCachedServiceWithCache wires a Service over sqlite and a miniredis
+// epoch store holding a live epoch, so requests take the cached path.
+func newCachedServiceWithCache(t *testing.T, cache CurrentEventsCache) (*Service, string) {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -146,8 +155,7 @@ func newCachedService(t *testing.T) (*Service, *mapCache, string) {
 		t.Fatalf("seed epoch: %v", err)
 	}
 
-	cache := &mapCache{data: map[string][]byte{}}
-	return NewService(NewRepository(db), cache, NewEpochStore(client)), cache, BuildCacheKey(epoch, []uint{1}, 6)
+	return NewService(NewRepository(db), cache, NewEpochStore(client)), BuildCacheKey(epoch, []uint{1}, 6)
 }
 
 func TestServiceCorruptCacheLogsThroughSlog(t *testing.T) {

@@ -68,7 +68,14 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 			// than hammering the DB. The earlier outer cache.Get
 			// was redundant: it always returned miss whenever the
 			// worker had to fall through to the DB anyway.
-			if data, hit, _ := s.cache.Get(flightCtx, key); hit {
+			data, hit, cacheErr := s.cache.Get(flightCtx, key)
+			if cacheErr != nil {
+				slog.Default().WarnContext(flightCtx, "events: cache lookup failed, falling back to the database",
+					slog.String("key", key),
+					slog.String("err", cacheErr.Error()),
+				)
+			}
+			if hit {
 				events, deserErr := deserializeEvents(data)
 				if deserErr == nil {
 					observability.EventCacheHits.Inc()
@@ -86,8 +93,19 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 				return nil, dbErr
 			}
 
-			if data, serErr := serializeEvents(events); serErr == nil {
-				_ = s.cache.Set(flightCtx, key, data, defaultTTL)
+			data, serErr := serializeEvents(events)
+			if serErr != nil {
+				slog.Default().WarnContext(flightCtx, "events: could not serialize the cached events",
+					slog.String("key", key),
+					slog.String("err", serErr.Error()),
+				)
+				return events, nil
+			}
+			if cacheErr := s.cache.Set(flightCtx, key, data, defaultTTL); cacheErr != nil {
+				slog.Default().WarnContext(flightCtx, "events: cache write failed",
+					slog.String("key", key),
+					slog.String("err", cacheErr.Error()),
+				)
 			}
 			return events, nil
 		})
