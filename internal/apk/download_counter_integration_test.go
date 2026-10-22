@@ -117,7 +117,7 @@ func TestDownloadCounter_FlushPreservesActive(t *testing.T) {
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	apk, err := NewRepository(db).Create("1.0.0", "test.apk", "/tmp/test.apk", "test", "com.test.flush.preserve", 100, 1, 21, 31)
+	apk, err := NewRepository(db).Create(context.Background(), "1.0.0", "test.apk", "/tmp/test.apk", "test", "com.test.flush.preserve", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create apk: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestDownloadCounter_FlushPreservesActive(t *testing.T) {
 		t.Fatalf("pending keys should be cleaned up after successful flush: %v", pendingKeys)
 	}
 
-	updatedApk, err := NewRepository(db).GetByID(apk.ID)
+	updatedApk, err := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestDownloadCounter_ReprocessBatchIdempotent(t *testing.T) {
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	apk, err := NewRepository(db).Create("1.0.0", "idem.apk", "/tmp/idem.apk", "idem", "com.test.flush.idem", 100, 1, 21, 31)
+	apk, err := NewRepository(db).Create(context.Background(), "1.0.0", "idem.apk", "/tmp/idem.apk", "idem", "com.test.flush.idem", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create apk: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestDownloadCounter_ReprocessBatchIdempotent(t *testing.T) {
 		t.Fatalf("first reprocessBatch: %v", err)
 	}
 
-	updatedApk, err := NewRepository(db).GetByID(apk.ID)
+	updatedApk, err := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestDownloadCounter_ReprocessBatchIdempotent(t *testing.T) {
 		t.Fatalf("second reprocessBatch: %v", err)
 	}
 
-	updatedApk2, err := NewRepository(db).GetByID(apk.ID)
+	updatedApk2, err := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestDownloadCounter_ProcessedPendingIsDeletedWithoutReapplying(t *testing.T
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	apk, err := NewRepository(db).Create("1.0.0", "processed.apk", "/tmp/processed.apk", "processed", "com.test.flush.processed", 100, 1, 21, 31)
+	apk, err := NewRepository(db).Create(context.Background(), "1.0.0", "processed.apk", "/tmp/processed.apk", "processed", "com.test.flush.processed", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create apk: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestDownloadCounter_ProcessedPendingIsDeletedWithoutReapplying(t *testing.T
 		t.Fatalf("reprocess processed pending: %v", err)
 	}
 
-	updated, err := NewRepository(db).GetByID(apk.ID)
+	updated, err := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestDownloadCounter_ReprocessOrphans(t *testing.T) {
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	apk, err := NewRepository(db).Create("1.0.0", "orphan.apk", "/tmp/orphan.apk", "orphan", "com.test.orphan", 100, 1, 21, 31)
+	apk, err := NewRepository(db).Create(context.Background(), "1.0.0", "orphan.apk", "/tmp/orphan.apk", "orphan", "com.test.orphan", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create apk: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestDownloadCounter_ReprocessOrphans(t *testing.T) {
 		t.Fatalf("ReprocessOrphans: %v", err)
 	}
 
-	updatedApk, err := NewRepository(db).GetByID(apk.ID)
+	updatedApk, err := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestDownloadCounter_ReprocessOrphans(t *testing.T) {
 	if err := counter.ReprocessOrphans(ctx); err != nil {
 		t.Fatalf("second ReprocessOrphans: %v", err)
 	}
-	updatedApk2, err := NewRepository(db).GetByID(apk.ID)
+	updatedApk2, err := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestDownloadCounter_ReprocessOrphansContinuesAndJoinsErrors(t *testing.T) {
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	apk, err := NewRepository(db).Create("1.0.0", "orphan-continue.apk", "/tmp/orphan-continue.apk", "orphan", "com.test.orphan.continue", 100, 1, 21, 31)
+	apk, err := NewRepository(db).Create(context.Background(), "1.0.0", "orphan-continue.apk", "/tmp/orphan-continue.apk", "orphan", "com.test.orphan.continue", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create apk: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestDownloadCounter_ReprocessOrphansContinuesAndJoinsErrors(t *testing.T) {
 		t.Fatalf("expected both batch errors, got %v", err)
 	}
 
-	updated, getErr := NewRepository(db).GetByID(apk.ID)
+	updated, getErr := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if getErr != nil {
 		t.Fatalf("GetByID: %v", getErr)
 	}
@@ -452,7 +452,7 @@ func TestDownloadCounter_SQLFailurePreservesPending(t *testing.T) {
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	apk, err := NewRepository(db).Create("1.0.0", "fail.apk", "/tmp/fail.apk", "fail", "com.test.flush.sqlfail", 100, 1, 21, 31)
+	apk, err := NewRepository(db).Create(context.Background(), "1.0.0", "fail.apk", "/tmp/fail.apk", "fail", "com.test.flush.sqlfail", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create apk: %v", err)
 	}
@@ -537,11 +537,11 @@ func TestDownloadCounter_FlushAppliesDeltas(t *testing.T) {
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	a, err := NewRepository(db).Create("1.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.flush.delta.a", 100, 1, 21, 31)
+	a, err := NewRepository(db).Create(context.Background(), "1.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.flush.delta.a", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create a: %v", err)
 	}
-	b, err := NewRepository(db).Create("1.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.flush.delta.b", 200, 1, 21, 31)
+	b, err := NewRepository(db).Create(context.Background(), "1.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.flush.delta.b", 200, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create b: %v", err)
 	}
@@ -561,8 +561,8 @@ func TestDownloadCounter_FlushAppliesDeltas(t *testing.T) {
 		t.Fatalf("Flush: %v", err)
 	}
 
-	a2, _ := NewRepository(db).GetByID(a.ID)
-	b2, _ := NewRepository(db).GetByID(b.ID)
+	a2, _ := NewRepository(db).GetByID(context.Background(), a.ID)
+	b2, _ := NewRepository(db).GetByID(context.Background(), b.ID)
 
 	if a2.TotalDownloads != 3 {
 		t.Fatalf("apk A: expected 3, got %d", a2.TotalDownloads)
@@ -577,7 +577,7 @@ func TestDownloadCounter_Integration_EndToEnd(t *testing.T) {
 	counter := NewDownloadCounter(redisClient, db)
 	ctx := context.Background()
 
-	apk, err := NewRepository(db).Create("1.0.0", "e2e.apk", "/tmp/e2e.apk", "e2e", "com.test.e2e", 100, 1, 21, 31)
+	apk, err := NewRepository(db).Create(context.Background(), "1.0.0", "e2e.apk", "/tmp/e2e.apk", "e2e", "com.test.e2e", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create apk: %v", err)
 	}
@@ -598,7 +598,7 @@ func TestDownloadCounter_Integration_EndToEnd(t *testing.T) {
 		t.Fatalf("Flush: %v", err)
 	}
 
-	updated, err := NewRepository(db).GetByID(apk.ID)
+	updated, err := NewRepository(db).GetByID(context.Background(), apk.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}

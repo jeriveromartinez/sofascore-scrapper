@@ -40,7 +40,7 @@ func (h *AppHandler) handleCheckUpdate(c *gin.Context) {
 		return
 	}
 
-	latest, err := h.repo.GetLatest(clientPackage)
+	latest, err := h.repo.GetLatest(c.Request.Context(), clientPackage)
 	if err != nil {
 		server.RespondError(c, http.StatusNotFound, "no APK version available")
 		return
@@ -76,7 +76,7 @@ func (h *AppHandler) handleDownload(c *gin.Context) {
 		return
 	}
 
-	apk, err := h.repo.GetByToken(token)
+	apk, err := h.repo.GetByToken(c.Request.Context(), token)
 	if err != nil {
 		server.RespondError(c, http.StatusNotFound, "APK version not found")
 		return
@@ -127,7 +127,7 @@ func (h *AppHandler) handleGetDomain(c *gin.Context) {
 		return
 	}
 
-	apk, err := h.repo.GetLatest(packageName)
+	apk, err := h.repo.GetLatest(c.Request.Context(), packageName)
 	if err != nil {
 		server.RespondError(c, http.StatusNotFound, "APK version not found")
 		return

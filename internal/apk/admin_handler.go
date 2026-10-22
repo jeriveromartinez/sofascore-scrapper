@@ -179,7 +179,7 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 	}
 
 	description := c.PostForm("description")
-	apkV, err := h.repo.Create(
+	apkV, err := h.repo.Create(c.Request.Context(),
 		version, fileName, destPath, description, apkInfo.PackageName,
 		fileHeader.Size, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
 	)
@@ -421,7 +421,7 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	}
 
 	description := c.PostForm("description")
-	apkV, err := h.repo.Create(
+	apkV, err := h.repo.Create(c.Request.Context(),
 		version, fileName, destPath, description, apkInfo.PackageName,
 		totalSize, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
 	)
@@ -448,7 +448,7 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 }
 
 func (h *AdminHandler) handleListVersions(c *gin.Context) {
-	versions, err := h.repo.ListAll()
+	versions, err := h.repo.ListAll(c.Request.Context())
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -472,7 +472,7 @@ func (h *AdminHandler) handleUpdateVersion(c *gin.Context) {
 		return
 	}
 
-	err = h.repo.UpdateURL(uint(id), akpData.Url)
+	err = h.repo.UpdateURL(c.Request.Context(), uint(id), akpData.Url)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "APK version not found")

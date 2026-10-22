@@ -19,8 +19,8 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Create(version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
-	return r.createOn(r.db, version, fileName, filePath, description, packageName, fileSize, versionCode, minSDK, targetSDK)
+func (r *Repository) Create(ctx context.Context, version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
+	return r.createOn(ctx, r.db.WithContext(ctx), version, fileName, filePath, description, packageName, fileSize, versionCode, minSDK, targetSDK)
 }
 
 // CreateTx inserts a new ApkVersion row inside the caller-supplied
@@ -33,10 +33,10 @@ func (r *Repository) CreateTx(tx *gorm.DB, version, fileName, filePath, descript
 	if tx == nil {
 		return nil, errors.New("CreateTx: tx is nil")
 	}
-	return r.createOn(tx, version, fileName, filePath, description, packageName, fileSize, versionCode, minSDK, targetSDK)
+	return r.createOn(tx.Statement.Context, tx, version, fileName, filePath, description, packageName, fileSize, versionCode, minSDK, targetSDK)
 }
 
-func (r *Repository) createOn(db *gorm.DB, version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
+func (r *Repository) createOn(ctx context.Context, db *gorm.DB, version, fileName, filePath, description, packageName string, fileSize int64, versionCode, minSDK, targetSDK int32) (*ApkVersion, error) {
 	major, minor, patch, err := ParseSemverComponents(version)
 	if err != nil {
 		return nil, fmt.Errorf("invalid semver %q: %w", version, err)
@@ -64,7 +64,7 @@ func (r *Repository) createOn(db *gorm.DB, version, fileName, filePath, descript
 		// Doing it inside the tx would widen the read-set for no
 		// benefit and could deadlock with concurrent updates on the
 		// same package_name.
-		if lastVersion, err := r.GetLatest(apk.PackageName); err == nil && lastVersion != nil {
+		if lastVersion, err := r.GetLatest(ctx, apk.PackageName); err == nil && lastVersion != nil {
 			apk.IPTVUrl = lastVersion.IPTVUrl
 		}
 	}
@@ -76,9 +76,9 @@ func (r *Repository) createOn(db *gorm.DB, version, fileName, filePath, descript
 	return apk, nil
 }
 
-func (r *Repository) GetLatest(packageName string) (*ApkVersion, error) {
+func (r *Repository) GetLatest(ctx context.Context, packageName string) (*ApkVersion, error) {
 	var apk ApkVersion
-	err := r.db.Where("package_name = ? AND is_active = ?", packageName, true).
+	err := r.db.WithContext(ctx).Where("package_name = ? AND is_active = ?", packageName, true).
 		Order("version_major DESC, version_minor DESC, version_patch DESC, id DESC").
 		Limit(1).
 		First(&apk).Error
@@ -91,25 +91,25 @@ func (r *Repository) GetLatest(packageName string) (*ApkVersion, error) {
 	return &apk, nil
 }
 
-func (r *Repository) GetByID(id uint) (*ApkVersion, error) {
+func (r *Repository) GetByID(ctx context.Context, id uint) (*ApkVersion, error) {
 	var apk ApkVersion
-	if err := r.db.First(&apk, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&apk, id).Error; err != nil {
 		return nil, err
 	}
 	return &apk, nil
 }
 
-func (r *Repository) GetByToken(token string) (*ApkVersion, error) {
+func (r *Repository) GetByToken(ctx context.Context, token string) (*ApkVersion, error) {
 	var apk ApkVersion
-	if err := r.db.Where("download_token = ?", token).First(&apk).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("download_token = ?", token).First(&apk).Error; err != nil {
 		return nil, err
 	}
 	return &apk, nil
 }
 
-func (r *Repository) ListAll() ([]ApkVersion, error) {
+func (r *Repository) ListAll(ctx context.Context) ([]ApkVersion, error) {
 	var versions []ApkVersion
-	if err := r.db.Order("created_at DESC").Find(&versions).Error; err != nil {
+	if err := r.db.WithContext(ctx).Order("created_at DESC").Find(&versions).Error; err != nil {
 		return nil, err
 	}
 	return versions, nil
@@ -136,8 +136,8 @@ func (r *Repository) ListPage(ctx context.Context, createdAtStr string, id uint,
 	return rows, hasMore, nil
 }
 
-func (r *Repository) UpdateURL(id uint, url string) error {
-	result := r.db.Model(&ApkVersion{}).Where("id = ?", id).Update("iptv_url", url)
+func (r *Repository) UpdateURL(ctx context.Context, id uint, url string) error {
+	result := r.db.WithContext(ctx).Model(&ApkVersion{}).Where("id = ?", id).Update("iptv_url", url)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -147,6 +147,6 @@ func (r *Repository) UpdateURL(id uint, url string) error {
 	return nil
 }
 
-func (r *Repository) IncrementDownloadCount(id uint) error {
-	return r.db.Model(&ApkVersion{}).Where("id = ?", id).UpdateColumn("total_downloads", gorm.Expr("total_downloads + ?", 1)).Error
+func (r *Repository) IncrementDownloadCount(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Model(&ApkVersion{}).Where("id = ?", id).UpdateColumn("total_downloads", gorm.Expr("total_downloads + ?", 1)).Error
 }

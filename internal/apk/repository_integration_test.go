@@ -3,6 +3,7 @@
 package apk
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -60,11 +61,11 @@ func TestGetLatest_ReturnsNewestVersion(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	a, err := repo.Create("1.0.9", "old.apk", "/tmp/old.apk", "old", "com.test.latest", 100, 1, 21, 31)
+	a, err := repo.Create(context.Background(), "1.0.9", "old.apk", "/tmp/old.apk", "old", "com.test.latest", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create 1.0.9: %v", err)
 	}
-	b, err := repo.Create("1.0.10", "new.apk", "/tmp/new.apk", "new", "com.test.latest", 200, 1, 21, 31)
+	b, err := repo.Create(context.Background(), "1.0.10", "new.apk", "/tmp/new.apk", "new", "com.test.latest", 200, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create 1.0.10: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestGetLatest_ReturnsNewestVersion(t *testing.T) {
 		db.Unscoped().Delete(b)
 	})
 
-	latest, err := repo.GetLatest("com.test.latest")
+	latest, err := repo.GetLatest(context.Background(), "com.test.latest")
 	if err != nil {
 		t.Fatalf("GetLatest: %v", err)
 	}
@@ -86,11 +87,11 @@ func TestGetLatest_ExcludesInactive(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	active, err := repo.Create("1.0.0", "active.apk", "/tmp/active.apk", "active", "com.test.exclude", 100, 1, 21, 31)
+	active, err := repo.Create(context.Background(), "1.0.0", "active.apk", "/tmp/active.apk", "active", "com.test.exclude", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create active: %v", err)
 	}
-	inactive, err := repo.Create("2.0.0", "inactive.apk", "/tmp/inactive.apk", "inactive", "com.test.exclude", 200, 1, 21, 31)
+	inactive, err := repo.Create(context.Background(), "2.0.0", "inactive.apk", "/tmp/inactive.apk", "inactive", "com.test.exclude", 200, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create inactive: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestGetLatest_ExcludesInactive(t *testing.T) {
 		db.Unscoped().Delete(inactive)
 	})
 
-	latest, err := repo.GetLatest("com.test.exclude")
+	latest, err := repo.GetLatest(context.Background(), "com.test.exclude")
 	if err != nil {
 		t.Fatalf("GetLatest: %v", err)
 	}
@@ -113,11 +114,11 @@ func TestGetLatest_PackageIsolation(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	a, err := repo.Create("1.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.iso.a", 100, 1, 21, 31)
+	a, err := repo.Create(context.Background(), "1.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.iso.a", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create A: %v", err)
 	}
-	b, err := repo.Create("2.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.iso.b", 200, 1, 21, 31)
+	b, err := repo.Create(context.Background(), "2.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.iso.b", 200, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create B: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestGetLatest_PackageIsolation(t *testing.T) {
 		db.Unscoped().Delete(b)
 	})
 
-	latest, err := repo.GetLatest("com.test.iso.a")
+	latest, err := repo.GetLatest(context.Background(), "com.test.iso.a")
 	if err != nil {
 		t.Fatalf("GetLatest A: %v", err)
 	}
@@ -142,13 +143,13 @@ func TestCreate_RejectsDuplicateVersionForPackage(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	first, err := repo.Create("1.0.0", "first.apk", "/tmp/first.apk", "first", "com.test.tiebreak", 100, 1, 21, 31)
+	first, err := repo.Create(context.Background(), "1.0.0", "first.apk", "/tmp/first.apk", "first", "com.test.tiebreak", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create first: %v", err)
 	}
 	t.Cleanup(func() { db.Unscoped().Delete(first) })
 
-	if _, err := repo.Create("1.0.0", "second.apk", "/tmp/second.apk", "second", "com.test.tiebreak", 200, 1, 21, 31); err == nil {
+	if _, err := repo.Create(context.Background(), "1.0.0", "second.apk", "/tmp/second.apk", "second", "com.test.tiebreak", 200, 1, 21, 31); err == nil {
 		t.Fatal("duplicate version and package should be rejected")
 	}
 }
@@ -157,11 +158,11 @@ func TestGetLatest_ExactlyOneRow(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	a, err := repo.Create("3.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.single", 100, 1, 21, 31)
+	a, err := repo.Create(context.Background(), "3.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.single", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	b, err := repo.Create("1.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.single", 200, 1, 21, 31)
+	b, err := repo.Create(context.Background(), "1.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.single", 200, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -170,7 +171,7 @@ func TestGetLatest_ExactlyOneRow(t *testing.T) {
 		db.Unscoped().Delete(b)
 	})
 
-	latest, err := repo.GetLatest("com.test.single")
+	latest, err := repo.GetLatest(context.Background(), "com.test.single")
 	if err != nil {
 		t.Fatalf("GetLatest: %v", err)
 	}
@@ -186,7 +187,7 @@ func TestGetLatest_NoActiveVersion(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	_, err := repo.GetLatest("com.test.nonexistent")
+	_, err := repo.GetLatest(context.Background(), "com.test.nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent package")
 	}
@@ -196,7 +197,7 @@ func TestCreate_InvalidSemver(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	_, err := repo.Create("not.a.version", "bad.apk", "/tmp/bad.apk", "bad", "com.test.invalid", 100, 1, 21, 31)
+	_, err := repo.Create(context.Background(), "not.a.version", "bad.apk", "/tmp/bad.apk", "bad", "com.test.invalid", 100, 1, 21, 31)
 	if err == nil {
 		t.Fatal("expected error for invalid semver")
 	}
@@ -206,11 +207,11 @@ func TestGetLatest_MajorVersionOrder(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	a, err := repo.Create("1.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.major", 100, 1, 21, 31)
+	a, err := repo.Create(context.Background(), "1.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.major", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create 1.0.0: %v", err)
 	}
-	b, err := repo.Create("10.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.major", 200, 1, 21, 31)
+	b, err := repo.Create(context.Background(), "10.0.0", "b.apk", "/tmp/b.apk", "b", "com.test.major", 200, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create 10.0.0: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestGetLatest_MajorVersionOrder(t *testing.T) {
 		db.Unscoped().Delete(b)
 	})
 
-	latest, err := repo.GetLatest("com.test.major")
+	latest, err := repo.GetLatest(context.Background(), "com.test.major")
 	if err != nil {
 		t.Fatalf("GetLatest: %v", err)
 	}
@@ -232,11 +233,11 @@ func TestGetLatest_MinorVersionOrder(t *testing.T) {
 	db := setupRepoTestDB(t)
 	repo := NewRepository(db)
 
-	a, err := repo.Create("2.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.minor", 100, 1, 21, 31)
+	a, err := repo.Create(context.Background(), "2.0.0", "a.apk", "/tmp/a.apk", "a", "com.test.minor", 100, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create 2.0.0: %v", err)
 	}
-	b, err := repo.Create("2.9.0", "b.apk", "/tmp/b.apk", "b", "com.test.minor", 200, 1, 21, 31)
+	b, err := repo.Create(context.Background(), "2.9.0", "b.apk", "/tmp/b.apk", "b", "com.test.minor", 200, 1, 21, 31)
 	if err != nil {
 		t.Fatalf("Create 2.9.0: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestGetLatest_MinorVersionOrder(t *testing.T) {
 		db.Unscoped().Delete(b)
 	})
 
-	latest, err := repo.GetLatest("com.test.minor")
+	latest, err := repo.GetLatest(context.Background(), "com.test.minor")
 	if err != nil {
 		t.Fatalf("GetLatest: %v", err)
 	}
