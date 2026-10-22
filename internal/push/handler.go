@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/server"
+	"gorm.io/gorm"
 )
 
 // Handler exposes the push-notifications REST surface. It is
@@ -383,7 +384,7 @@ func (h *Handler) writeServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrForbidden):
 		server.RespondError(c, http.StatusForbidden, "forbidden")
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, ErrNotFound), errors.Is(err, gorm.ErrRecordNotFound):
 		server.RespondError(c, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrInvalidPayload):
 		server.RespondError(c, http.StatusBadRequest, err.Error())

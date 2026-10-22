@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"google.golang.org/protobuf/proto"
+	"gorm.io/gorm"
 )
 
 const pushesPath = "/api/web/v1/pushes"
@@ -97,4 +99,56 @@ func TestWriteServiceError_UnknownErrorIsGeneric(t *testing.T) {
 	h := &Handler{}
 	h.writeServiceError(c, fmt.Errorf("insert push: %w", errors.New("Error 1062: Duplicate entry 'secret'")))
 	assertGenericInternalError(t, w)
+}
+
+func TestWriteServiceError_MapsSentinels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{ErrForbidden, http.StatusForbidden},
+		{ErrNotFound, http.StatusNotFound},
+		{fmt.Errorf("%w: title and body are required", ErrInvalidPayload), http.StatusBadRequest},
+		{fmt.Errorf("%w: bad cron", ErrInvalidSchedule), http.StatusBadRequest},
+		{ErrDisabledFeature, http.StatusForbidden},
+		{gorm.ErrRecordNotFound, http.StatusNotFound},
+	} {
+		t.Run(tc.err.Error(), func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, pushesPath, nil)
+			(&Handler{}).writeServiceError(c, tc.err)
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d (body=%q)", w.Code, tc.want, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestHandler_MissingRowsAreNotFound covers ids that do not exist
+// or belong to another user: the repository answers
+// gorm.ErrRecordNotFound, which must surface as 404, not 500.
+func TestHandler_MissingRowsAreNotFound(t *testing.T) {
+	f := newTimerFixture(t)
+	timerTestingT = t
+	router := newPushTestRouter(f)
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   proto.Message
+	}{
+		{http.MethodGet, pushesPath + "/999", nil},
+		{http.MethodGet, pushesPath + "/schedules/999", nil},
+		{http.MethodPatch, pushesPath + "/schedules/999", &pb.UpdateScheduleRequest{IsActive: false}},
+		{http.MethodDelete, pushesPath + "/schedules/999", nil},
+		{http.MethodGet, pushesPath + "/metrics/campaign/999", nil},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			w := doPushRequest(t, router, tc.method, tc.path, tc.body)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404 (body=%q)", w.Code, w.Body.String())
+			}
+		})
+	}
 }
