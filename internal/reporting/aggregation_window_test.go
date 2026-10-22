@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -57,7 +58,7 @@ func TestGenerateDaily_WindowEndsAtNextLocalMidnight(t *testing.T) {
 	// The end bound itself belongs to the next day.
 	insertWindowLog(t, db, "next-day", end.UnixMilli())
 
-	if err := repo.GenerateDaily(); err != nil {
+	if err := repo.GenerateDaily(context.Background()); err != nil {
 		t.Fatalf("GenerateDaily failed: %v", err)
 	}
 

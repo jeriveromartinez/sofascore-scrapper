@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"context"
 	"log/slog"
 	"runtime/debug"
 	"time"
@@ -49,11 +50,10 @@ func monthlyWindow(now time.Time, loc *time.Location) (begin, end time.Time) {
 // panic is logged with the full stack trace and re-raised so the
 // caller (the cron job) sees the failure rather than a silent
 // "aggregation ran but did nothing".
-func (r *AggregationRepository) GenerateDaily() (err error) {
-	db := r.db
+func (r *AggregationRepository) GenerateDaily(ctx context.Context) (err error) {
 	begin, end := dailyWindow(time.Now(), time.Local)
 
-	tx := db.Begin()
+	tx := r.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -119,11 +119,10 @@ func (r *AggregationRepository) GenerateDaily() (err error) {
 // GenerateMonthly rolls up the previous month's per-day content_stats
 // into a single per-month row per content_hash, then deletes the
 // source day rows. Same panic-and-error semantics as GenerateDaily.
-func (r *AggregationRepository) GenerateMonthly() (err error) {
-	db := r.db
+func (r *AggregationRepository) GenerateMonthly(ctx context.Context) (err error) {
 	begin, end := monthlyWindow(time.Now(), time.Local)
 
-	tx := db.Begin()
+	tx := r.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
