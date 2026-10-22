@@ -76,4 +76,14 @@ describe("login.vue a11y", () => {
     expect(password.attributes("type")).toBe("password");
     wrapper.unmount();
   });
+
+  it("labels the password input through the label's for attribute", () => {
+    const wrapper = mount(Login, {
+      global: { plugins: [buildRouter()] },
+      attachTo: document.body,
+    });
+    const label = wrapper.find<HTMLLabelElement>('label[for="password"]');
+    expect(label.element.control).toBe(wrapper.find('input[name="password"]').element);
+    wrapper.unmount();
+  });
 });
