@@ -2,7 +2,6 @@ package push
 
 import (
 	"errors"
-	"log/slog"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/realtime"
 	"github.com/prometheus/client_golang/prometheus"
@@ -181,17 +180,18 @@ func (m *Metrics) SetWSConnections(n int) {
 	m.wsConns.Set(float64(n))
 }
 
-// SetEnabledUsers sets the gauge to the given count. No caller
-// feeds it yet, so push_enabled_users currently stays at 0.
+// SetEnabledUsers sets the gauge to the given count. Refreshed
+// periodically from the database by Service.RefreshGauges.
 func (m *Metrics) SetEnabledUsers(n int64) {
+
 	if m == nil {
 		return
 	}
 	m.enabled.Set(float64(n))
 }
 
-// SetActiveSchedules sets the gauge to the given count. No caller
-// feeds it yet, so push_active_schedules currently stays at 0.
+// SetActiveSchedules sets the gauge to the given count. Refreshed
+// periodically from the database by Service.RefreshGauges.
 func (m *Metrics) SetActiveSchedules(n int64) {
 	if m == nil {
 		return
@@ -219,9 +219,3 @@ func (m *Metrics) IncFailedError(err error) {
 	}
 	m.IncFailed(FromRealtimeFailureReason(err))
 }
-
-// logOnce is a tiny helper for the metrics package to emit a
-// debug log when an unexpected label value is encountered, so
-// the dashboard can flag it. Currently unused but kept as a
-// hook for the dashboard team's future request.
-var _ = slog.Default

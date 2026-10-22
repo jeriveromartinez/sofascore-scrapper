@@ -81,6 +81,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg, s.logger)
 	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg, s.logger)
 	startTimersRunner(localCtx, s.pushService, s.tickInterval, s.batchLimit, s.pushLocker, s.logger, &s.wg)
+	startPushGauges(localCtx, s.pushService, pushGaugesInterval, s.logger, &s.wg)
 	s.mu.Unlock()
 
 	<-localCtx.Done()

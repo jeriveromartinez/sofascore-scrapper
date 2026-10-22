@@ -232,8 +232,8 @@ func TestClient_Options_Defaults(t *testing.T) {
 	if c.langID != DefaultLangID {
 		t.Errorf("langID = %d, want %d (es-mx)", c.langID, DefaultLangID)
 	}
-	if c.TimezoneName() != DefaultTimezoneName {
-		t.Errorf("timezoneName = %q, want %q", c.TimezoneName(), DefaultTimezoneName)
+	if c.timezoneName != DefaultTimezoneName {
+		t.Errorf("timezoneName = %q, want %q", c.timezoneName, DefaultTimezoneName)
 	}
 	if c.userCountryID != DefaultUserCountryID {
 		t.Errorf("userCountryID = %d, want %d", c.userCountryID, DefaultUserCountryID)
@@ -249,13 +249,6 @@ func TestImageURLs(t *testing.T) {
 		t.Errorf("CompetitorImageURL:\n got %q\nwant %q", got, want)
 	}
 
-	// An absent imageVersion must still produce a usable URL.
-	if got := c.CompetitionImageURL(352, 0); !strings.Contains(got, "/v1/Competitions/352") {
-		t.Errorf("CompetitionImageURL(352, 0) = %q, want v1 fallback", got)
-	}
-	if got := c.CountryImageURL(116, 1); !strings.Contains(got, "/Countries/116") {
-		t.Errorf("CountryImageURL = %q", got)
-	}
 	// A zero ID has no badge; callers treat "" as nothing to fetch.
 	if got := c.CompetitorImageURL(0, 1); got != "" {
 		t.Errorf("CompetitorImageURL(0) = %q, want empty", got)

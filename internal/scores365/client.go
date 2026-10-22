@@ -308,14 +308,6 @@ func NewClient(opts Options) *Client {
 	}
 }
 
-// SportIDs returns the configured sport filter used by
-// FetchCompetitions when the caller does not pass one.
-func (c *Client) SportIDs() []int { return append([]int(nil), c.sportIDs...) }
-
-// TimezoneName returns the IANA zone the client asks the API to
-// bucket fixtures by.
-func (c *Client) TimezoneName() string { return c.timezoneName }
-
 // commonParams returns the query parameters every /web/ endpoint
 // expects.
 func (c *Client) commonParams() url.Values {
@@ -502,21 +494,9 @@ func (c *Client) CompetitorImageURL(id, imageVersion int) string {
 	return c.ImageURL(CollectionCompetitors, id, imageVersion)
 }
 
-// CompetitionImageURL returns the badge URL for a competition.
-func (c *Client) CompetitionImageURL(id, imageVersion int) string {
-	return c.ImageURL(CollectionCompetitions, id, imageVersion)
-}
-
-// CountryImageURL returns the flag URL for a country.
-func (c *Client) CountryImageURL(id, imageVersion int) string {
-	return c.ImageURL(CollectionCountries, id, imageVersion)
-}
-
 // Cloudinary folder names on imagecache.365scores.com.
 const (
-	CollectionCompetitors  = "Competitors"
-	CollectionCompetitions = "Competitions"
-	CollectionCountries    = "Countries"
+	CollectionCompetitors = "Competitors"
 )
 
 // CompetitorImageURL builds a competitor badge URL against the
