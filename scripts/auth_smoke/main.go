@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math/big"
@@ -59,7 +60,7 @@ func main() {
 		fmt.Println("REGISTER ERR:", err)
 		return
 	}
-	fmt.Println("REGISTER status:", regResp.status, "body:", regResp.body)
+	fmt.Println("REGISTER status:", regResp.status)
 
 	if regResp.status != 201 {
 		return
@@ -79,7 +80,12 @@ func main() {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Println("GET /api/web/v1/users status:", resp.StatusCode, "body[:200]:", string(body)[:min(200, len(body))])
+	userList := &pb.UserList{}
+	if err := proto.Unmarshal(body, userList); err != nil {
+		fmt.Println("GET /api/web/v1/users status:", resp.StatusCode, "decode error:", err)
+		return
+	}
+	fmt.Println("GET /api/web/v1/users status:", resp.StatusCode, "users:", len(userList.Users))
 
 	// 3. Create invitation as admin
 	invReq := &pb.CreateInvitationRequest{TtlSeconds: 3600}
@@ -89,11 +95,11 @@ func main() {
 		fmt.Println("CREATE_INVITATION ERR:", err)
 		return
 	}
-	fmt.Println("CREATE_INVITATION status:", invHTTP.status, "body:", invHTTP.body)
+	fmt.Println("CREATE_INVITATION status:", invHTTP.status)
 
 	invResp := &pb.InvitationResponse{}
 	_ = proto.Unmarshal(invHTTP.body, invResp)
-	fmt.Println("CREATE_INVITATION ok: token=", invResp.Token, "expires_at=", invResp.ExpiresAt)
+	fmt.Println("CREATE_INVITATION ok: token=", preview(invResp.Token), "expires_at=", invResp.ExpiresAt)
 
 	// 4. Refresh token
 	refReq, _ := http.NewRequest("POST", base+"/api/web/v1/users/refresh", nil)
@@ -105,7 +111,12 @@ func main() {
 	}
 	defer refResp.Body.Close()
 	refBody, _ := io.ReadAll(refResp.Body)
-	fmt.Println("REFRESH status:", refResp.StatusCode, "body[:200]:", string(refBody)[:min(200, len(refBody))])
+	refreshed := &pb.AuthResponse{}
+	if err := proto.Unmarshal(refBody, refreshed); err != nil {
+		fmt.Println("REFRESH status:", refResp.StatusCode, "decode error:", err)
+		return
+	}
+	fmt.Println("REFRESH status:", refResp.StatusCode, "access_token=", preview(refreshed.Token), "refresh_token=", preview(refreshed.RefreshToken))
 
 	// 5. Logout
 	logoutReq, _ := http.NewRequest("POST", base+"/api/web/v1/users/logout?all=true", nil)
@@ -117,7 +128,7 @@ func main() {
 	}
 	defer logoutResp.Body.Close()
 	logoutBody, _ := io.ReadAll(logoutResp.Body)
-	fmt.Println("LOGOUT status:", logoutResp.StatusCode, "body:", strings.TrimSpace(string(logoutBody)))
+	fmt.Println("LOGOUT status:", logoutResp.StatusCode, "body_len:", len(logoutBody))
 }
 
 type httpResp struct {
@@ -141,11 +152,15 @@ func randomPassword() string {
 	return string(out)
 }
 
+// preview renders a credential as its length plus a short digest, so an
+// operator can tell two tokens apart without the secret reaching the
+// terminal scrollback or a CI log.
 func preview(token string) string {
-	if len(token) <= 32 {
-		return token
+	if token == "" {
+		return "<empty>"
 	}
-	return token[:32] + "..."
+	sum := sha256.Sum256([]byte(token))
+	return fmt.Sprintf("<redacted len=%d sha256=%x>", len(token), sum[:4])
 }
 
 func postProto(ctx context.Context, url string, body []byte) (*httpResp, error) {
