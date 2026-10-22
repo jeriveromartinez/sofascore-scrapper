@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -104,9 +103,7 @@ func (h *AppHandler) handleDownload(c *gin.Context) {
 		return
 	}
 
-	if rc := http.NewResponseController(c.Writer); rc != nil {
-		rc.SetWriteDeadline(time.Time{})
-	}
+	clearWriteDeadline(c)
 
 	if err := h.counter.Increment(c.Request.Context(), apk.ID); err != nil {
 		slog.Default().Error("failed to buffer apk download count",

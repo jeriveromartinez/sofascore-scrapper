@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ const (
 
 var flushRenameScript = goredis.NewScript(`
 	if redis.call("EXISTS", KEYS[1]) == 1 then
-		redis.call("RENAME", KEYS[1], ARGV[1])
+		redis.call("RENAME", KEYS[1], KEYS[2])
 		return 1
 	end
 	return 0
@@ -92,7 +93,7 @@ func (c *downloadCounter) flushUnderLease(ctx context.Context, afterRename func(
 	batchID := uuid.New().String()
 	pendingKey := pendingPrefix + batchID
 
-	renamed, err := flushRenameScript.Run(ctx, c.client, []string{activeDownloadsKey}, pendingKey).Bool()
+	renamed, err := flushRenameScript.Run(ctx, c.client, []string{activeDownloadsKey, pendingKey}).Bool()
 	if err != nil {
 		return fmt.Errorf("rename active to pending: %w", err)
 	}
@@ -165,7 +166,10 @@ func (c *downloadCounter) ReprocessOrphans(ctx context.Context) error {
 	var batchErrors []error
 	for iter.Next(ctx) {
 		pendingKey := iter.Val()
-		batchID := pendingKey[len(pendingPrefix):]
+		// The scan yields the physical key, which may carry the
+		// deployment key prefix, so the batch id is taken from the
+		// last segment instead of from a fixed offset.
+		batchID := pendingKey[strings.LastIndex(pendingKey, ":")+1:]
 		if err := c.processPending(ctx, batchID, pendingKey); err != nil {
 			batchErrors = append(batchErrors, fmt.Errorf("reprocess batch %s: %w", batchID, err))
 		}
