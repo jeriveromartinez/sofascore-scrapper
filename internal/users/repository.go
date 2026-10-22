@@ -56,7 +56,7 @@ func (r *Repository) Create(ctx context.Context, email, password string) (*User,
 	if err != nil {
 		return nil, err
 	}
-	user := &User{Email: email, Password: string(hash)}
+	user := &User{Email: NormalizeEmail(email), Password: string(hash)}
 	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
 		return nil, result.Error
@@ -87,7 +87,7 @@ func (r *Repository) CreateAndMaybeBootstrapAdmin(ctx context.Context, email, pa
 	if err != nil {
 		return nil, false, err
 	}
-	user := &User{Email: email, Password: string(hash)}
+	user := &User{Email: NormalizeEmail(email), Password: string(hash)}
 	promoted := false
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(user).Error; err != nil {
@@ -124,7 +124,7 @@ func (r *Repository) UpdatePassword(ctx context.Context, id uint, hash string) e
 // — callers should not have to remember the not-found convention.
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
-	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("email = ?", NormalizeEmail(email)).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -153,7 +153,7 @@ func (r *Repository) Update(ctx context.Context, id uint, email, password string
 		return nil, err
 	}
 
-	user.Email = email
+	user.Email = NormalizeEmail(email)
 	if password != "" {
 		hash, err := hashPassword(password)
 		if err != nil {

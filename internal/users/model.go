@@ -1,6 +1,7 @@
 package users
 
 import (
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -10,6 +11,13 @@ const (
 	RoleUser  = "user"
 	RoleAdmin = "admin"
 )
+
+// NormalizeEmail canonicalizes an email address for storage and
+// lookup. Surrounding whitespace is stripped so an address typed with
+// padding resolves to the same account on registration and on login.
+func NormalizeEmail(email string) string {
+	return strings.TrimSpace(email)
+}
 
 type User struct {
 	gorm.Model
