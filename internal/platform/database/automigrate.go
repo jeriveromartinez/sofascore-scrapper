@@ -26,8 +26,6 @@ import (
 // When you add a new model with FKs, append it in the correct
 // position. When you add a new model without FKs, append it at the
 // end. Never reorder existing entries without checking the FK graph.
-//
-// Source of truth: docs/superpowers/specs/2026-09-01-gorm-automigrate-seeder-design.md §3.2.
 var automigrateModels = []any{
 	// Lote 0 — independent
 	&reporting.CrashReport{},

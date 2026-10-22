@@ -463,7 +463,9 @@ message UploadCompleteResponse {
 
 // ========== Push Notifications (added 2026-08-28) ==========
 //
-// Wire format reference: docs/superpowers/specs/2026-08-28-push-notifications-websocket-design.md
+// The push wire format is defined by this file; the Go bindings
+// regenerate into internal/gen/api and the web client mirrors it in
+// web/src/proto/api.ts.
 
 // PushCategory is the type of event a push message represents. The
 // category drives how the Flutter client renders the notification and
