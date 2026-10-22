@@ -144,15 +144,12 @@ func Handler(cfg HandlerConfig) gin.HandlerFunc {
 			return
 		}
 
-		conn := newConnection(uint64(dev.ID), userIDPtrToUint32(dev.UserID), 0, ws, cfg.AckHandler, func(conn *Connection, reason string) {
+		conn := newConnection(uint64(dev.ID), ws, cfg.AckHandler, func(conn *Connection, reason string) {
 			cfg.Hub.UnregisterConn(uint64(dev.ID), conn)
 			cfg.Logger.Info("realtime: connection closed",
 				slog.Uint64("device_id", uint64(dev.ID)),
 				slog.String("reason", reason))
 		}, cfg.Logger)
-		if dev.DomainID != nil {
-			conn.domainID = uint32(*dev.DomainID)
-		}
 
 		cfg.Hub.Register(uint64(dev.ID), conn)
 		cfg.Logger.Info("realtime: connection registered",
@@ -293,13 +290,3 @@ func isExpectedClose(err error) bool {
 
 // Compile-time check that Handler is wired through gin.HandlerFunc.
 var _ gin.HandlerFunc = Handler(HandlerConfig{})
-
-// userIDPtrToUint32 unwraps a *uint to uint32 with a zero default.
-// Used because devices.UserID is nullable (the Flutter app may not
-// have a user_id at registration time).
-func userIDPtrToUint32(p *uint) uint32 {
-	if p == nil {
-		return 0
-	}
-	return uint32(*p)
-}

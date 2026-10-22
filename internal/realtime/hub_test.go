@@ -13,8 +13,8 @@ import (
 func TestHub_RegisterLookupUnregister(t *testing.T) {
 	h := NewHub()
 
-	c1 := newTestConnection(t, 1, 1, 1)
-	c2 := newTestConnection(t, 2, 1, 1)
+	c1 := newTestConnection(t, 1)
+	c2 := newTestConnection(t, 2)
 	h.Register(1, c1)
 	h.Register(2, c2)
 
@@ -45,8 +45,8 @@ func TestHub_RegisterLookupUnregister(t *testing.T) {
 func TestHub_DeliverToLocal(t *testing.T) {
 	h := NewHub()
 
-	c1 := newTestConnection(t, 1, 1, 1)
-	c2 := newTestConnection(t, 2, 1, 1)
+	c1 := newTestConnection(t, 1)
+	c2 := newTestConnection(t, 2)
 	defer c2.Close(1000, "test done")
 	h.Register(1, c1)
 	h.Register(2, c2)
@@ -95,8 +95,8 @@ func TestHub_DeliverToLocal_UnknownDeviceIsNoop(t *testing.T) {
 func TestHub_RegisterTwiceForSameDeviceEvictsOldConnection(t *testing.T) {
 	h := NewHub()
 
-	c1 := newTestConnection(t, 1, 1, 1)
-	c2 := newTestConnection(t, 1, 1, 1) // same device_id
+	c1 := newTestConnection(t, 1)
+	c2 := newTestConnection(t, 1) // same device_id
 
 	h.Register(1, c1)
 	h.Register(1, c2) // evicts c1
@@ -125,7 +125,7 @@ func TestHub_ConcurrentRegisterAndUnregister(t *testing.T) {
 	const N = 50
 	conns := make([]*Connection, N)
 	for i := 0; i < N; i++ {
-		conns[i] = newTestConnection(t, uint64(i+1), 1, 1)
+		conns[i] = newTestConnection(t, uint64(i+1))
 	}
 
 	var wg sync.WaitGroup
@@ -157,7 +157,7 @@ func TestHub_ConcurrentRegisterAndUnregister(t *testing.T) {
 // closed connection was reported delivered but never written.
 func TestHub_DeliverToClosedConnectionReportsNotConnected(t *testing.T) {
 	hub := NewHub()
-	conn := newTestConnection(t, 42, 1, 1)
+	conn := newTestConnection(t, 42)
 	hub.Register(42, conn)
 	conn.Close(1000, "client gone")
 
@@ -184,7 +184,7 @@ func TestHub_NoEnqueueAfterCloseReturns(t *testing.T) {
 
 	for round := 0; round < rounds; round++ {
 		hub := NewHub()
-		conn := newTestConnection(t, 42, 1, 1)
+		conn := newTestConnection(t, 42)
 		hub.Register(42, conn)
 
 		start := make(chan struct{})

@@ -46,8 +46,6 @@ type CloseHandler func(c *Connection, reason string)
 // long as the client keeps the socket open.
 type Connection struct {
 	deviceID uint64
-	userID   uint32
-	domainID uint32
 
 	ws *websocket.Conn
 
@@ -72,11 +70,9 @@ type Connection struct {
 
 // newConnection constructs a Connection. ws may be nil in unit tests
 // that exercise the hub without a real socket.
-func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn, ack AckHandler, closeHook CloseHandler, logger *slog.Logger) *Connection {
+func newConnection(deviceID uint64, ws *websocket.Conn, ack AckHandler, closeHook CloseHandler, logger *slog.Logger) *Connection {
 	conn := &Connection{
 		deviceID:   deviceID,
-		userID:     userID,
-		domainID:   domainID,
 		ws:         ws,
 		send:       make(chan []byte, 16),
 		closed:     make(chan struct{}),
@@ -91,14 +87,6 @@ func newConnection(deviceID uint64, userID, domainID uint32, ws *websocket.Conn,
 
 // DeviceID exposes the device_id for logging and metrics.
 func (c *Connection) DeviceID() uint64 { return c.deviceID }
-
-// UserID exposes the user_id (used for the audience filter and the
-// Prometheus audience_size gauge).
-func (c *Connection) UserID() uint32 { return c.userID }
-
-// DomainID exposes the device's domain_id (used for the audience
-// filter in the push service).
-func (c *Connection) DomainID() uint32 { return c.domainID }
 
 // IsClosed reports whether Close has been called. Used by the hub to
 // avoid re-queueing writes to a dead connection.

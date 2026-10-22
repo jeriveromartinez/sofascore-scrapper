@@ -58,7 +58,7 @@ func newWSPair(t *testing.T) (server, client *websocket.Conn) {
 func TestKeepalive_ReapsHalfOpenConnection(t *testing.T) {
 	serverConn, _ := newWSPair(t)
 
-	conn := newConnection(1, 1, 1, serverConn, func(context.Context, string) {}, nil, nil)
+	conn := newConnection(1, serverConn, func(context.Context, string) {}, nil, nil)
 	go writeLoop(conn, slog.Default(), 50*time.Millisecond)
 	go readLoop(conn, slog.Default(), 300*time.Millisecond)
 
@@ -74,7 +74,7 @@ func TestKeepalive_ReapsHalfOpenConnection(t *testing.T) {
 func TestKeepalive_KeepsConnectionAliveWhenClientAnswers(t *testing.T) {
 	serverConn, clientConn := newWSPair(t)
 
-	conn := newConnection(1, 1, 1, serverConn, func(context.Context, string) {}, nil, nil)
+	conn := newConnection(1, serverConn, func(context.Context, string) {}, nil, nil)
 	go writeLoop(conn, slog.Default(), 50*time.Millisecond)
 	go readLoop(conn, slog.Default(), 400*time.Millisecond)
 
@@ -114,7 +114,7 @@ func TestKeepalive_KeepsConnectionAliveWhenClientAnswers(t *testing.T) {
 func TestReadLoop_RejectsOversizedFrame(t *testing.T) {
 	serverConn, clientConn := newWSPair(t)
 
-	conn := newConnection(1, 1, 1, serverConn, func(context.Context, string) {}, nil, nil)
+	conn := newConnection(1, serverConn, func(context.Context, string) {}, nil, nil)
 	go readLoop(conn, slog.Default(), 10*time.Second)
 
 	payload := make([]byte, maxFrameBytes+1024)
