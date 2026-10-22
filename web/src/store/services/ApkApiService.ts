@@ -1,6 +1,5 @@
 import { BaseApiService, REQUEST_TIMEOUT_MS, UPLOAD_TIMEOUT_MS } from "./BaseApiService";
 import {
-  ApkList,
   ApkPage,
   ApkUpdateCheckResponse,
   ApkUploadResponse,
@@ -14,7 +13,6 @@ import {
 } from "../../proto/api";
 import type {
   ApkCheckResponse,
-  ApkVersionInfo,
   ApkPageResponse,
   UploadApkResponse,
 } from "./models";
@@ -246,10 +244,6 @@ export class ApkApiService extends BaseApiService {
       this.clearSession();
       throw error;
     }
-  }
-
-  async listVersions(): Promise<ApkVersionInfo[]> {
-    return (await this.get("/versions", ApkList)).versions;
   }
 
   async listVersionsPage(

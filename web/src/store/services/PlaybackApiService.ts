@@ -1,14 +1,10 @@
 import { BaseApiService } from "./BaseApiService";
-import { PlaybackLogList, PlaybackPage } from "../../proto/api";
+import { PlaybackPage } from "../../proto/api";
 import type { PlaybackPageResponse } from "./models";
 
 export class PlaybackApiService extends BaseApiService {
   constructor() {
     super("/playback");
-  }
-
-  async getPlayingNow(page: number, limit: number): Promise<PlaybackLogList> {
-    return await this.get(`?page=${page}&limit=${limit}`, PlaybackLogList);
   }
 
   async getPlaybackPage(

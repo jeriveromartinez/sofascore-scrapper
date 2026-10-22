@@ -4,7 +4,6 @@ import type {
   ApkUploadResponse as ProtoApkUploadResponse,
   ApkUpdateCheckResponse as ProtoApkUpdateCheckResponse,
   Domain as ProtoDomain,
-  DomainList,
   DomainPage as ProtoDomainPage,
   DomainRequest,
   Device as ProtoDevice,
@@ -16,11 +15,9 @@ import type {
   EventsList,
   EventPage as ProtoEventPage,
   GlobalTournamentConfig as ProtoGlobalTournamentConfig,
-  LogPlaybackRequest,
   PlaybackLog as ProtoPlaybackLog,
   PlaybackPage as ProtoPlaybackPage,
   ExternalEvent as ProtoExternalEvent,
-  Team as ProtoTeam,
   Tournament as ProtoTournament,
   TournamentPage as ProtoTournamentPage,
   TournamentRequest,
@@ -28,11 +25,9 @@ import type {
   AssignTournamentRequest,
   EventStats as ProtoEventStats,
   User as ProtoUser,
-  UserList,
   UserPage as ProtoUserPage,
   UserWriteRequest,
-  // Push notification types (added 2026-08-28; see
-  // docs/superpowers/specs/2026-08-28-push-notifications-websocket-design.md).
+  // Push notification types (added 2026-08-28; see proto/api.proto).
   CreateImmediatePushRequest as ProtoCreateImmediatePushRequest,
   CreateScheduleRequest as ProtoCreateScheduleRequest,
   UpdateScheduleRequest as ProtoUpdateScheduleRequest,
@@ -44,21 +39,17 @@ import type {
   ScheduledPushPage as ProtoScheduledPushPage,
   PushMetricsByCampaign as ProtoPushMetricsByCampaign,
   PushMetricsAggregate as ProtoPushMetricsAggregate,
-  FailureBreakdown as ProtoFailureBreakdown,
 } from "../../../proto/api";
 
-export type Team = ProtoTeam;
 export type ExternalEvent = ProtoExternalEvent;
 export type EventsResponse = EventsList;
 export type EventPageResponse = ProtoEventPage;
 export type DeviceResponse = DeviceList;
 export type DevicePageResponse = ProtoDevicePage;
-export type UsersResponse = UserList;
 export type UserPageResponse = ProtoUserPage;
 export type DomainPageResponse = ProtoDomainPage;
 export type TournamentPageResponse = ProtoTournamentPage;
 export type DeviceTournamentPageResponse = ProtoDeviceTournamentPage;
-export type DomainsResponse = DomainList;
 
 export interface EventsQuery {
   date?: string;
@@ -80,11 +71,7 @@ export interface EventsPageFilters {
 export type Device = ProtoDevice;
 export type RegisterDevicePayload = DeviceRegisterRequest;
 export type PlaybackLog = ProtoPlaybackLog;
-export type CreatePlaybackPayload = LogPlaybackRequest;
 export type PlaybackPageResponse = ProtoPlaybackPage;
-export interface UpdatePlaybackPayload {
-  endedAt?: number;
-}
 
 export interface StatusResponse {
   status?: string;
@@ -105,10 +92,6 @@ export type CreateTournamentPayload = TournamentRequest;
 export type UpdateTournamentPayload = TournamentRequest;
 export type AssignTournamentPayload = AssignTournamentRequest;
 export type SetDeviceTournamentsPayload = SetTournamentIdsRequest;
-export type SetGlobalConfigPayload = SetTournamentIdsRequest;
-export interface AddGlobalConfigPayload {
-  tournamentId: number;
-}
 
 export type UploadApkResponse = ProtoApkUploadResponse;
 export type ApkVersionInfo = ProtoApkInfo;
@@ -123,7 +106,6 @@ export type ScheduledPush = ProtoScheduledPush;
 export type ScheduledPushPageResponse = ProtoScheduledPushPage;
 export type PushMetricsByCampaign = ProtoPushMetricsByCampaign;
 export type PushMetricsAggregate = ProtoPushMetricsAggregate;
-export type FailureBreakdown = ProtoFailureBreakdown;
 
 export type CreateImmediatePushPayload = ProtoCreateImmediatePushRequest;
 export type CreateSchedulePayload = ProtoCreateScheduleRequest;
@@ -133,5 +115,3 @@ export type SetNotificationsEnabledPayload = ProtoSetNotificationsEnabledRequest
 export interface ApiErrorResponse {
   error: string;
 }
-
-export type PlaybackUpdateMethod = "PUT" | "PATCH";

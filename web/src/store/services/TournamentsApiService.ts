@@ -36,10 +36,6 @@ export class TournamentsApiService extends BaseApiService {
     return this.get(url, TournamentPage, signal);
   }
 
-  async getTournament(id: number): Promise<Tournament> {
-    return this.get(`/${id}`, ProtoTournamentMessage);
-  }
-
   async createTournament(
     payload: CreateTournamentPayload,
   ): Promise<Tournament> {

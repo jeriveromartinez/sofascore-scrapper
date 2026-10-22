@@ -32,5 +32,3 @@ export const adminRoutes: CustomRouteRecordRaw[] = [
     icon: "bx-info-circle",
   },
 ];
-
-export default adminRoutes;

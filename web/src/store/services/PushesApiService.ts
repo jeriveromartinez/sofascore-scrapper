@@ -1,7 +1,7 @@
 // PushesApiService
 //
 // REST client for the push-notification admin surface. The push
-// subsystem lives under /api/app/v1/pushes and exposes immediate
+// subsystem lives under /api/web/v1/pushes and exposes immediate
 // sends, scheduled sends, aggregate and per-campaign metrics, and
 // a feature-flag toggle on /users/:id/notifications.
 //
@@ -14,8 +14,7 @@
 // notifications_enabled on the caller for create endpoints; the
 // UI is expected to gate the compose form on the same flag.
 //
-// See docs/superpowers/specs/2026-08-28-push-notifications-websocket-design.md
-// for the contract.
+// See proto/api.proto (Push Notifications section) for the contract.
 
 import { BaseApiService, type ProtoCodec } from "./BaseApiService";
 import {
@@ -154,7 +153,7 @@ const UpdateSchedulePayloadCodec: ProtoCodec<UpdateSchedulePayload> = {
 /**
  * FeatureFlagApiService covers the per-user
  * notifications_enabled toggle. It is sibling to the user
- * management surface (`/api/app/v1/users/:id`) and split out
+ * management surface (`/api/web/v1/users/:id/notifications`) and split out
  * here so the push dashboard can wire it without depending on
  * the full UsersApiService surface (which the push page does
  * not otherwise need).
