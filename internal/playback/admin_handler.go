@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -59,7 +60,8 @@ func (h *AdminHandler) handleGetPlaybackPage(c *gin.Context) {
 
 	logs, hasMore, err := h.repo.ListPage(c.Request.Context(), createdAtStr, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -115,15 +117,17 @@ func (h *AdminHandler) handleGetPlayback(c *gin.Context) {
 		limit = parsedLimit
 	}
 
-	logs, err := h.repo.GetList(page, limit)
+	logs, err := h.repo.GetList(c.Request.Context(), page, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	total, err := h.repo.TotalCount(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

@@ -81,7 +81,7 @@ func (h *AuthHandler) handleRegister(c *gin.Context) {
 	// DB cannot land the operator with role='user'. The returned
 	// 'promoted' flag is informational.
 	_ = promoted
-	response, err := h.buildAuthResponse(user.ID, user.Email)
+	response, err := h.buildAuthResponse(c.Request.Context(), user.ID, user.Email)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "token generation failed")
 		return
@@ -156,7 +156,7 @@ func (h *AuthHandler) handleLogin(c *gin.Context) {
 			)
 		}
 	}
-	response, err := h.buildAuthResponse(user.ID, user.Email)
+	response, err := h.buildAuthResponse(c.Request.Context(), user.ID, user.Email)
 	if err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "token generation failed")
 		return
@@ -230,7 +230,7 @@ func (h *AuthHandler) handleLogout(c *gin.Context) {
 		claims, err := h.tokens.ParseRefreshToken(refreshToken)
 		if err == nil {
 			if refreshUserID, userErr := claims.UserID(); userErr == nil && refreshUserID == userID {
-				if err := h.authRepo.RevokeRefreshToken(userID, claims.ID); err != nil {
+				if err := h.authRepo.RevokeRefreshToken(c.Request.Context(), userID, claims.ID); err != nil {
 					server.RespondError(c, http.StatusInternalServerError, "logout failed")
 					return
 				}
@@ -254,7 +254,7 @@ func (h *AuthHandler) handleLogout(c *gin.Context) {
 		return
 	}
 
-	if err := h.authRepo.RevokeAllRefreshTokens(userID); err != nil {
+	if err := h.authRepo.RevokeAllRefreshTokens(c.Request.Context(), userID); err != nil {
 		server.RespondError(c, http.StatusInternalServerError, "logout failed")
 		return
 	}
@@ -262,13 +262,13 @@ func (h *AuthHandler) handleLogout(c *gin.Context) {
 	server.RespondProto(c, http.StatusOK, &pb.StatusMessage{Message: "logout successful"})
 }
 
-func (h *AuthHandler) buildAuthResponse(userID uint, email string) (*pb.AuthResponse, error) {
+func (h *AuthHandler) buildAuthResponse(ctx context.Context, userID uint, email string) (*pb.AuthResponse, error) {
 	accessToken, refreshToken, tokenID, expiresAt, err := h.tokens.GenerateTokenPair(userID, email)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.authRepo.SaveRefreshToken(userID, tokenID, expiresAt); err != nil {
+	if err := h.authRepo.SaveRefreshToken(ctx, userID, tokenID, expiresAt); err != nil {
 		return nil, err
 	}
 

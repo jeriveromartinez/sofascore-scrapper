@@ -3,9 +3,10 @@ package events
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
+	"github.com/jeriveromartinez/scores365-scrapper/internal/platform/observability"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -67,21 +68,44 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 			// than hammering the DB. The earlier outer cache.Get
 			// was redundant: it always returned miss whenever the
 			// worker had to fall through to the DB anyway.
-			if data, hit, _ := s.cache.Get(flightCtx, key); hit {
+			data, hit, cacheErr := s.cache.Get(flightCtx, key)
+			if cacheErr != nil {
+				slog.Default().WarnContext(flightCtx, "events: cache lookup failed, falling back to the database",
+					slog.String("key", key),
+					slog.String("err", cacheErr.Error()),
+				)
+			}
+			if hit {
 				events, deserErr := deserializeEvents(data)
 				if deserErr == nil {
+					observability.EventCacheHits.Inc()
 					return events, nil
 				}
-				log.Printf("events: corrupt cache key %s, repopulating: %v", key, deserErr)
+				slog.Default().WarnContext(flightCtx, "events: corrupt cache entry, repopulating",
+					slog.String("key", key),
+					slog.String("err", deserErr.Error()),
+				)
 			}
+			observability.EventCacheMisses.Inc()
 
 			events, dbErr := s.repo.getCurrentAndUpcoming(flightCtx, tournamentIDs, limit)
 			if dbErr != nil {
 				return nil, dbErr
 			}
 
-			if data, serErr := serializeEvents(events); serErr == nil {
-				_ = s.cache.Set(flightCtx, key, data, defaultTTL)
+			data, serErr := serializeEvents(events)
+			if serErr != nil {
+				slog.Default().WarnContext(flightCtx, "events: could not serialize the cached events",
+					slog.String("key", key),
+					slog.String("err", serErr.Error()),
+				)
+				return events, nil
+			}
+			if cacheErr := s.cache.Set(flightCtx, key, data, defaultTTL); cacheErr != nil {
+				slog.Default().WarnContext(flightCtx, "events: cache write failed",
+					slog.String("key", key),
+					slog.String("err", cacheErr.Error()),
+				)
 			}
 			return events, nil
 		})

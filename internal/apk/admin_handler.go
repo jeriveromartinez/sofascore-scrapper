@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,10 +38,13 @@ type AdminHandlerDeps struct {
 
 type AdminHandler struct {
 	repo *Repository
+	// parseAPKInfo is a seam so the upload routes can be exercised
+	// without a real signed APK fixture.
+	parseAPKInfo func(path string) (*APKInfo, error)
 }
 
 func NewAdminHandler(repo *Repository) *AdminHandler {
-	return &AdminHandler{repo: repo}
+	return &AdminHandler{repo: repo, parseAPKInfo: ParseAPKInfo}
 }
 
 func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerDeps) {
@@ -83,7 +87,8 @@ func (h *AdminHandler) handleListVersionsPage(c *gin.Context) {
 
 	versions, hasMore, err := h.repo.ListPage(c.Request.Context(), createdAtStr, id, limit)
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -133,7 +138,7 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 		return
 	}
 
-	apkInfo, parseErr := ParseAPKInfo(tmpPath)
+	apkInfo, parseErr := h.parseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
 		server.RespondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
@@ -179,13 +184,13 @@ func (h *AdminHandler) handleUpload(c *gin.Context) {
 	}
 
 	description := c.PostForm("description")
-	apkV, err := h.repo.Create(
+	apkV, err := h.repo.Create(c.Request.Context(),
 		version, fileName, destPath, description, apkInfo.PackageName,
 		fileHeader.Size, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		server.RespondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
+		respondClientError(c, http.StatusConflict, "could not save APK version", err)
 		return
 	}
 
@@ -373,7 +378,7 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 
 	_ = os.RemoveAll(chunkDir)
 
-	apkInfo, parseErr := ParseAPKInfo(tmpPath)
+	apkInfo, parseErr := h.parseAPKInfo(tmpPath)
 	if parseErr != nil {
 		_ = os.Remove(tmpPath)
 		server.RespondError(c, http.StatusBadRequest, "could not parse APK metadata: "+parseErr.Error())
@@ -421,13 +426,13 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 	}
 
 	description := c.PostForm("description")
-	apkV, err := h.repo.Create(
+	apkV, err := h.repo.Create(c.Request.Context(),
 		version, fileName, destPath, description, apkInfo.PackageName,
 		totalSize, apkInfo.VersionCode, apkInfo.MinSDKVersion, apkInfo.TargetSDKVersion,
 	)
 	if err != nil {
 		_ = os.Remove(destPath)
-		server.RespondError(c, http.StatusConflict, "could not save APK version: "+err.Error())
+		respondClientError(c, http.StatusConflict, "could not save APK version", err)
 		return
 	}
 
@@ -448,9 +453,10 @@ func (h *AdminHandler) handleAssembleChunks(c *gin.Context) {
 }
 
 func (h *AdminHandler) handleListVersions(c *gin.Context) {
-	versions, err := h.repo.ListAll()
+	versions, err := h.repo.ListAll(c.Request.Context())
 	if err != nil {
-		server.RespondError(c, http.StatusInternalServerError, err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -472,13 +478,14 @@ func (h *AdminHandler) handleUpdateVersion(c *gin.Context) {
 		return
 	}
 
-	err = h.repo.UpdateURL(uint(id), akpData.Url)
+	err = h.repo.UpdateURL(c.Request.Context(), uint(id), akpData.Url)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.RespondError(c, http.StatusNotFound, "APK version not found")
 			return
 		}
-		server.RespondError(c, http.StatusInternalServerError, "could not update APK URL: "+err.Error())
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

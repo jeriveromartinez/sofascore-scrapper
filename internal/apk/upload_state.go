@@ -270,7 +270,7 @@ func (s *UploadStateStore) Begin(ctx context.Context, req BeginUploadRequest) (*
 	}
 
 	if errMsg, hasErr := resultMap["err"]; hasErr {
-		return nil, fmt.Errorf("%s", errMsg)
+		return nil, &ValidationError{Message: errMsg}
 	}
 
 	return &UploadSession{
@@ -298,7 +298,7 @@ func (s *UploadStateStore) Get(ctx context.Context, id uuid.UUID) (*UploadSessio
 	raw, err := s.client.Get(ctx, metaKey).Result()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
-			return nil, fmt.Errorf("upload not found")
+			return nil, &ValidationError{Message: "upload not found"}
 		}
 		return nil, fmt.Errorf("get upload: %w", err)
 	}
@@ -337,7 +337,7 @@ func (s *UploadStateStore) RecordChunk(ctx context.Context, id uuid.UUID, chunk 
 	}
 
 	if errMsg, hasErr := resultMap["err"].(string); hasErr {
-		return fmt.Errorf("%s", errMsg)
+		return &ValidationError{Message: errMsg}
 	}
 
 	return nil
@@ -370,7 +370,7 @@ func (s *UploadStateStore) BeginAssembly(ctx context.Context, id uuid.UUID, tota
 	}
 
 	if errMsg, hasErr := resultMap["err"].(string); hasErr {
-		return fmt.Errorf("%s", errMsg)
+		return &ValidationError{Message: errMsg}
 	}
 
 	return nil
@@ -409,7 +409,7 @@ func (s *UploadStateStore) Complete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if errMsg, hasErr := resultMap["err"]; hasErr {
-		return fmt.Errorf("%s", errMsg)
+		return &ValidationError{Message: errMsg}
 	}
 
 	return nil
@@ -449,7 +449,7 @@ func (s *UploadStateStore) Abort(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if errMsg, hasErr := resultMap["err"]; hasErr {
-		return fmt.Errorf("%s", errMsg)
+		return &ValidationError{Message: errMsg}
 	}
 
 	return nil
