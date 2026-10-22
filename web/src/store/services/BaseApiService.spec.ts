@@ -333,3 +333,64 @@ describe("BaseApiService timeouts", () => {
     expect(post).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("BaseApiService cancellation", () => {
+  class AllVerbsService extends BaseApiService {
+    constructor() {
+      super("/test");
+    }
+
+    calls(signal: AbortSignal): Array<Promise<unknown>> {
+      const form = new FormData();
+      return [
+        this.post("", { message: "x" }, StatusMessage, StatusMessage, signal),
+        this.postWithoutBody("", StatusMessage, undefined, signal),
+        this.put("", { message: "x" }, StatusMessage, StatusMessage, signal),
+        this.patch("", { message: "x" }, StatusMessage, StatusMessage, signal),
+        this.postMultipart("", form, StatusMessage, signal),
+        this.postMultipartJSON("", form, signal),
+        this.getBinary("", signal),
+        this.delete("", StatusMessage, signal),
+        this.deleteWithBody("", { message: "x" }, StatusMessage, StatusMessage, signal),
+      ];
+    }
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    clearAuthStorage();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("forwards the AbortSignal on every verb", async () => {
+    const configs: Array<{ signal?: AbortSignal }> = [];
+    const respond = async () => ({ data: new ArrayBuffer(0), status: 200, headers: {} });
+    const withBody = vi.fn(async (_url: string, _body: unknown, config: { signal?: AbortSignal }) => {
+      configs.push(config);
+      return respond();
+    });
+    const noBody = vi.fn(async (_url: string, config: { signal?: AbortSignal }) => {
+      configs.push(config);
+      return respond();
+    });
+    vi.spyOn(axios, "create").mockReturnValue({
+      post: withBody,
+      put: withBody,
+      patch: withBody,
+      get: noBody,
+      delete: noBody,
+      interceptors: { response: { use: vi.fn() } },
+    } as never);
+    const controller = new AbortController();
+
+    await Promise.all(new AllVerbsService().calls(controller.signal));
+
+    expect(configs).toHaveLength(9);
+    for (const config of configs) {
+      expect(config.signal).toBe(controller.signal);
+    }
+  });
+});

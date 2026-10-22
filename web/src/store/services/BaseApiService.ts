@@ -280,6 +280,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -291,6 +292,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
       transformRequest: [(data) => data],
     });
 
@@ -303,6 +305,7 @@ export abstract class BaseApiService {
     url: string,
     decoder: ProtoCodec<T>,
     extraHeaders?: Record<string, string>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = { ...this.getHeaders(), ...extraHeaders };
     const {
@@ -313,6 +316,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
@@ -325,6 +329,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -336,6 +341,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
       transformRequest: [(data) => data],
     });
 
@@ -349,6 +355,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -360,6 +367,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
       transformRequest: [(data) => data],
     });
 
@@ -372,6 +380,7 @@ export abstract class BaseApiService {
     url: string,
     formData: FormData,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = { Accept: PROTO_CONTENT_TYPE };
@@ -385,6 +394,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
       timeout: UPLOAD_TIMEOUT_MS,
     });
 
@@ -401,6 +411,7 @@ export abstract class BaseApiService {
   protected async postMultipartJSON<T>(
     url: string,
     formData: FormData,
+    signal?: AbortSignal,
   ): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = {};
@@ -412,6 +423,7 @@ export abstract class BaseApiService {
       {
         headers,
         validateStatus: () => true,
+        signal,
         timeout: UPLOAD_TIMEOUT_MS,
       },
     );
@@ -430,12 +442,13 @@ export abstract class BaseApiService {
     return data;
   }
 
-  protected async getBinary(url: string): Promise<Blob> {
+  protected async getBinary(url: string, signal?: AbortSignal): Promise<Blob> {
     const headers = this.getHeaders();
     const response = await this.http.get<ArrayBuffer>(`${this.pathApi}${url}`, {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     const contentType = headerString(response.headers, "content-type");
@@ -453,7 +466,11 @@ export abstract class BaseApiService {
     });
   }
 
-  protected async delete<T>(url: string, decoder: ProtoCodec<T>): Promise<T> {
+  protected async delete<T>(
+    url: string,
+    decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const headers = this.getHeaders();
     const {
       data,
@@ -463,6 +480,7 @@ export abstract class BaseApiService {
       headers,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
@@ -475,6 +493,7 @@ export abstract class BaseApiService {
     body: B | undefined,
     encoder: ProtoCodec<B>,
     decoder: ProtoCodec<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const headers = this.getHeaders(true);
     const payload = this.encodeRequest(body, encoder);
@@ -487,6 +506,7 @@ export abstract class BaseApiService {
       data: payload,
       responseType: "arraybuffer",
       validateStatus: () => true,
+      signal,
     });
 
     this.assertSuccess(status, data, headerString(responseHeaders, "content-type"));
