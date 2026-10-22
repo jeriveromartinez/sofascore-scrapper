@@ -95,14 +95,6 @@ func invalidDataUnlessDBError(err error) error {
 	return err
 }
 
-func (r *Repository) UpdateLastSeen(ctx context.Context, token string) error {
-	return r.db.WithContext(ctx).Model(&Device{}).Where("token = ?", token).Update("last_seen", time.Now().Unix()).Error
-}
-
-func (r *Repository) UpdateLastSeenByID(ctx context.Context, deviceID uint, ts int64) error {
-	return r.db.WithContext(ctx).Model(&Device{}).Where("id = ?", deviceID).Update("last_seen", ts).Error
-}
-
 func (r *Repository) GetDevices(ctx context.Context, page, limit uint) ([]Device, int64, error) {
 	db := r.db.WithContext(ctx)
 	var devices []Device
@@ -112,10 +104,10 @@ func (r *Repository) GetDevices(ctx context.Context, page, limit uint) ([]Device
 	}
 	offset := (page - 1) * limit
 	// The pb.DeviceList proto never exposes the joined users.User
-	// fields, so the Manager preload was a wasted N+1 roundtrip per
-	// page. Dropped here and in ListPage/GetAll; if a future consumer
-	// needs the manager email, replace with a LEFT JOIN users that
-	// selects only that column rather than loading the whole row.
+	// fields, so the device → user relation is never loaded here.
+	// If a future consumer needs the manager email, use a LEFT JOIN
+	// users that selects only that column rather than loading the
+	// whole row.
 	result := db.Order("id DESC").Offset(int(offset)).Limit(int(limit)).Find(&devices)
 	return devices, total, result.Error
 }

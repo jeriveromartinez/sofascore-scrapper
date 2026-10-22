@@ -373,16 +373,6 @@ func (c *Client) FetchSports(ctx context.Context) ([]Sport, error) {
 	return feed.Sports, nil
 }
 
-// FetchCountries returns the country dictionary used to resolve
-// Competition.CountryID into a human-readable region.
-func (c *Client) FetchCountries(ctx context.Context) ([]Country, error) {
-	feed, err := c.fetchFeed(ctx, "/web/countries/", c.commonParams())
-	if err != nil {
-		return nil, err
-	}
-	return feed.Countries, nil
-}
-
 func (c *Client) fetchFeed(ctx context.Context, path string, params url.Values) (*Feed, error) {
 	endpoint := c.baseURL + path + "?" + params.Encode()
 

@@ -10,19 +10,16 @@ import (
 )
 
 // countingScraper is a scraperService mock that records how many times
-// each job is invoked. Used by the cron-driven tests below.
+// the today job is invoked. Used by the cron-driven tests below.
 type countingScraper struct {
-	todayCalls  atomic.Int64
-	futureCalls atomic.Int64
+	todayCalls atomic.Int64
 }
 
 func (c *countingScraper) ScrapeToday(_ context.Context, _ time.Time) {
 	c.todayCalls.Add(1)
 }
 
-func (c *countingScraper) ScrapeNext7Days(_ context.Context) {
-	c.futureCalls.Add(1)
-}
+func (c *countingScraper) ScrapeNext7Days(_ context.Context) {}
 
 // TestStartScrape_CronDrivenToday verifies that startScrape drives
 // ScrapeToday from a cron entry, not from one of the four manual

@@ -82,24 +82,9 @@ func ScheduleTypeFromProto(s pb.PushScheduleType) ScheduleType {
 	return ""
 }
 
-// PayloadToProto converts a (category, title, body, ...) tuple to a
-// pb.PushPayload. This is the canonical proto representation; both
-// CreateImmediatePushRequest and CreateScheduleRequest use it.
-func PayloadToProto(category Category, title, body, imageURL string, priority Priority, ttlSeconds int, data StringJSON) *pb.PushPayload {
-	return &pb.PushPayload{
-		Category:   CategoryToProto(category),
-		Title:      title,
-		Body:       body,
-		ImageUrl:   imageURL,
-		Priority:   PriorityToProto(priority),
-		TtlSeconds: int32(ttlSeconds),
-		Data:       map[string]string(data),
-	}
-}
-
-// PayloadFromProto is the inverse of PayloadToProto. Returns ok=false
-// when the category or priority is UNSPECIFIED so the caller can
-// reject the request with a 400.
+// PayloadFromProto converts a pb.PushPayload back to the domain
+// values. Returns ok=false when the category or priority is
+// UNSPECIFIED so the caller can reject the request with a 400.
 func PayloadFromProto(p *pb.PushPayload) (category Category, title, body, imageURL string, priority Priority, ttlSeconds int, data StringJSON, ok bool) {
 	if p == nil {
 		return "", "", "", "", "", 0, nil, false

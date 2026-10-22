@@ -227,9 +227,8 @@ func statusOf(r *http.Response) int {
 // bugs that gorilla-only tests miss because gorilla surfaces every
 // msgType with its payload to the consumer.
 type dartLikeClient struct {
-	conn     *websocket.Conn
-	dropped  int  // count of TextMessage frames silently dropped
-	pingSeen bool // true once a BinaryMessage WsPing has been observed
+	conn    *websocket.Conn
+	dropped int // count of TextMessage frames silently dropped
 }
 
 func newDartLikeClient(conn *websocket.Conn) *dartLikeClient {
@@ -254,26 +253,6 @@ func (c *dartLikeClient) readFrame(t *testing.T, timeout time.Duration) []byte {
 			continue
 		}
 		return raw
-	}
-}
-
-// sendAck writes a WsPushAck application frame (BinaryMessage).
-// Mirrors _sendAck in the Flutter client.
-func (c *dartLikeClient) sendAck(t *testing.T, messageID string) {
-	t.Helper()
-	ack := &pbWsFrame{
-		PushAck: &pb.WsPushAck{
-			MessageId: messageID,
-			AckedAt:   time.Now().UnixMilli(),
-		},
-	}
-	raw, err := encodeFrame(ack.toProto())
-	if err != nil {
-		t.Fatalf("encode ack: %v", err)
-	}
-	_ = c.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-	if err := c.conn.WriteMessage(websocket.BinaryMessage, raw); err != nil {
-		t.Fatalf("write ack: %v", err)
 	}
 }
 
@@ -415,7 +394,6 @@ func TestWSHandler_HelloIsBinaryAndKeepaliveWorks(t *testing.T) {
 	if pingFrame.GetPing() == nil {
 		t.Fatalf("second frame payload is not Ping: %T", pingFrame.Payload)
 	}
-	client.pingSeen = true
 
 	// Reply with a WsPong application frame (mirrors the Flutter
 	// client's _sendPong). The server MUST treat this as a

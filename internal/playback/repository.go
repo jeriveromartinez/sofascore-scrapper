@@ -36,10 +36,6 @@ func (r *Repository) Start(ctx context.Context, deviceID uint, content string, s
 	return &created, err
 }
 
-func (r *Repository) UpdateEnd(ctx context.Context, id uint, endedAt int64) error {
-	return r.db.WithContext(ctx).Model(&PlaybackLog{}).Where("id = ?", id).Update("ended_at", endedAt).Error
-}
-
 func (r *Repository) GetList(ctx context.Context, page, limit int) ([]*PlaybackLog, error) {
 	offset := (page - 1) * limit
 	var logs []*PlaybackLog

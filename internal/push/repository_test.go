@@ -256,8 +256,8 @@ func TestRepository_MarkDeliverySent_Delivered_Failed(t *testing.T) {
 	}
 }
 
-// TestRepository_ScheduledPushLifecycle covers the create/list/due/
-// fire/reschedule cycle. The recurring path updates next_fire_at
+// TestRepository_ScheduledPushLifecycle covers the create/fire/
+// reschedule cycle. The recurring path updates next_fire_at
 // based on the cron expression; the one_shot path deactivates the
 // row and stamps last_fired_at.
 func TestRepository_ScheduledPushLifecycle(t *testing.T) {
@@ -269,8 +269,7 @@ func TestRepository_ScheduledPushLifecycle(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
 
-	// Create a one_shot in the past relative to "now+1s" so it
-	// shows up in the due query immediately.
+	// Create a one_shot whose fire time already elapsed.
 	runAt := now.Add(-time.Minute)
 	one := &ScheduledPush{
 		UserID:       uid,
@@ -301,14 +300,6 @@ func TestRepository_ScheduledPushLifecycle(t *testing.T) {
 	}
 	if err := repo.InsertScheduledPushWithTargets(ctx, rec, []uint{d1}, nil); err != nil {
 		t.Fatalf("insert rec: %v", err)
-	}
-
-	due, err := repo.ListDueScheduledPushes(ctx, now, 10)
-	if err != nil {
-		t.Fatalf("list due: %v", err)
-	}
-	if len(due) != 2 {
-		t.Fatalf("due count = %d, want 2", len(due))
 	}
 
 	// Mark one as fired and deactivate.

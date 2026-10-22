@@ -233,22 +233,6 @@ func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, le
 	return true, nil
 }
 
-// ExistsBySourceLeagueID returns 1 if a row with the given (source,
-// source_league_id) exists in scraper_leagues (excluding soft-deleted),
-// else 0. Errors propagate.
-func (r *Repository) ExistsBySourceLeagueID(ctx context.Context, source, sourceLeagueID string) (int, error) {
-	var n int64
-	err := r.db.WithContext(ctx).
-		Model(&ScraperLeague{}).
-		Where("source = ? AND source_league_id = ?", source, sourceLeagueID).
-		Where("deleted_at IS NULL").
-		Count(&n).Error
-	if err != nil {
-		return 0, err
-	}
-	return int(n), nil
-}
-
 // SearchLocalByName is a free-text match against the Name
 // column. The match is case-insensitive and the term may appear
 // anywhere in the name; only live (non-soft-deleted) rows are
