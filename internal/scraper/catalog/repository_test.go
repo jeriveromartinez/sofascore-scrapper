@@ -272,6 +272,32 @@ func TestRepository_EnsureLeague_PreservesDisabledRow(t *testing.T) {
 	}
 }
 
+// TestRepository_EnsureLeague_InsertConflictReportsNotCreated covers
+// the insert race. A soft-deleted row still holds the unique index
+// entry, so the insert conflicts even though the pre-check missed it.
+// EnsureLeague must report created=false and must not surface the
+// duplicate-key error to the caller.
+func TestRepository_EnsureLeague_InsertConflictReportsNotCreated(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewRepository(db)
+
+	ref := scraper.LeagueRef{Source: "scores365", Name: "MLB", Sport: "baseball", Country: "USA"}
+	if _, err := repo.EnsureLeague(context.Background(), "scores365", ref); err != nil {
+		t.Fatalf("EnsureLeague: %v", err)
+	}
+	if err := db.Delete(&ScraperLeague{}, "source = ? AND source_league_id = ?", "scores365", "scores365").Error; err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	created, err := repo.EnsureLeague(context.Background(), "scores365", ref)
+	if err != nil {
+		t.Fatalf("EnsureLeague after soft delete: %v", err)
+	}
+	if created {
+		t.Errorf("EnsureLeague must return created=false when the insert conflicts")
+	}
+}
+
 func TestRepository_SearchLocalByName_IgnoresSoftDeleted(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewRepository(db)

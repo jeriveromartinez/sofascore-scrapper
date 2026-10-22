@@ -223,6 +223,11 @@ func (r *Repository) EnsureLeague(ctx context.Context, sourceLeagueID string, le
 		Country:        truncateCountry(league.Country),
 		Enabled:        true,
 	}
+	// The unique index is the arbiter of the race. The insert cannot
+	// be turned into a no-op clause instead: MariaDB answers a
+	// conflicting INSERT ... ON DUPLICATE KEY UPDATE with the
+	// existing row, so the affected-row count stays at one and the
+	// caller could no longer tell a fresh insert from a race.
 	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
 		if isUniqueViolation(err) {
 			// Raced with another worker; treat as success but
