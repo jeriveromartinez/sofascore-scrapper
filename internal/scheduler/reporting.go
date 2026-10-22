@@ -35,9 +35,6 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 		logger.Warn("scheduler: no aggregation repository available")
 	}
 
-	_ = gormDB
-	_ = agg
-
 	c := cron.New()
 
 	// Thread the parent ctx through every cron callback so SIGTERM
