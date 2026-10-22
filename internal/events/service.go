@@ -3,7 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -72,7 +72,10 @@ func (s *Service) GetCurrentAndUpcoming(ctx context.Context, devID uint, limit i
 				if deserErr == nil {
 					return events, nil
 				}
-				log.Printf("events: corrupt cache key %s, repopulating: %v", key, deserErr)
+				slog.Default().WarnContext(flightCtx, "events: corrupt cache entry, repopulating",
+					slog.String("key", key),
+					slog.String("err", deserErr.Error()),
+				)
 			}
 
 			events, dbErr := s.repo.getCurrentAndUpcoming(flightCtx, tournamentIDs, limit)

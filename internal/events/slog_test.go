@@ -1,0 +1,162 @@
+package events
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/glebarez/sqlite"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
+	goredis "github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
+)
+
+type logRecords struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *logRecords) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+// find returns the first structured record whose message contains msg.
+func (l *logRecords) find(t *testing.T, msg string) map[string]any {
+	t.Helper()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	scanner := bufio.NewScanner(bytes.NewReader(l.buf.Bytes()))
+	for scanner.Scan() {
+		var rec map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
+			t.Fatalf("decode log record %q: %v", scanner.Text(), err)
+		}
+		if m, _ := rec["msg"].(string); strings.Contains(m, msg) {
+			return rec
+		}
+	}
+	t.Fatalf("no log record containing %q in:\n%s", msg, l.buf.String())
+	return nil
+}
+
+// captureSlog routes slog.Default to a JSON buffer for the test. Output
+// written through the log package also lands here, but only as an INFO
+// record without attributes, which is what the assertions tell apart.
+func captureSlog(t *testing.T) *logRecords {
+	t.Helper()
+	records := &logRecords{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(records, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return records
+}
+
+func assertStructuredWarn(t *testing.T, rec map[string]any, attr string) {
+	t.Helper()
+	if rec["level"] != "WARN" {
+		t.Fatalf("record level = %v, want WARN (record %v)", rec["level"], rec)
+	}
+	if _, ok := rec[attr]; !ok {
+		t.Fatalf("record is missing structured attribute %q: %v", attr, rec)
+	}
+}
+
+type failingLookup struct{}
+
+func (failingLookup) TeamLogoURL(context.Context, string) (string, error) {
+	return "", errors.New("lookup unavailable")
+}
+
+func TestDownloadAndPersistLogoLogsThroughSlog(t *testing.T) {
+	records := captureSlog(t)
+	repo := NewRepository(nil).WithLogoLookup(failingLookup{})
+	repo.idSourceURL = func(int64) string { return "" }
+
+	repo.DownloadAndPersistLogo(context.Background(), nil, LogoJob{TeamID: 77, TeamName: "Lookup FC"})
+
+	assertStructuredWarn(t, records.find(t, "logo lookup"), "team_id")
+	assertStructuredWarn(t, records.find(t, "no logo source"), "team_id")
+}
+
+func TestTruncateTournamentIDsLogsThroughSlog(t *testing.T) {
+	records := captureSlog(t)
+	ids := make([]uint, maxTournamentIDs+1)
+
+	if got := truncateTournamentIDs(9, ids); len(got) != maxTournamentIDs {
+		t.Fatalf("len = %d, want %d", len(got), maxTournamentIDs)
+	}
+	assertStructuredWarn(t, records.find(t, "truncating"), "device_id")
+}
+
+type mapCache struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
+
+func (c *mapCache) Get(_ context.Context, key string) ([]byte, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.data[key]
+	return v, ok, nil
+}
+
+func (c *mapCache) Set(_ context.Context, key string, value []byte, _ time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data[key] = value
+	return nil
+}
+
+// newCachedService wires a Service over sqlite, an in-memory cache and
+// a miniredis epoch store holding a live epoch, so requests take the
+// cached path. It returns the cache key the first device request uses.
+func newCachedService(t *testing.T) (*Service, *mapCache, string) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&Event{}, &Team{}, &tournaments.Tournament{}, &tournaments.DeviceTournament{}, &tournaments.GlobalTournamentConfig{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1}).Error; err != nil {
+		t.Fatalf("seed global config: %v", err)
+	}
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	client := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	const epoch = int64(1)
+	if err := client.Set(context.Background(), epochKey, epoch, 0).Err(); err != nil {
+		t.Fatalf("seed epoch: %v", err)
+	}
+
+	cache := &mapCache{data: map[string][]byte{}}
+	return NewService(NewRepository(db), cache, NewEpochStore(client)), cache, BuildCacheKey(epoch, []uint{1}, 6)
+}
+
+func TestServiceCorruptCacheLogsThroughSlog(t *testing.T) {
+	svc, cache, key := newCachedService(t)
+	cache.data[key] = []byte("not json")
+	records := captureSlog(t)
+
+	if _, err := svc.GetCurrentAndUpcoming(context.Background(), 1, 6); err != nil {
+		t.Fatalf("GetCurrentAndUpcoming: %v", err)
+	}
+	assertStructuredWarn(t, records.find(t, "corrupt cache"), "key")
+}

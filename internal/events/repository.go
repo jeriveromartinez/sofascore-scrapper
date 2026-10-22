@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -298,7 +298,11 @@ func (r *Repository) DownloadAndPersistLogo(ctx context.Context, db *gorm.DB, jo
 	if r.logoLookup != nil && strings.TrimSpace(job.TeamName) != "" {
 		url, lookupErr := r.logoLookup.TeamLogoURL(ctx, job.TeamName)
 		if lookupErr != nil {
-			log.Printf("events: logo lookup for team %d (%q) failed: %v", job.TeamID, job.TeamName, lookupErr)
+			slog.Default().WarnContext(ctx, "events: logo lookup failed",
+				slog.Int64("team_id", job.TeamID),
+				slog.String("team_name", job.TeamName),
+				slog.String("err", lookupErr.Error()),
+			)
 		} else if url != "" && r.tryDownloadAndPersist(ctx, db, job.TeamID, url) {
 			return
 		}
@@ -306,7 +310,11 @@ func (r *Repository) DownloadAndPersistLogo(ctx context.Context, db *gorm.DB, jo
 	if r.tryDownloadAndPersist(ctx, db, job.TeamID, r.idSource(job.TeamID)) {
 		return
 	}
-	log.Printf("events: no logo source succeeded for team %d (name=%q, primary=%q)", job.TeamID, job.TeamName, job.PrimaryURL)
+	slog.Default().WarnContext(ctx, "events: no logo source succeeded",
+		slog.Int64("team_id", job.TeamID),
+		slog.String("team_name", job.TeamName),
+		slog.String("primary_url", job.PrimaryURL),
+	)
 }
 
 // tryDownloadAndPersist attempts one source URL: writes the image
@@ -319,7 +327,11 @@ func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, tea
 		return false
 	}
 	if _, err := DownloadTeamLogoWithContext(ctx, teamID, url); err != nil {
-		log.Printf("events: failed to download logo for team %d from %s: %v", teamID, url, err)
+		slog.Default().WarnContext(ctx, "events: failed to download logo",
+			slog.Int64("team_id", teamID),
+			slog.String("url", url),
+			slog.String("err", err.Error()),
+		)
 		return false
 	}
 	if ctx.Err() != nil {
@@ -333,7 +345,10 @@ func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, tea
 	}
 	apiPath := TeamLogoAPIPath(teamID)
 	if err := db.WithContext(ctx).Model(&Team{}).Where("team_id = ?", teamID).Update("logo_url", apiPath).Error; err != nil {
-		log.Printf("events: failed to update logo URL for team %d: %v", teamID, err)
+		slog.Default().WarnContext(ctx, "events: failed to update logo URL",
+			slog.Int64("team_id", teamID),
+			slog.String("err", err.Error()),
+		)
 	}
 	return true
 }
@@ -387,7 +402,11 @@ func truncateTournamentIDs(devID uint, ids []uint) []uint {
 	if len(ids) <= maxTournamentIDs {
 		return ids
 	}
-	log.Printf("events: device %d has %d tournament assignments, truncating to %d (cap to keep the IN-list query plan in index-scan range)", devID, len(ids), maxTournamentIDs)
+	slog.Default().Warn("events: truncating device tournament assignments to keep the IN-list query plan in index-scan range",
+		slog.Uint64("device_id", uint64(devID)),
+		slog.Int("assignments", len(ids)),
+		slog.Int("cap", maxTournamentIDs),
+	)
 	return ids[:maxTournamentIDs]
 }
 
