@@ -73,34 +73,34 @@ test.describe("Cursor pagination", () => {
   });
 
   test("last page returns hasMore=false and no next_cursor", async ({ request }) => {
-    // limit=10, 25 items → page1(10), page2(10), page3(5)
-    const page1 = await api.get<TournamentPage>(
-      request,
-      `${PAGE_PATH}?limit=10`,
-      TournamentPage,
-      { Authorization: `Bearer ${accessToken}` },
-    );
-    expect(page1.status).toBe(200);
+    // How many tournaments are stored depends on what the scraper and
+    // earlier runs left behind, so the last page is found by following
+    // the cursor instead of assuming a fixed number of pages.
+    const LIMIT = 10;
+    const MAX_PAGES = 1000;
+    let cursor = "";
+    let pages = 0;
+    let page: TournamentPage | null = null;
 
-    const page2 = await api.get<TournamentPage>(
-      request,
-      `${PAGE_PATH}?limit=10&cursor=${encodeURIComponent(page1.data!.page!.nextCursor)}`,
-      TournamentPage,
-      { Authorization: `Bearer ${accessToken}` },
-    );
-    expect(page2.status).toBe(200);
-
-    if (page2.data!.page!.hasMore) {
-      const page3 = await api.get<TournamentPage>(
+    do {
+      const query = cursor === "" ? `?limit=${LIMIT}` : `?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`;
+      const resp = await api.get<TournamentPage>(
         request,
-        `${PAGE_PATH}?limit=10&cursor=${encodeURIComponent(page2.data!.page!.nextCursor)}`,
+        `${PAGE_PATH}${query}`,
         TournamentPage,
         { Authorization: `Bearer ${accessToken}` },
       );
-      expect(page3.status).toBe(200);
-      expect(page3.data!.page!.hasMore).toBe(false);
-      expect(page3.data!.page!.nextCursor).toBe("");
-    }
+      expect(resp.status, `page error: ${resp.error}`).toBe(200);
+      page = resp.data!;
+      expect(page.data.length).toBeLessThanOrEqual(LIMIT);
+      cursor = page.page!.nextCursor;
+      pages++;
+    } while (page.page!.hasMore && cursor !== "" && pages < MAX_PAGES);
+
+    // The walk has to end on a page the API reports as the last one.
+    expect(pages, "expected the cursor to span more than one page").toBeGreaterThan(1);
+    expect(page!.page!.hasMore).toBe(false);
+    expect(page!.page!.nextCursor).toBe("");
   });
 
   test("invalid cursor returns 400", async ({ request }) => {
