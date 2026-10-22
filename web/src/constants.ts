@@ -1,3 +1,5 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/web/v1";
+export const APP_API_BASE_URL =
+  import.meta.env.VITE_APP_API_BASE_URL ?? "/api/app/v1";
 export const KEY_USER_LOGIN = "user_info";
 export const KEY_THEME = "local_theme";

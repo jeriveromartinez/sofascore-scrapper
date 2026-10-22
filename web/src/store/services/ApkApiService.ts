@@ -19,7 +19,7 @@ import type {
   UploadApkResponse,
 } from "./models";
 import { readAuthStorage } from "../authStorage";
-import { API_BASE_URL } from "../../constants";
+import { API_BASE_URL, APP_API_BASE_URL } from "../../constants";
 import axios from "axios";
 
 const CHUNK_SIZE = 10 * 1024 * 1024;
@@ -32,6 +32,17 @@ interface StoredSession {
   totalChunks: number;
   version?: string;
   description?: string;
+}
+
+async function readErrorMessage(data: ArrayBuffer, status: number): Promise<string> {
+  const text = new TextDecoder().decode(new Uint8Array(data));
+  try {
+    const parsed = JSON.parse(text) as { error?: string };
+    if (parsed.error) return parsed.error;
+  } catch {
+    /* fall through to the generic message */
+  }
+  return `HTTP ${status}`;
 }
 
 export class ApkApiService extends BaseApiService {
@@ -257,10 +268,23 @@ export class ApkApiService extends BaseApiService {
     version: string,
     packageName: string,
   ): Promise<ApkCheckResponse> {
-    return this.get<ApkCheckResponse>(
-      `/check?version=${encodeURIComponent(version)}&package=${encodeURIComponent(packageName)}`,
-      ApkUpdateCheckResponse,
+    // The update check is a client-facing endpoint: it lives under the
+    // app API, not the admin web API.
+    const params = new URLSearchParams({ version, package: packageName });
+    const response = await axios.get<ArrayBuffer>(
+      `${APP_API_BASE_URL}/update?${params.toString()}`,
+      {
+        headers: { Accept: PROTO_CONTENT_TYPE },
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
     );
+
+    if (response.status >= 400) {
+      throw new Error(await readErrorMessage(response.data, response.status));
+    }
+
+    return ApkUpdateCheckResponse.decode(new Uint8Array(response.data));
   }
 
   getDownloadUrl(appKey: string): string {
@@ -269,7 +293,22 @@ export class ApkApiService extends BaseApiService {
   }
 
   async downloadByToken(token: string): Promise<Blob> {
-    return this.getBinary(`/download/${token}`);
+    const response = await axios.get<ArrayBuffer>(
+      `${APP_API_BASE_URL}/apk/download/${token}`,
+      {
+        headers: { Accept: PROTO_CONTENT_TYPE },
+        responseType: "arraybuffer",
+        validateStatus: () => true,
+      },
+    );
+
+    if (response.status >= 400) {
+      throw new Error(await readErrorMessage(response.data, response.status));
+    }
+
+    return new Blob([response.data], {
+      type: "application/vnd.android.package-archive",
+    });
   }
 
   async updateApkUrl(id: number, url: string): Promise<StatusMessage> {
