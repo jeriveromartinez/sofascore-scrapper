@@ -1,5 +1,15 @@
 import { test, expect } from "@playwright/test";
-import { api, getE2EAdminToken, UploadBeginRequest, UploadBeginResponse, UploadStatusResponse, UploadChunkResponse, StatusMessage, DeviceUrl } from "./helpers";
+import {
+  api,
+  getE2EAdminToken,
+  releaseOpenUpload,
+  trackOpenUpload,
+  UploadBeginRequest,
+  UploadBeginResponse,
+  UploadStatusResponse,
+  StatusMessage,
+  DeviceUrl,
+} from "./helpers";
 
 const UPLOADS_PATH = "/api/web/v1/apk/uploads";
 const APK_PATH = "/api/web/v1/apk";
@@ -23,6 +33,7 @@ test.describe("Resumable APK upload", () => {
     await api.delete<StatusMessage>(request, `${UPLOADS_PATH}/${uploadId}`, StatusMessage, {
       Authorization: `Bearer ${accessToken}`,
     });
+    releaseOpenUpload(uploadId);
   });
 
   test("begin upload requires auth", async ({ request }) => {
@@ -67,6 +78,7 @@ test.describe("Resumable APK upload", () => {
     expect(uploadId).toBeTruthy();
     expect(beginResp.data!.status).toBe("receiving");
     openUploadId = uploadId;
+    trackOpenUpload(uploadId);
 
     // Step 2: Check status
     const statusResp = await api.get<UploadStatusResponse>(
@@ -97,6 +109,7 @@ test.describe("Resumable APK upload", () => {
     );
     expect(abortResp.status, `abort error: ${abortResp.error}`).toBe(200);
     openUploadId = null;
+    releaseOpenUpload(uploadId);
   });
 
   test("non-existent upload returns 404", async ({ request }) => {

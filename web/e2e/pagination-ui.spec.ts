@@ -1,13 +1,29 @@
 import { test, expect } from "@playwright/test";
-import { api, getE2EAdminToken, E2E_SEEDED_ADMIN_EMAIL, TournamentRequest, Tournament } from "./helpers";
+import {
+  api,
+  getE2EAdminToken,
+  getE2EState,
+  E2E_ADMIN_EMAIL,
+  StatusMessage,
+  TournamentList,
+  TournamentRequest,
+  Tournament,
+} from "./helpers";
 
+const TOURNAMENTS_PATH = "/api/web/v1/tournaments";
 const USER_INFO_KEY = "user_info";
+
+// The admin table shows twenty rows per page, so a second page only
+// exists once more than twenty tournaments are stored.
+const PAGE_SIZE = 20;
+
+const seededIds: number[] = [];
 
 async function injectAdminSession(page: import("@playwright/test").Page): Promise<void> {
   const token = getE2EAdminToken();
   const user = {
-    id: 0,
-    email: E2E_SEEDED_ADMIN_EMAIL,
+    id: getE2EState().adminUserId,
+    email: E2E_ADMIN_EMAIL,
     token,
     refreshToken: token,
   };
@@ -19,21 +35,23 @@ async function injectAdminSession(page: import("@playwright/test").Page): Promis
   );
 }
 
-// The admin table shows 20 rows per page, so a second page only exists
-// once more than 20 tournaments are stored. How many the scraper has
-// written by the time the suite runs depends on the clock, so the
-// rows the pagination needs are seeded here instead of being waited
-// for.
-const SEEDED_TOURNAMENTS = 25;
-
 test.describe("Pagination URL sync", () => {
   test.beforeAll(async ({ request }) => {
     const accessToken = getE2EAdminToken();
-    for (let i = 0; i < SEEDED_TOURNAMENTS; i++) {
+    const list = await api.get<TournamentList>(request, TOURNAMENTS_PATH, TournamentList, {
+      Authorization: `Bearer ${accessToken}`,
+    });
+    expect(list.status, `tournament list error: ${list.error}`).toBe(200);
+
+    // Only the rows the second page is missing are seeded. A stack
+    // that already holds more tournaments than a page shows needs none,
+    // so the run leaves nothing behind at all.
+    const missing = Math.max(0, PAGE_SIZE + 1 - list.data!.tournaments.length);
+    for (let i = 0; i < missing; i++) {
       const slug = `e2e-page-${String(i).padStart(3, "0")}`;
       const resp = await api.post<Tournament, TournamentRequest>(
         request,
-        "/api/web/v1/tournaments",
+        TOURNAMENTS_PATH,
         { name: `E2E Page ${String(i).padStart(3, "0")}`, slug },
         TournamentRequest,
         Tournament,
@@ -42,6 +60,20 @@ test.describe("Pagination URL sync", () => {
       if (resp.status !== 201) {
         throw new Error(`could not seed tournament ${slug}: ${resp.error ?? resp.status}`);
       }
+      seededIds.push(resp.data!.id);
+    }
+  });
+
+  test.afterAll(async ({ request }) => {
+    const accessToken = getE2EAdminToken();
+    for (const id of seededIds) {
+      const resp = await api.delete<StatusMessage>(
+        request,
+        `${TOURNAMENTS_PATH}/${id}`,
+        StatusMessage,
+        { Authorization: `Bearer ${accessToken}` },
+      );
+      expect(resp.status, `delete tournament error: ${resp.error}`).toBe(200);
     }
   });
 

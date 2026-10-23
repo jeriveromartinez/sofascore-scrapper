@@ -1,7 +1,17 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { api, getE2EAdminToken, CreateInvitationRequest, InvitationResponse, UploadBeginRequest, UploadBeginResponse, StatusMessage } from "./helpers";
+import {
+  api,
+  getE2EAdminToken,
+  releaseOpenUpload,
+  trackOpenUpload,
+  CreateInvitationRequest,
+  InvitationResponse,
+  UploadBeginRequest,
+  UploadBeginResponse,
+  StatusMessage,
+} from "./helpers";
 
 const INVITE_PATH = "/api/web/v1/users/invitations";
 const UPLOADS_PATH = "/api/web/v1/apk/uploads";
@@ -54,6 +64,7 @@ async function abortUpload(request: import("@playwright/test").APIRequestContext
   );
   expect(resp.status, `abort error: ${resp.error}`).toBe(200);
   openUploadId = null;
+  releaseOpenUpload(uploadId);
 }
 
 test.describe("Redis degradation", () => {
@@ -68,6 +79,7 @@ test.describe("Redis degradation", () => {
     await api.delete<StatusMessage>(request, `${UPLOADS_PATH}/${uploadId}`, StatusMessage, {
       Authorization: `Bearer ${accessToken}`,
     });
+    releaseOpenUpload(uploadId);
   });
 
   test("with Redis healthy: invitation creation works", async ({ request }) => {
@@ -93,6 +105,7 @@ test.describe("Redis degradation", () => {
     );
     expect(resp.status, `upload error: ${resp.error}`).toBe(201);
     openUploadId = resp.data!.uploadId;
+    trackOpenUpload(openUploadId);
     await abortUpload(request, resp.data!.uploadId);
   });
 
@@ -153,6 +166,7 @@ test.describe("Redis degradation", () => {
     );
     expect(resp.status).toBe(201);
     openUploadId = resp.data!.uploadId;
+    trackOpenUpload(openUploadId);
     await abortUpload(request, resp.data!.uploadId);
   });
 });
