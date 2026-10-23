@@ -270,6 +270,20 @@ make proto
 with uncommitted changes (the `ci.yml` workflow runs this same check
 on `workflow_dispatch`).
 
+The dashboard reads the same contract through the TypeScript bindings
+in `web/src/proto/`. Regenerate them after editing the proto as well:
+
+```bash
+npm ci --prefix web   # the ts-proto plugin lives in the web workspace
+make proto-web
+```
+
+`make proto-web-check` regenerates them and fails if they differ from
+the committed ones. The committed bindings were produced with protoc
+24.3 and ts-proto v2.11.5, the version `web/package.json` pins; the
+version of protoc is recorded in the header of the generated file and
+changes nothing else, so the check ignores that line.
+
 The Flutter consumer (the Android TV app) lives in the separate
 `flutter-apptv` repository and mirrors `proto/api.proto` verbatim.
 Verify the mirror is in sync before tagging a release:
