@@ -23,9 +23,11 @@ var concurrentMigrationMarkers = []string{
 	"Error 1061", // duplicate key name
 	"Error 1826", // duplicate foreign key constraint name
 	"Error 1091", // can't drop; check that column/key exists
+	"Error 1060", // duplicate column name
 	"Error 1213", // deadlock found
 	"Error 1205", // lock wait timeout exceeded
 	"already exists",
+	"duplicate column name",
 }
 
 // isConcurrentMigrationError reports whether err is the signature of
