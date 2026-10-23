@@ -14,7 +14,7 @@ import (
 func TestConnection_OnAckDoesNotBlockReader(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	conn := newConnection(1, 1, 1, nil, func(ctx context.Context, messageID string) {
+	conn := newConnection(1, nil, func(ctx context.Context, messageID string) {
 		close(entered)
 		<-release
 	}, nil, nil)
@@ -47,7 +47,7 @@ func TestConnection_AckSurvivesConnectionClose(t *testing.T) {
 	var mu sync.Mutex
 	received := make([]string, 0, 1)
 	entered := make(chan struct{})
-	conn := newConnection(1, 1, 1, nil, func(ctx context.Context, messageID string) {
+	conn := newConnection(1, nil, func(ctx context.Context, messageID string) {
 		mu.Lock()
 		received = append(received, messageID)
 		mu.Unlock()
@@ -76,7 +76,7 @@ func TestConnection_AckSurvivesConnectionClose(t *testing.T) {
 func TestConnection_AckHandlerContextOutlivesConnection(t *testing.T) {
 	entered := make(chan struct{})
 	ctxErr := make(chan error, 1)
-	conn := newConnection(1, 1, 1, nil, func(ctx context.Context, messageID string) {
+	conn := newConnection(1, nil, func(ctx context.Context, messageID string) {
 		close(entered)
 		ctxErr <- ctx.Err()
 	}, nil, nil)

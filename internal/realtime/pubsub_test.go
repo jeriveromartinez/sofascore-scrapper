@@ -47,7 +47,7 @@ func TestSubscriber_RoundTripsPushMessage(t *testing.T) {
 	client, _ := newTestRedis(t)
 	hub := NewHub()
 
-	conn := newTestConnection(t, 42, 1, 1)
+	conn := newTestConnection(t, 42)
 	hub.Register(42, conn)
 
 	sub := NewSubscriber(client, hub, SubscriberConfig{
@@ -112,9 +112,9 @@ func TestSubscriber_KeyPrefixIsolatesChannels(t *testing.T) {
 	hubA := NewHub()
 	hubB := NewHub()
 
-	connA := newTestConnection(t, 42, 1, 1)
+	connA := newTestConnection(t, 42)
 	hubA.Register(42, connA)
-	connB := newTestConnection(t, 42, 1, 1)
+	connB := newTestConnection(t, 42)
 	hubB.Register(42, connB)
 
 	subA := NewSubscriber(client, hubA, SubscriberConfig{Channel: "push:fanout", KeyPrefix: "tenant-a:"})

@@ -13,12 +13,12 @@ import (
 func TestRegisterEvictingPreviousConnectionDoesNotDeadlock(t *testing.T) {
 	h := NewHub()
 
-	old := newConnection(1, 0, 0, nil, nil, func(c *Connection, reason string) {
+	old := newConnection(1, nil, nil, func(c *Connection, reason string) {
 		h.UnregisterConn(1, c)
 	}, nil)
 	h.Register(1, old)
 
-	replacement := newConnection(1, 0, 0, nil, nil, nil, nil)
+	replacement := newConnection(1, nil, nil, nil, nil)
 
 	done := make(chan struct{})
 	go func() {
@@ -47,8 +47,8 @@ func TestRegisterEvictingPreviousConnectionDoesNotDeadlock(t *testing.T) {
 func TestUnregisterConnKeepsReplacementRegistered(t *testing.T) {
 	h := NewHub()
 
-	old := newConnection(7, 0, 0, nil, nil, nil, nil)
-	replacement := newConnection(7, 0, 0, nil, nil, nil, nil)
+	old := newConnection(7, nil, nil, nil, nil)
+	replacement := newConnection(7, nil, nil, nil, nil)
 
 	h.Register(7, old)
 	h.Register(7, replacement)
@@ -69,7 +69,7 @@ func TestUnregisterConnKeepsReplacementRegistered(t *testing.T) {
 func TestUnregisterConnRemovesItsOwnConnection(t *testing.T) {
 	h := NewHub()
 
-	conn := newConnection(9, 0, 0, nil, nil, nil, nil)
+	conn := newConnection(9, nil, nil, nil, nil)
 	h.Register(9, conn)
 
 	h.UnregisterConn(9, conn)

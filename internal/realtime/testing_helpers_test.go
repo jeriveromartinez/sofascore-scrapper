@@ -36,10 +36,10 @@ func (p *testPush) encode() ([]byte, error) {
 //   - send is a buffered channel of wire bytes
 //   - closedFlag is observable to verify the hub evicted the conn
 //   - Close() is idempotent
-func newTestConnection(t *testing.T, deviceID uint64, userID, domainID uint32) *Connection {
+func newTestConnection(t *testing.T, deviceID uint64) *Connection {
 	t.Helper()
 
-	c := newConnection(deviceID, userID, domainID, nil, func(context.Context, string) {}, nil, nil)
+	c := newConnection(deviceID, nil, func(context.Context, string) {}, nil, nil)
 	c.closedMu.Lock()
 	c.closedFlag = false
 	c.closedMu.Unlock()
