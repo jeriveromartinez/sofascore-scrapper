@@ -34,9 +34,9 @@ export const useScraperLeaguesStore = defineStore('scraperLeagues', {
         if (seq !== this._requestSeq) return
         this.items = res.data
         this.total = res.total
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (seq !== this._requestSeq) return
-        this.error = e.message
+        this.error = e instanceof Error ? e.message : String(e)
       } finally {
         if (seq === this._requestSeq) this.loading = false
       }

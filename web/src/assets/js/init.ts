@@ -7,8 +7,12 @@ declare global {
   interface Window {
     Menu: any;
     Helpers: any;
-    PerfectScrollbar: any;
   }
+}
+
+// The vendored menu plugin links itself to the element it wraps.
+interface MenuHost extends HTMLElement {
+  menuInstance?: { destroy(): void };
 }
 
 /**
@@ -29,11 +33,11 @@ export function initializeLayout() {
   }
 
   // Initialize Menu
-  const menuEl = document.querySelector('#layout-menu');
+  const menuEl = document.querySelector('#layout-menu') as MenuHost | null;
   if (menuEl) {
     try {
       // Check if menu is already initialized
-      if (!(menuEl as any).menuInstance) {
+      if (!menuEl.menuInstance) {
         const menu = new window.Menu(menuEl, {
           animate: true,
           accordion: true,
@@ -102,8 +106,8 @@ export function cleanupLayout() {
     window.Helpers.destroy();
   }
 
-  const menuEl = document.querySelector('#layout-menu');
-  if (menuEl && (menuEl as any).menuInstance) {
-    (menuEl as any).menuInstance.destroy();
+  const menuEl = document.querySelector('#layout-menu') as MenuHost | null;
+  if (menuEl && menuEl.menuInstance) {
+    menuEl.menuInstance.destroy();
   }
 }

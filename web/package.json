@@ -13,16 +13,15 @@
         "bundle-budget": "node scripts/check-bundle-budget.mjs"
     },
     "dependencies": {
+        "@bufbuild/protobuf": "^2.11.0",
         "axios": "^1.20.0",
         "pinia": "^3.0.4",
-        "protobufjs": "^8.6.6",
         "vue": "^3.5.25",
         "vue-router": "^5.0.3",
         "vue3-toastify": "^0.2.8"
     },
     "devDependencies": {
         "@types/node": "^24.10.1",
-        "@typescript-eslint/eslint-plugin": "^8.46.1",
         "@typescript-eslint/parser": "^8.46.1",
         "@playwright/test": "^1.55.0",
         "@vitejs/plugin-vue": "^6.0.2",
@@ -32,7 +31,6 @@
         "eslint-import-resolver-node": "^0.3.9",
         "eslint-import-resolver-typescript": "^4.4.4",
         "eslint-plugin-import": "^2.32.0",
-        "eslint-plugin-vue": "^10.5.1",
         "jsdom": "^29.1.1",
         "purgecss": "^8.0.0",
         "ts-proto": "^2.11.5",
