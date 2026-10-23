@@ -1,23 +1,49 @@
 import { test, expect } from "@playwright/test";
-import { api, AuthRequest, AuthResponse, createTestInvitation, CreateInvitationRequest, InvitationResponse, E2E_TEST_PASSWORD } from "./helpers";
+import {
+  api,
+  AuthRequest,
+  AuthResponse,
+  createTestInvitation,
+  CreateInvitationRequest,
+  InvitationResponse,
+  E2E_USER_PASSWORD,
+  getE2EAdminToken,
+  StatusMessage,
+} from "./helpers";
 
+const AUTH_PATH = "/api/web/v1/users";
 const INVITE_PATH = "/api/web/v1/users/invitations";
 const REGISTER_PATH = "/api/web/v1/users/register";
 const LOGIN_PATH = "/api/web/v1/users/login";
 const REFRESH_PATH = "/api/web/v1/users/refresh";
 
 const TEST_EMAIL = `e2e-auth-${Date.now()}@test.local`;
-const TEST_PASSWORD = E2E_TEST_PASSWORD;
+const TEST_PASSWORD = E2E_USER_PASSWORD;
 const TEST_EMAIL2 = `e2e-auth2-${Date.now()}@test.local`;
 
 let bootstrapToken: string;
 let accessToken: string;
 let refreshToken: string;
+let registeredUserId = 0;
 
 test.describe("Auth flow", () => {
   test.beforeAll(async ({ request }) => {
     bootstrapToken = await createTestInvitation(request);
     expect(bootstrapToken).toBeTruthy();
+  });
+
+  // The registered account only exists for the assertions of this
+  // file, so it is removed again instead of piling up in the users
+  // table of the stack.
+  test.afterAll(async ({ request }) => {
+    if (!registeredUserId) return;
+    const resp = await api.delete<StatusMessage>(
+      request,
+      `${AUTH_PATH}/${registeredUserId}`,
+      StatusMessage,
+      { Authorization: `Bearer ${getE2EAdminToken()}` },
+    );
+    expect(resp.status, `delete user error: ${resp.error}`).toBe(200);
   });
 
   test("register with bootstrap invitation", async ({ request }) => {
@@ -34,6 +60,7 @@ test.describe("Auth flow", () => {
     expect(resp.data!.refreshToken).toBeTruthy();
     accessToken = resp.data!.token;
     refreshToken = resp.data!.refreshToken;
+    registeredUserId = resp.data!.id;
   });
 
   test("login with registered user", async ({ request }) => {

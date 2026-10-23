@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -255,9 +256,29 @@ func atomicRename(oldpath, newpath string) error {
 	}
 
 	dir := filepath.Dir(newpath)
-	if f, err := os.Open(dir); err == nil {
-		f.Sync()
-		f.Close()
+	f, err := os.Open(dir)
+	if err != nil {
+		slog.Default().Warn("could not open the chunk directory to flush it",
+			slog.String("dir", dir),
+			slog.String("err", err.Error()),
+		)
+		return nil
+	}
+	// The directory flush is a crash durability step. It cannot fail
+	// the rename: on Windows the sync of a directory handle is
+	// rejected by the OS, so returning the error would break every
+	// rename there.
+	if err := f.Sync(); err != nil {
+		slog.Default().Warn("could not flush the chunk directory",
+			slog.String("dir", dir),
+			slog.String("err", err.Error()),
+		)
+	}
+	if err := f.Close(); err != nil {
+		slog.Default().Warn("could not close the chunk directory handle",
+			slog.String("dir", dir),
+			slog.String("err", err.Error()),
+		)
 	}
 
 	return nil

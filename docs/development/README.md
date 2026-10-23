@@ -182,6 +182,38 @@ Three compose files live under `deployments/docker/`:
 | `compose.test.yml` | CI / integration / E2E tests (tmpfs, bootstrap-invitation one-shot). |
 | `compose.multi.yml` | Staging / load testing (three backends behind nginx + Prometheus). |
 
+### End-to-end tests (Playwright)
+
+The Playwright suite drives the running stack over HTTP and through the
+dashboard. It needs the test stack up, the browser installed and the
+dashboard built into the image (the compose file does that):
+
+```bash
+docker compose -f deployments/docker/compose.test.yml up --build --wait
+cd web && npm ci && npx playwright install chromium
+E2E_BASE_URL=http://127.0.0.1:8080 npx playwright test
+```
+
+`npx playwright test --project=api` runs only the API specs,
+`--project=ui` only the browser ones.
+
+The suite administers the stack with accounts of its own
+(`e2e-admin@test.local`, `e2e-user@test.local`) and removes what it
+creates, so a run leaves nothing behind and the next run starts from the
+same state. The open upload sessions it tracks are aborted by the setup
+of the next run, so an interrupted run does not exhaust the upload quota.
+
+When the host port 8080 is taken, move the backend out of the way and
+point the suite at it:
+
+```bash
+E2E_BACKEND_PORT=18081 docker compose -f deployments/docker/compose.test.yml up --build --wait
+E2E_BASE_URL=http://127.0.0.1:18081 npx playwright test
+```
+
+Tear the stack down with
+`docker compose -f deployments/docker/compose.test.yml down --volumes`.
+
 ### Auth round-trip smoke test
 
 `scripts/auth_smoke/` is a tiny Go program that exercises every

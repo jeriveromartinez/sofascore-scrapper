@@ -6,6 +6,16 @@
 #
 # Usage:
 #   docker compose -f deployments/docker/compose.test.yml up --build --abort-on-container-exit
+#
+# E2E_BACKEND_PORT overrides the host port of the backend, for a machine
+# where 8080 is already taken. The suite then has to be pointed at it
+# with E2E_BASE_URL.
+
+# The project name is pinned so that every invocation of this file
+# addresses the same containers, whatever directory the command runs
+# from. The suite pauses the redis container through compose, and that
+# only finds it when both commands agree on the project.
+name: e2e
 
 services:
   mariadb:
@@ -69,7 +79,7 @@ services:
       context: ../..
       dockerfile: deployments/docker/Dockerfile.e2e
     ports:
-      - "8080:8080"
+      - "${E2E_BACKEND_PORT:-8080}:8080"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -92,6 +102,12 @@ services:
       # fixed password the account would get a random one and the e2e suite
       # could not log in.
       DEFAULT_ADMIN_PASSWORD: E2eStackAdminPass1!
+      # The suite runs from the host, so every request of it arrives from
+      # the gateway of the docker network and the throttle of the auth
+      # endpoints counts all the runs of the suite as a single client.
+      # Trusting the proxy lets the suite send the address of the client
+      # it acts for, the way a deployment behind a reverse proxy does.
+      TRUSTED_PROXIES: "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16"
     tmpfs:
       - /tmp/apk_storage
       - /tmp/image_storage

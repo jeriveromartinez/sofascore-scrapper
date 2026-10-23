@@ -18,9 +18,6 @@ export default defineConfig({
       },
     },
   },
-  optimizeDeps: {
-    include: ["protobufjs/minimal"],
-  },
   build: {
     commonjsOptions: {
       include: [/node_modules/],

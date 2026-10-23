@@ -1,14 +1,39 @@
 import { test, expect } from "@playwright/test";
-import { api, getE2EAdminToken, UploadBeginRequest, UploadBeginResponse, UploadStatusResponse, UploadChunkResponse, StatusMessage, DeviceUrl } from "./helpers";
+import {
+  api,
+  getE2EAdminToken,
+  releaseOpenUpload,
+  trackOpenUpload,
+  UploadBeginRequest,
+  UploadBeginResponse,
+  UploadStatusResponse,
+  StatusMessage,
+  DeviceUrl,
+} from "./helpers";
 
 const UPLOADS_PATH = "/api/web/v1/apk/uploads";
 const APK_PATH = "/api/web/v1/apk";
 
 let accessToken: string;
 
+// The session of the running test. An open upload session counts against
+// the upload quota of its user for 24 hours, so it has to be released
+// even when the test fails before it reaches its abort step.
+let openUploadId: string | null = null;
+
 test.describe("Resumable APK upload", () => {
   test.beforeAll(() => {
     accessToken = getE2EAdminToken();
+  });
+
+  test.afterEach(async ({ request }) => {
+    if (!openUploadId) return;
+    const uploadId = openUploadId;
+    openUploadId = null;
+    await api.delete<StatusMessage>(request, `${UPLOADS_PATH}/${uploadId}`, StatusMessage, {
+      Authorization: `Bearer ${accessToken}`,
+    });
+    releaseOpenUpload(uploadId);
   });
 
   test("begin upload requires auth", async ({ request }) => {
@@ -52,6 +77,8 @@ test.describe("Resumable APK upload", () => {
     const uploadId = beginResp.data!.uploadId;
     expect(uploadId).toBeTruthy();
     expect(beginResp.data!.status).toBe("receiving");
+    openUploadId = uploadId;
+    trackOpenUpload(uploadId);
 
     // Step 2: Check status
     const statusResp = await api.get<UploadStatusResponse>(
@@ -81,6 +108,8 @@ test.describe("Resumable APK upload", () => {
       { Authorization: `Bearer ${accessToken}` },
     );
     expect(abortResp.status, `abort error: ${abortResp.error}`).toBe(200);
+    openUploadId = null;
+    releaseOpenUpload(uploadId);
   });
 
   test("non-existent upload returns 404", async ({ request }) => {

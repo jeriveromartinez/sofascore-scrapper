@@ -1,26 +1,25 @@
 import { test, expect } from "@playwright/test";
 import {
   api,
-  AuthRequest,
-  AuthResponse,
-  createTestInvitation,
   getE2EAdminToken,
+  getE2EState,
   E2E_ADMIN_EMAIL,
-  E2E_TEST_PASSWORD,
+  E2E_USER_EMAIL,
 } from "./helpers";
 import { SetUserRoleRequest, UserList } from "../src/proto/api";
 
-const AUTH_PATH = "/api/web/v1/users";
 const USERS_PATH = "/api/web/v1/users";
 const USER_INFO_KEY = "user_info";
 
-const TEST_EMAIL = `e2e-role-${Date.now()}@test.local`;
-const TEST_PASSWORD = E2E_TEST_PASSWORD;
+// The suite promotes a shared account instead of registering a new one
+// on every run, so the users table does not grow with the runs and the
+// registration flow is not throttled twice per run.
+const TEST_EMAIL = E2E_USER_EMAIL;
 
 async function injectAdminSession(page: import("@playwright/test").Page): Promise<void> {
   const token = getE2EAdminToken();
   const user = {
-    id: 0,
+    id: getE2EState().adminUserId,
     email: E2E_ADMIN_EMAIL,
     token,
     refreshToken: token,
@@ -33,23 +32,27 @@ async function injectAdminSession(page: import("@playwright/test").Page): Promis
   );
 }
 
+// The users table shows the accounts in pages of twenty, and the
+// accounts of the earlier runs of the suite are still in the database,
+// so the row of the test account is not always on the first page.
+async function gotoUserRow(page: import("@playwright/test").Page): Promise<void> {
+  const row = page.locator("table tbody tr", { hasText: TEST_EMAIL });
+  const next = page.locator('[data-test="pagination-next"]');
+  while ((await row.count()) === 0 && (await next.isEnabled())) {
+    await next.click();
+    await page.waitForLoadState("networkidle");
+  }
+}
+
 test.describe("Admin > User edit role", () => {
   let targetUserId = 0;
 
-  test.beforeAll(async ({ request }) => {
-    // Bootstrap a fresh "user"-role account via invitation +
-    // registration, the same flow that an operator would use to
-    // onboard a teammate.
-    const invitationToken = await createTestInvitation(request);
-    const reg = await api.post<AuthResponse, AuthRequest>(
-      request,
-      `${AUTH_PATH}/register`,
-      { email: TEST_EMAIL, password: TEST_PASSWORD, invitationToken },
-      AuthRequest,
-      AuthResponse,
-    );
-    expect(reg.status, `register error: ${reg.error}`).toBe(201);
-    targetUserId = reg.data!.id;
+  test.beforeAll(() => {
+    // The global setup creates the shared account and resets its role,
+    // so a run that failed while promoting it starts from a regular
+    // account again.
+    targetUserId = getE2EState().userId;
+    expect(targetUserId).toBeGreaterThan(0);
   });
 
   test.beforeEach(async ({ page }) => {
@@ -61,6 +64,7 @@ test.describe("Admin > User edit role", () => {
     await page.waitForLoadState("networkidle");
 
     // Find the row for our target user and click its Edit button.
+    await gotoUserRow(page);
     const row = page.locator("table tbody tr", { hasText: TEST_EMAIL });
     await expect(row).toHaveCount(1);
     await row.locator('button:has-text("Editar")').click();
@@ -79,6 +83,7 @@ test.describe("Admin > User edit role", () => {
     await page.goto("/#/users");
     await page.waitForLoadState("networkidle");
 
+    await gotoUserRow(page);
     const row = page.locator("table tbody tr", { hasText: TEST_EMAIL });
     await row.locator('button:has-text("Editar")').click();
 

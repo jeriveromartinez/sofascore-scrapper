@@ -23,15 +23,13 @@ const (
 	ttlUploadsCleanup = 10 * time.Minute
 )
 
-func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner *Runner, cleanupJob *apk.CleanupJob, redisClient *redis.Client, counter apk.DownloadCounter, wg *sync.WaitGroup, logger *slog.Logger) {
-	gormDB, ok := db.(*gorm.DB)
-	if !ok || gormDB == nil {
+func startStats(ctx context.Context, db *gorm.DB, aggRepo *reporting.AggregationRepository, runner *Runner, cleanupJob *apk.CleanupJob, redisClient *redis.Client, counter apk.DownloadCounter, wg *sync.WaitGroup, logger *slog.Logger) {
+	if db == nil {
 		logger.Warn("scheduler: no DB available for stats")
 		return
 	}
 
-	agg, ok := aggRepo.(*reporting.AggregationRepository)
-	if !ok || agg == nil {
+	if aggRepo == nil {
 		logger.Warn("scheduler: no aggregation repository available")
 	}
 
@@ -42,10 +40,10 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 	// robfig/cron.Stop blocks until the running job returns, and the
 	// previous context.Background() meant a job that happened to be
 	// in-flight could stall shutdown by its full lock TTL.
-	if agg != nil {
+	if aggRepo != nil {
 		_, err := c.AddFunc("1 0 * * *", func() {
 			runScheduledJob(ctx, runner, logger, "daily stats", lockStatsDaily, ttlStatsDaily, func(jobCtx context.Context) error {
-				return agg.GenerateDaily(jobCtx)
+				return aggRepo.GenerateDaily(jobCtx)
 			})
 		})
 		if err != nil {
@@ -54,7 +52,7 @@ func startStats(ctx context.Context, db interface{}, aggRepo interface{}, runner
 
 		_, err = c.AddFunc("10 0 1 * *", func() {
 			runScheduledJob(ctx, runner, logger, "monthly stats", lockStatsMonthly, ttlStatsMonthly, func(jobCtx context.Context) error {
-				return agg.GenerateMonthly(jobCtx)
+				return aggRepo.GenerateMonthly(jobCtx)
 			})
 		})
 		if err != nil {

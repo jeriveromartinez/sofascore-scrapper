@@ -51,8 +51,12 @@ func TestRepository_Create_DuplicateUniqueErrors(t *testing.T) {
 func TestRepository_ActiveLeagues(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewRepository(db)
-	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "PL", Enabled: true})
-	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "87", Name: "LL", Enabled: false})
+	if err := repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "PL", Enabled: true}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "87", Name: "LL", Enabled: false}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
 	leagues, err := repo.ActiveLeagues(context.Background())
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -66,7 +70,9 @@ func TestRepository_SoftDelete(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewRepository(db)
 	sl := &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "PL", Enabled: true}
-	repo.Create(context.Background(), sl)
+	if err := repo.Create(context.Background(), sl); err != nil {
+		t.Fatalf("create: %v", err)
+	}
 	if err := repo.SoftDelete(context.Background(), sl.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -82,9 +88,15 @@ func TestRepository_SoftDelete(t *testing.T) {
 func TestRepository_SearchLocalByName(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewRepository(db)
-	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "GB", Sport: "football", Enabled: true})
-	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "87", Name: "LaLiga", Country: "ES", Sport: "football", Enabled: true})
-	repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "54", Name: "Bundesliga", Country: "DE", Sport: "football", Enabled: true})
+	if err := repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "GB", Sport: "football", Enabled: true}); err != nil {
+		t.Fatalf("create Premier League: %v", err)
+	}
+	if err := repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "87", Name: "LaLiga", Country: "ES", Sport: "football", Enabled: true}); err != nil {
+		t.Fatalf("create LaLiga: %v", err)
+	}
+	if err := repo.Create(context.Background(), &ScraperLeague{Source: "fotmob", SourceLeagueId: "54", Name: "Bundesliga", Country: "DE", Sport: "football", Enabled: true}); err != nil {
+		t.Fatalf("create Bundesliga: %v", err)
+	}
 
 	// Empty query short-circuits.
 	if got, err := repo.SearchLocalByName(context.Background(), "   "); err != nil || got != nil {
@@ -303,9 +315,15 @@ func TestRepository_SearchLocalByName_IgnoresSoftDeleted(t *testing.T) {
 	repo := NewRepository(db)
 	live := &ScraperLeague{Source: "fotmob", SourceLeagueId: "47", Name: "Premier League", Country: "GB", Sport: "football", Enabled: true}
 	deleted := &ScraperLeague{Source: "fotmob", SourceLeagueId: "87", Name: "Premier League", Country: "ES", Sport: "football", Enabled: true}
-	repo.Create(context.Background(), live)
-	repo.Create(context.Background(), deleted)
-	repo.SoftDelete(context.Background(), deleted.ID)
+	if err := repo.Create(context.Background(), live); err != nil {
+		t.Fatalf("create live league: %v", err)
+	}
+	if err := repo.Create(context.Background(), deleted); err != nil {
+		t.Fatalf("create deleted league: %v", err)
+	}
+	if err := repo.SoftDelete(context.Background(), deleted.ID); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
 
 	got, _ := repo.SearchLocalByName(context.Background(), "Premier")
 	if len(got) != 1 || got[0].SourceLeagueId != "47" {

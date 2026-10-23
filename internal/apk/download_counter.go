@@ -182,10 +182,6 @@ func (c *downloadCounter) processPending(ctx context.Context, batchID, pendingKe
 	return nil
 }
 
-func (c *downloadCounter) reprocessBatch(ctx context.Context, batchID, pendingKey string) error {
-	return c.processPending(ctx, batchID, pendingKey)
-}
-
 func (c *downloadCounter) ReprocessOrphans(ctx context.Context) error {
 	if c.client == nil {
 		return nil
