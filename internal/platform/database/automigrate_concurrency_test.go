@@ -41,8 +41,18 @@ func TestIsConcurrentMigrationError(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "duplicate column name",
+			err:  errors.New("Error 1060 (42S21): Duplicate column name 'external_match_id'"),
+			want: true,
+		},
+		{
 			name: "sqlite duplicate index",
 			err:  errors.New("index idx_playback_logs_ended_at already exists"),
+			want: true,
+		},
+		{
+			name: "sqlite duplicate column",
+			err:  errors.New("duplicate column name: external_match_id"),
 			want: true,
 		},
 		{
