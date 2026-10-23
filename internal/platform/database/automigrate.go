@@ -71,12 +71,21 @@ var automigrateModels = []any{
 // AutoMigrate loop so legacy events rows get a non-empty
 // external_match_id before the unique index is created. See that
 // helper's docstring for the rationale.
+//
+// Every step tolerates another backend migrating the same database at
+// the same time: the deployment runs one backend per instance and
+// they all boot against the same MariaDB. See
+// automigrate_concurrency.go for the details.
 func AutoMigrateAll(db *gorm.DB) error {
-	if err := PreMigrateLegacyEvents(db); err != nil {
+	if err := retryOnConcurrentMigration(func() error {
+		return PreMigrateLegacyEvents(db)
+	}); err != nil {
 		return fmt.Errorf("pre-migrate legacy events: %w", err)
 	}
 	for i, model := range automigrateModels {
-		if err := db.AutoMigrate(model); err != nil {
+		if err := retryOnConcurrentMigration(func() error {
+			return db.AutoMigrate(model)
+		}); err != nil {
 			return fmt.Errorf("automigrate %s (index %d): %w",
 				reflect.TypeOf(model).Elem().Name(), i, err)
 		}
@@ -86,14 +95,18 @@ func AutoMigrateAll(db *gorm.DB) error {
 	// covering source_league_id alone, and AutoMigrate never replaces
 	// an index that exists. The migration swaps it for the composite
 	// one, so it has to run after the table exists.
-	if err := catalog.MigrateSourceLeagueIndex(db); err != nil {
+	if err := retryOnConcurrentMigration(func() error {
+		return catalog.MigrateSourceLeagueIndex(db)
+	}); err != nil {
 		return fmt.Errorf("migrate catalog source league index: %w", err)
 	}
 	// The FotMob id shift left the tournaments table with a duplicate
 	// row per league the pre-shift code path had written. The repair
 	// needs the tournaments, events, device assignment and global
 	// config tables, so it runs after the AutoMigrate loop.
-	if err := MigrateFotMobTournamentDuplicates(db); err != nil {
+	if err := retryOnConcurrentMigration(func() error {
+		return MigrateFotMobTournamentDuplicates(db)
+	}); err != nil {
 		return fmt.Errorf("migrate fotmob tournament duplicates: %w", err)
 	}
 	return nil
