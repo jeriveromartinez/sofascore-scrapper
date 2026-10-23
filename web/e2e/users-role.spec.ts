@@ -33,6 +33,18 @@ async function injectAdminSession(page: import("@playwright/test").Page): Promis
   );
 }
 
+// The users table shows the accounts in pages of twenty, and the
+// accounts of the earlier runs of the suite are still in the database,
+// so the row of the test account is not always on the first page.
+async function gotoUserRow(page: import("@playwright/test").Page): Promise<void> {
+  const row = page.locator("table tbody tr", { hasText: TEST_EMAIL });
+  const next = page.locator('[data-test="pagination-next"]');
+  while ((await row.count()) === 0 && (await next.isEnabled())) {
+    await next.click();
+    await page.waitForLoadState("networkidle");
+  }
+}
+
 test.describe("Admin > User edit role", () => {
   let targetUserId = 0;
 
@@ -61,6 +73,7 @@ test.describe("Admin > User edit role", () => {
     await page.waitForLoadState("networkidle");
 
     // Find the row for our target user and click its Edit button.
+    await gotoUserRow(page);
     const row = page.locator("table tbody tr", { hasText: TEST_EMAIL });
     await expect(row).toHaveCount(1);
     await row.locator('button:has-text("Editar")').click();
@@ -79,6 +92,7 @@ test.describe("Admin > User edit role", () => {
     await page.goto("/#/users");
     await page.waitForLoadState("networkidle");
 
+    await gotoUserRow(page);
     const row = page.locator("table tbody tr", { hasText: TEST_EMAIL });
     await row.locator('button:has-text("Editar")').click();
 

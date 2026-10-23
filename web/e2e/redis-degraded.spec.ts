@@ -1,12 +1,17 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { api, getE2EAdminToken, CreateInvitationRequest, InvitationResponse, UploadBeginRequest, UploadBeginResponse } from "./helpers";
+import { api, getE2EAdminToken, CreateInvitationRequest, InvitationResponse, UploadBeginRequest, UploadBeginResponse, StatusMessage } from "./helpers";
 
 const INVITE_PATH = "/api/web/v1/users/invitations";
 const UPLOADS_PATH = "/api/web/v1/apk/uploads";
 
 let accessToken: string;
+
+// The session of the running test. An open upload session counts against
+// the upload quota of its user for 24 hours, so it has to be released
+// even when the test fails before it reaches its abort step.
+let openUploadId: string | null = null;
 
 // Resolved from this file's location so the suite does not depend on the
 // directory the test runner was started from.
@@ -37,9 +42,32 @@ async function unpauseRedis(): Promise<void> {
   await new Promise((r) => setTimeout(r, 1000));
 }
 
+// The backend keeps the open upload sessions of a user and refuses to
+// open more than a couple of them at a time, so a session the suite
+// starts has to be released again.
+async function abortUpload(request: import("@playwright/test").APIRequestContext, uploadId: string): Promise<void> {
+  const resp = await api.delete<StatusMessage>(
+    request,
+    `${UPLOADS_PATH}/${uploadId}`,
+    StatusMessage,
+    { Authorization: `Bearer ${accessToken}` },
+  );
+  expect(resp.status, `abort error: ${resp.error}`).toBe(200);
+  openUploadId = null;
+}
+
 test.describe("Redis degradation", () => {
   test.beforeAll(() => {
     accessToken = getE2EAdminToken();
+  });
+
+  test.afterEach(async ({ request }) => {
+    if (!openUploadId) return;
+    const uploadId = openUploadId;
+    openUploadId = null;
+    await api.delete<StatusMessage>(request, `${UPLOADS_PATH}/${uploadId}`, StatusMessage, {
+      Authorization: `Bearer ${accessToken}`,
+    });
   });
 
   test("with Redis healthy: invitation creation works", async ({ request }) => {
@@ -64,6 +92,8 @@ test.describe("Redis degradation", () => {
       { Authorization: `Bearer ${accessToken}` },
     );
     expect(resp.status, `upload error: ${resp.error}`).toBe(201);
+    openUploadId = resp.data!.uploadId;
+    await abortUpload(request, resp.data!.uploadId);
   });
 
   test("with Redis paused: invitation creation returns 503 (admin routes fail-closed)", async ({ request }) => {
@@ -122,5 +152,7 @@ test.describe("Redis degradation", () => {
       { Authorization: `Bearer ${accessToken}` },
     );
     expect(resp.status).toBe(201);
+    openUploadId = resp.data!.uploadId;
+    await abortUpload(request, resp.data!.uploadId);
   });
 });
