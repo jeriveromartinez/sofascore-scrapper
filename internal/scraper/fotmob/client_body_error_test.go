@@ -28,8 +28,8 @@ func TestClient_DayMatches_BodyReadErrorPropagated(t *testing.T) {
 		defer conn.Close()
 		// Announce more bytes than are sent, then hang up: the
 		// client sees a truncated body.
-		buf.WriteString("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 512\r\n\r\n")
-		buf.WriteString(`{"leagues":[]}`)
+		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 512\r\n\r\n")
+		_, _ = buf.WriteString(`{"leagues":[]}`)
 		buf.Flush()
 	}))
 	defer server.Close()

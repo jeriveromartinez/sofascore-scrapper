@@ -19,7 +19,9 @@ func newTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	db.AutoMigrate(&ScraperLeague{})
+	if err := db.AutoMigrate(&ScraperLeague{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
 	repo := NewRepository(db)
 	svc := NewService(repo, nil)
 	h := NewHandler(svc)

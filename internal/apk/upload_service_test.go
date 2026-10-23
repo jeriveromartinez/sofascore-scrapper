@@ -149,13 +149,13 @@ func serveTestRedis(listener net.Listener, session string) {
 				}
 				switch strings.ToLower(command[0]) {
 				case "hello":
-					io.WriteString(conn, "-ERR unknown command 'hello'\r\n")
+					_, _ = io.WriteString(conn, "-ERR unknown command 'hello'\r\n")
 				case "client":
-					io.WriteString(conn, "+OK\r\n")
+					_, _ = io.WriteString(conn, "+OK\r\n")
 				case "get":
 					fmt.Fprintf(conn, "$%d\r\n%s\r\n", len(session), session)
 				default:
-					io.WriteString(conn, "-ERR unsupported test command\r\n")
+					_, _ = io.WriteString(conn, "-ERR unsupported test command\r\n")
 				}
 			}
 		}()

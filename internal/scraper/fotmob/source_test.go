@@ -129,7 +129,7 @@ func TestSource_SearchLeagues_FiltersLeagueSuggestions(t *testing.T) {
 		if got := r.URL.Query().Get("term"); got != "premier" {
 			t.Errorf("query term: want premier, got %q", got)
 		}
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"suggestions": [
 				{"type":"league","id":47,"name":"Premier League","country":"England","sport":"football"},
 				{"type":"team","id":9825,"name":"Chelsea"},

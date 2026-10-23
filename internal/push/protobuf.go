@@ -169,10 +169,3 @@ func formatDateTime(t time.Time) string {
 	}
 	return t.Format(time.RFC3339)
 }
-
-func formatDateTimePtr(t *time.Time) string {
-	if t == nil {
-		return ""
-	}
-	return t.Format(time.RFC3339)
-}

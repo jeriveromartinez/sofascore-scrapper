@@ -47,7 +47,12 @@ func (cj *CleanupJob) Run(ctx context.Context, client *goredis.Client) error {
 	for _, id := range expired {
 		session, err := cj.store.Get(ctx, id)
 		if err != nil {
-			cj.chunkStore.RemoveChunks(id.String())
+			if err := cj.chunkStore.RemoveChunks(id.String()); err != nil {
+				slog.Default().Warn("cleanup: remove the chunks of an unreadable upload session",
+					slog.String("upload_id", id.String()),
+					slog.String("err", err.Error()),
+				)
+			}
 			continue
 		}
 
@@ -55,7 +60,12 @@ func (cj *CleanupJob) Run(ctx context.Context, client *goredis.Client) error {
 			continue
 		}
 
-		cj.chunkStore.RemoveChunks(id.String())
+		if err := cj.chunkStore.RemoveChunks(id.String()); err != nil {
+			slog.Default().Warn("cleanup: remove the chunks of an expired upload session",
+				slog.String("upload_id", id.String()),
+				slog.String("err", err.Error()),
+			)
+		}
 
 		if session.UserID > 0 {
 			_ = cj.store.Abort(ctx, id)

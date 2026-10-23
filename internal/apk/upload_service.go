@@ -314,7 +314,12 @@ func (s *UploadService) Complete(ctx context.Context, uploadID uuid.UUID, userID
 		return nil, err
 	}
 
-	s.chunkStore.RemoveChunks(session.ID)
+	if err := s.chunkStore.RemoveChunks(session.ID); err != nil {
+		slog.Default().Warn("complete: remove the upload chunks",
+			slog.String("upload_id", session.ID),
+			slog.String("err", err.Error()),
+		)
+	}
 
 	return &pb.UploadCompleteResponse{
 		Id:               uint32(apkV.ID),
@@ -342,7 +347,12 @@ func (s *UploadService) Abort(ctx context.Context, uploadID uuid.UUID, userID ui
 		return validationErrorf("owner mismatch")
 	}
 
-	s.chunkStore.RemoveChunks(session.ID)
+	if err := s.chunkStore.RemoveChunks(session.ID); err != nil {
+		slog.Default().Warn("abort: remove the upload chunks",
+			slog.String("upload_id", session.ID),
+			slog.String("err", err.Error()),
+		)
+	}
 
 	var pub UploadPublication
 	err = s.db.WithContext(ctx).Where("upload_id = ?", uploadID.String()).First(&pub).Error
@@ -486,7 +496,12 @@ func (s *UploadService) reconcilePublicationBatch(ctx context.Context, pubs []Up
 			)
 		}
 		finCancel()
-		s.chunkStore.RemoveChunks(stale.id.String())
+		if err := s.chunkStore.RemoveChunks(stale.id.String()); err != nil {
+			slog.Default().Warn("reconcile: remove the upload chunks",
+				slog.String("upload_id", stale.id.String()),
+				slog.String("err", err.Error()),
+			)
+		}
 	}
 	return nil
 }

@@ -86,7 +86,9 @@ func TestRepository_Migration_ReplacesLegacyIndex(t *testing.T) {
 		t.Fatalf("legacy index columns = %v, want a single column", cols)
 	}
 
-	MigrateSourceLeagueIndex(db)
+	if err := MigrateSourceLeagueIndex(db); err != nil {
+		t.Fatalf("migrate source league index: %v", err)
+	}
 
 	cols, ok = indexColumns(t, db, sourceLeagueIndexName)
 	if !ok {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -55,6 +56,14 @@ func classifyBodyLimit(method, path string) (int64, time.Duration) {
 func setReadDeadline(c *gin.Context, dur time.Duration) {
 	rc := http.NewResponseController(c.Writer)
 	if rc != nil {
-		rc.SetReadDeadline(time.Now().Add(dur))
+		// The deadline is a best effort guard: the request still
+		// succeeds when it cannot be armed, but the failure has to
+		// stay visible.
+		if err := rc.SetReadDeadline(time.Now().Add(dur)); err != nil {
+			slog.Default().Warn("could not set the request read deadline",
+				slog.String("path", c.Request.URL.Path),
+				slog.String("err", err.Error()),
+			)
+		}
 	}
 }
