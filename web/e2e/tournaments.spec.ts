@@ -5,9 +5,25 @@ const TOURNAMENTS_PATH = "/api/web/v1/tournaments";
 
 let accessToken: string;
 
+// The tournaments this file creates are removed again, so a run does
+// not leave rows behind that the next run has to page around.
+const createdIds: number[] = [];
+
 test.describe("Tournament CRUD", () => {
   test.beforeAll(() => {
     accessToken = getE2EAdminToken();
+  });
+
+  test.afterAll(async ({ request }) => {
+    for (const id of createdIds) {
+      const resp = await api.delete<StatusMessage>(
+        request,
+        `${TOURNAMENTS_PATH}/${id}`,
+        StatusMessage,
+        { Authorization: `Bearer ${accessToken}` },
+      );
+      expect(resp.status, `delete tournament error: ${resp.error}`).toBe(200);
+    }
   });
 
   test("list tournaments returns the created tournament", async ({ request }) => {
@@ -23,6 +39,7 @@ test.describe("Tournament CRUD", () => {
       { Authorization: `Bearer ${accessToken}` },
     );
     expect(created.status, `create error: ${created.error}`).toBe(201);
+    createdIds.push(created.data!.id);
 
     const resp = await api.get<TournamentList>(
       request,
@@ -46,6 +63,7 @@ test.describe("Tournament CRUD", () => {
       { Authorization: `Bearer ${accessToken}` },
     );
     expect(resp.status, `create error: ${resp.error}`).toBe(201);
+    createdIds.push(resp.data!.id);
     expect(resp.data!.name).toBe("Premier League");
     expect(resp.data!.slug).toBe("premier-league");
     expect(resp.data!.id).toBeGreaterThan(0);
@@ -74,6 +92,7 @@ test.describe("Tournament CRUD", () => {
     );
     expect(createResp.status).toBe(201);
     const id = createResp.data!.id;
+    createdIds.push(id);
 
     const getResp = await api.get<Tournament>(
       request,
@@ -107,6 +126,7 @@ test.describe("Tournament CRUD", () => {
     );
     expect(createResp.status).toBe(201);
     const id = createResp.data!.id;
+    createdIds.push(id);
 
     const updateResp = await api.put<Tournament, TournamentRequest>(
       request,
