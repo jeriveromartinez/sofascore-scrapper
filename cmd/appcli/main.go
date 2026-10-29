@@ -37,6 +37,10 @@ const (
 	DefaultPlatform = "android"
 	// DefaultDeviceName is the name the simulator registers with.
 	DefaultDeviceName = "appcli-sim"
+	// DefaultTimezone is the IANA timezone the simulated device reports.
+	// The real app sends the timezone of the device it runs on, and the
+	// scheduler needs it to fire the pushes at the device-local hour.
+	DefaultTimezone = "America/Mexico_City"
 )
 
 func main() {
@@ -68,6 +72,7 @@ type options struct {
 	context    string
 	fatal      bool
 	out        string
+	domainID   uint
 	positional string
 }
 
@@ -135,7 +140,7 @@ func parseOptions(command string, args []string, stderr io.Writer) (*options, er
 	fs.StringVar(&opts.platform, "platform", DefaultPlatform, "device platform")
 	fs.StringVar(&opts.version, "version", DefaultAppVersion, "app version")
 	fs.StringVar(&opts.name, "name", DefaultDeviceName, "device name")
-	fs.StringVar(&opts.timezone, "timezone", os.Getenv("TZ"), "IANA timezone of the device")
+	fs.StringVar(&opts.timezone, "timezone", envOr("TZ", DefaultTimezone), "IANA timezone of the device")
 	fs.IntVar(&opts.limit, "limit", 6, "number of events to request (1-6)")
 	fs.BoolVar(&opts.jsonOut, "json", false, "print the raw decoded payload as JSON")
 	fs.DurationVar(&opts.duration, "duration", 0, "stop listening after this duration (0 = until interrupted)")
@@ -150,6 +155,7 @@ func parseOptions(command string, args []string, stderr io.Writer) (*options, er
 	fs.StringVar(&opts.context, "context", "channel player", "context of the crash report")
 	fs.BoolVar(&opts.fatal, "fatal", false, "mark the crash report as fatal")
 	fs.StringVar(&opts.out, "out", "", "path where the downloaded file is written")
+	fs.UintVar(&opts.domainID, "domain-id", 0, "domain the device is assigned to (0 = the one the server resolves)")
 
 	positional, rest := splitPositional(fs, args)
 	opts.positional = positional
@@ -159,9 +165,6 @@ func parseOptions(command string, args []string, stderr io.Writer) (*options, er
 	}
 	if len(fs.Args()) > 0 {
 		return nil, fmt.Errorf("unexpected argument %q", fs.Args()[0])
-	}
-	if opts.timezone == "" {
-		opts.timezone = time.Now().Location().String()
 	}
 	return opts, nil
 }
@@ -232,14 +235,22 @@ Comandos:
   logo       descarga el logo de un equipo (GET /teams/logo/:teamId)
   help       muestra esta ayuda
 
-Flags:
-  --token    token del device, enviado en la cabecera APP-XIPTV
-  --package  package de la app (mx.qchotv.tvapp)
-  --out      ruta donde se guarda el archivo descargado
-  --json     imprime la respuesta cruda en JSON
+Flags del device (todos con valor fijo, editables):
+  --token      token del device, enviado en la cabecera APP-XIPTV
+  --platform   plataforma del device (android)
+  --name       nombre del device (appcli-sim)
+  --version    version de la app (1.0.22)
+  --package    package de la app (mx.qchotv.tvapp)
+  --timezone   zona IANA del device (America/Mexico_City)
+  --domain-id  dominio al que se asigna el device (0 = el que resuelve el servidor)
+
+Otros flags:
+  --out        ruta donde se guarda el archivo descargado
+  --json       imprime la respuesta cruda en JSON
 
 Ejemplo:
   appcli session --base-url http://localhost:8080 --duration 60s
+  appcli register --base-url http://localhost:8080 --token dev-sim-001 --domain-id 3
   appcli url --package mx.qchotv.tvapp
   appcli download <download-token> --out app.apk
 `)
@@ -272,6 +283,7 @@ func (o *options) cmdRegister(ctx context.Context, stdout, stderr io.Writer) int
 		Version:   o.version,
 		PackageId: o.pkg,
 		Timezone:  o.timezone,
+		DomainId:  uint32(o.domainID),
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
@@ -282,15 +294,24 @@ func (o *options) cmdRegister(ctx context.Context, stdout, stderr io.Writer) int
 		return printJSON(stdout, stderr, dev)
 	}
 
-	fmt.Fprintf(stdout, "device #%d registrado\n", dev.Id)
-	fmt.Fprintf(stdout, "  token:       %s\n", deviceToken(dev, token))
-	fmt.Fprintf(stdout, "  platform:    %s\n", dev.Platform)
-	fmt.Fprintf(stdout, "  name:        %s\n", dev.Name)
-	fmt.Fprintf(stdout, "  version:     %s\n", dev.Version)
-	fmt.Fprintf(stdout, "  package:     %s\n", dev.PackageId)
-	fmt.Fprintf(stdout, "  domain:      %d\n", dev.DomainId)
-	fmt.Fprintf(stdout, "  iptv url:    %s\n", dev.IptvUrl)
+	renderDevice(stdout, dev, token)
 	return 0
+}
+
+// renderDevice prints every field the server returned for the device.
+func renderDevice(w io.Writer, dev *pb.Device, token string) {
+	fmt.Fprintf(w, "device #%d registrado\n", dev.Id)
+	fmt.Fprintf(w, "  token:       %s\n", deviceToken(dev, token))
+	fmt.Fprintf(w, "  platform:    %s\n", dev.Platform)
+	fmt.Fprintf(w, "  name:        %s\n", dev.Name)
+	fmt.Fprintf(w, "  version:     %s\n", dev.Version)
+	fmt.Fprintf(w, "  package:     %s\n", dev.PackageId)
+	fmt.Fprintf(w, "  timezone:    %s\n", dev.Timezone)
+	fmt.Fprintf(w, "  domain:      %d\n", dev.DomainId)
+	fmt.Fprintf(w, "  iptv url:    %s\n", dev.IptvUrl)
+	fmt.Fprintf(w, "  last seen:   %d\n", dev.LastSeen)
+	fmt.Fprintf(w, "  created:     %s\n", dev.CreatedAt)
+	fmt.Fprintf(w, "  updated:     %s\n", dev.UpdatedAt)
 }
 
 func (o *options) cmdUpdate(ctx context.Context, stdout, stderr io.Writer) int {
@@ -432,6 +453,7 @@ func (o *options) cmdSession(ctx context.Context, stdout, stderr io.Writer) int 
 		Version:   o.version,
 		PackageId: o.pkg,
 		Timezone:  o.timezone,
+		DomainId:  uint32(o.domainID),
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
@@ -442,10 +464,7 @@ func (o *options) cmdSession(ctx context.Context, stdout, stderr io.Writer) int 
 			return code
 		}
 	} else {
-		fmt.Fprintf(stdout, "device #%d (token %s) domain %d\n", dev.Id, deviceToken(dev, token), dev.DomainId)
-		if dev.IptvUrl != "" {
-			fmt.Fprintf(stdout, "iptv url: %s\n", dev.IptvUrl)
-		}
+		renderDevice(stdout, dev, token)
 	}
 
 	fmt.Fprintln(stdout, "\n== panel ==")
