@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -64,6 +67,8 @@ type options struct {
 	stack      string
 	context    string
 	fatal      bool
+	out        string
+	positional string
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -77,7 +82,9 @@ func runWithContext(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 
 	command := args[0]
-	opts, err := parseOptions(command, args[1:], stderr)
+	rest := args[1:]
+
+	opts, err := parseOptions(command, rest, stderr)
 	if err != nil {
 		return 2
 	}
@@ -97,6 +104,12 @@ func runWithContext(ctx context.Context, args []string, stdout, stderr io.Writer
 		return opts.cmdWS(ctx, stdout, stderr)
 	case "session":
 		return opts.cmdSession(ctx, stdout, stderr)
+	case "url":
+		return opts.cmdURL(ctx, stdout, stderr)
+	case "download":
+		return opts.cmdDownload(ctx, stdout, stderr)
+	case "logo":
+		return opts.cmdLogo(ctx, stdout, stderr)
 	case "help":
 		printUsage(stdout)
 		return 0
@@ -136,14 +149,61 @@ func parseOptions(command string, args []string, stderr io.Writer) (*options, er
 	fs.StringVar(&opts.stack, "stack", "#0 appcli (simulated crash)", "stack trace of the crash report")
 	fs.StringVar(&opts.context, "context", "channel player", "context of the crash report")
 	fs.BoolVar(&opts.fatal, "fatal", false, "mark the crash report as fatal")
+	fs.StringVar(&opts.out, "out", "", "path where the downloaded file is written")
 
-	if err := fs.Parse(args); err != nil {
+	positional, rest := splitPositional(fs, args)
+	opts.positional = positional
+
+	if err := fs.Parse(rest); err != nil {
 		return nil, err
+	}
+	if len(fs.Args()) > 0 {
+		return nil, fmt.Errorf("unexpected argument %q", fs.Args()[0])
 	}
 	if opts.timezone == "" {
 		opts.timezone = time.Now().Location().String()
 	}
 	return opts, nil
+}
+
+// splitPositional returns the first argument that is neither a flag
+// nor the value of a flag, plus the remaining arguments. It lets a
+// command take a positional argument ("appcli download <token>
+// --base-url ...") without forcing the flags to come last.
+func splitPositional(fs *flag.FlagSet, args []string) (string, []string) {
+	rest := make([]string, 0, len(args))
+	positional := ""
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if positional == "" && !strings.HasPrefix(arg, "-") {
+			positional = arg
+			continue
+		}
+		rest = append(rest, arg)
+		if strings.HasPrefix(arg, "-") && flagTakesValue(fs, arg) && i+1 < len(args) {
+			i++
+			rest = append(rest, args[i])
+		}
+	}
+	return positional, rest
+}
+
+// flagTakesValue reports whether the flag consumes the argument that
+// follows it.
+func flagTakesValue(fs *flag.FlagSet, arg string) bool {
+	name := strings.TrimLeft(arg, "-")
+	if idx := strings.Index(name, "="); idx >= 0 {
+		name = name[:idx]
+	}
+	f := fs.Lookup(name)
+	if f == nil {
+		return true
+	}
+	if boolFlag, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && boolFlag.IsBoolFlag() {
+		return false
+	}
+	return true
 }
 
 func envOr(name, fallback string) string {
@@ -161,16 +221,27 @@ Uso:
 
 Comandos:
   register   registra el device (POST /devices) e imprime su token
+  url        muestra la URL de panel del package (GET /devices/url/:package)
   update     consulta si hay una version nueva de la app (GET /update)
   events     lista los eventos actuales del device (GET /current-events)
   viewing    reporta que el device empezo a reproducir (POST /devices/viewing)
   crash      envia un crash report (POST /crash-report)
   ws         escucha el WebSocket e imprime cada notificacion recibida
-  session    ejecuta el flujo completo: register, update, events y ws
+  session    ejecuta el flujo completo: register, url, update, events y ws
+  download   descarga el APK de un token (GET /apk/download/:token)
+  logo       descarga el logo de un equipo (GET /teams/logo/:teamId)
   help       muestra esta ayuda
+
+Flags:
+  --token    token del device, enviado en la cabecera APP-XIPTV
+  --package  package de la app (mx.qchotv.tvapp)
+  --out      ruta donde se guarda el archivo descargado
+  --json     imprime la respuesta cruda en JSON
 
 Ejemplo:
   appcli session --base-url http://localhost:8080 --duration 60s
+  appcli url --package mx.qchotv.tvapp
+  appcli download <download-token> --out app.apk
 `)
 }
 
@@ -377,12 +448,16 @@ func (o *options) cmdSession(ctx context.Context, stdout, stderr io.Writer) int 
 		}
 	}
 
-	fmt.Fprintln(stdout, "\n== actualizacion ==")
+	fmt.Fprintln(stdout, "\n== panel ==")
 	o.token = token
-	if code := o.cmdUpdate(ctx, stdout, stderr); code != 0 {
+	if code := o.cmdURL(ctx, stdout, stderr); code != 0 {
 		return code
 	}
 
+	fmt.Fprintln(stdout, "\n== actualizacion ==")
+	if code := o.cmdUpdate(ctx, stdout, stderr); code != 0 {
+		return code
+	}
 	fmt.Fprintln(stdout, "\n== eventos ==")
 	if code := o.cmdEvents(ctx, stdout, stderr); code != 0 {
 		return code
@@ -424,4 +499,121 @@ func printJSON(w io.Writer, stderr io.Writer, msg proto.Message) int {
 	}
 	fmt.Fprintln(w, strings.TrimRight(string(raw), "\n"))
 	return 0
+}
+
+// cmdURL prints the panel URL the server publishes for the package.
+func (o *options) cmdURL(ctx context.Context, stdout, stderr io.Writer) int {
+	panelURL, err := o.client(o.token).DeviceURL(ctx, o.pkg)
+	if err != nil {
+		fmt.Fprintln(stderr, "appcli:", err)
+		return 1
+	}
+
+	if o.jsonOut {
+		return printJSON(stdout, stderr, &pb.DeviceUrl{Url: panelURL})
+	}
+	fmt.Fprintln(stdout, panelURL)
+	return 0
+}
+
+// cmdDownload downloads the APK of a download token.
+func (o *options) cmdDownload(ctx context.Context, stdout, stderr io.Writer) int {
+	if o.positional == "" {
+		fmt.Fprintln(stderr, "appcli: falta el token de descarga (appcli download <token>)")
+		return 2
+	}
+
+	file, err := o.client(o.token).GetFile(ctx, "/apk/download/"+url.PathEscape(o.positional))
+	if err != nil {
+		fmt.Fprintln(stderr, "appcli:", err)
+		return 1
+	}
+
+	name := o.out
+	if name == "" {
+		name = filepath.Base(file.Filename)
+		if name == "" {
+			name = "app.apk"
+		}
+	}
+	if err := o.writeFile(name, file); err != nil {
+		fmt.Fprintln(stderr, "appcli:", err)
+		return 1
+	}
+	return o.reportFile(stdout, stderr, "apk", name, file)
+}
+
+// cmdLogo downloads the logo of a team.
+func (o *options) cmdLogo(ctx context.Context, stdout, stderr io.Writer) int {
+	if o.positional == "" {
+		fmt.Fprintln(stderr, "appcli: falta el id del equipo (appcli logo <teamId>)")
+		return 2
+	}
+
+	file, err := o.client(o.token).GetFile(ctx, "/teams/logo/"+url.PathEscape(o.positional))
+	if err != nil {
+		fmt.Fprintln(stderr, "appcli:", err)
+		return 1
+	}
+
+	name := o.out
+	if name == "" {
+		name = "team-" + o.positional + extensionForContentType(file.ContentType)
+	}
+	if err := o.writeFile(name, file); err != nil {
+		fmt.Fprintln(stderr, "appcli:", err)
+		return 1
+	}
+	return o.reportFile(stdout, stderr, "logo", name, file)
+}
+
+// writeFile saves a downloaded file under the given path.
+func (o *options) writeFile(name string, file *FileResponse) error {
+	if err := os.WriteFile(name, file.Body, 0o644); err != nil {
+		return fmt.Errorf("escribir %s: %w", name, err)
+	}
+	return nil
+}
+
+// reportFile prints what was written, as text or as JSON.
+func (o *options) reportFile(stdout, stderr io.Writer, label, name string, file *FileResponse) int {
+	if o.jsonOut {
+		raw, err := json.Marshal(downloadResult{
+			Path:        name,
+			Bytes:       len(file.Body),
+			ContentType: file.ContentType,
+		})
+		if err != nil {
+			fmt.Fprintln(stderr, "appcli:", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(raw))
+		return 0
+	}
+	fmt.Fprintf(stdout, "%s descargado: %s (%d bytes)\n", label, name, len(file.Body))
+	return 0
+}
+
+// downloadResult summarizes what a file command wrote.
+type downloadResult struct {
+	Path        string `json:"path"`
+	Bytes       int    `json:"bytes"`
+	ContentType string `json:"content_type"`
+}
+
+// extensionForContentType returns the file extension that matches the
+// content type the server sent.
+func extensionForContentType(contentType string) string {
+	switch strings.TrimSpace(strings.Split(contentType, ";")[0]) {
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	case "image/webp":
+		return ".webp"
+	case "application/vnd.android.package-archive":
+		return ".apk"
+	default:
+		return ""
+	}
 }

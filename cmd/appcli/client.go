@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -146,6 +147,19 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 }
 
 func (c *Client) doRaw(ctx context.Context, method, path string, query url.Values, body []byte, contentType string) ([]byte, error) {
+	resp, raw, err := c.request(ctx, method, path, query, body, contentType)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, &APIError{Status: resp.StatusCode, Message: errorMessage(raw)}
+	}
+	return raw, nil
+}
+
+// request builds and performs the call, returning the response and
+// its body already read.
+func (c *Client) request(ctx context.Context, method, path string, query url.Values, body []byte, contentType string) (*http.Response, []byte, error) {
 	endpoint := c.baseURL + appPathPrefix + path
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()
@@ -157,10 +171,12 @@ func (c *Client) doRaw(ctx context.Context, method, path string, query url.Value
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, reader)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, nil, fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Accept", contentType)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("Accept", contentType)
+	}
 	req.Header.Set("User-Agent", AppUserAgent)
 	if c.token != "" {
 		req.Header.Set("APP-XIPTV", c.token)
@@ -168,18 +184,52 @@ func (c *Client) doRaw(ctx context.Context, method, path string, query url.Value
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s %s: %w", method, endpoint, err)
+		return nil, nil, fmt.Errorf("%s %s: %w", method, endpoint, err)
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, nil, fmt.Errorf("read response: %w", err)
+	}
+	return resp, raw, nil
+}
+
+// FileResponse is a binary answer: the bytes the server sent plus the
+// metadata that describes them.
+type FileResponse struct {
+	ContentType string
+	Filename    string
+	Body        []byte
+}
+
+// GetFile fetches a binary resource: the APK of a package or the logo
+// of a team.
+func (c *Client) GetFile(ctx context.Context, path string) (*FileResponse, error) {
+	resp, raw, err := c.request(ctx, http.MethodGet, path, nil, nil, "")
+	if err != nil {
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, &APIError{Status: resp.StatusCode, Message: errorMessage(raw)}
 	}
-	return raw, nil
+	return &FileResponse{
+		ContentType: resp.Header.Get("Content-Type"),
+		Filename:    filenameFromDisposition(resp.Header.Get("Content-Disposition")),
+		Body:        raw,
+	}, nil
+}
+
+// filenameFromDisposition extracts the file name the server suggests.
+func filenameFromDisposition(header string) string {
+	if header == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(header)
+	if err != nil {
+		return ""
+	}
+	return params["filename"]
 }
 
 // errorMessage extracts the message the API puts in its JSON error

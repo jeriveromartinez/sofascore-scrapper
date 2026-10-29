@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -188,6 +189,11 @@ func TestRunSessionRunsTheWholeAppFlow(t *testing.T) {
 			require.NoError(t, err)
 			w.Header().Set("Content-Type", "application/x-protobuf")
 			_, _ = w.Write(out)
+		case "/api/app/v1/devices/url/mx.qchotv.tvapp":
+			out, err := proto.Marshal(&pb.DeviceUrl{Url: "https://iptvdev.tumejorcasa.xyz"})
+			require.NoError(t, err)
+			w.Header().Set("Content-Type", "application/x-protobuf")
+			_, _ = w.Write(out)
 		case "/api/app/v1/update":
 			out, err := proto.Marshal(&pb.ApkUpdateCheckResponse{UpdateAvailable: true, LatestVersion: "1.0.30"})
 			require.NoError(t, err)
@@ -219,6 +225,7 @@ func TestRunSessionRunsTheWholeAppFlow(t *testing.T) {
 
 	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
 	text := stdout.String()
+	assert.Contains(t, text, "https://iptvdev.tumejorcasa.xyz")
 	assert.Contains(t, text, "Local")
 	assert.Contains(t, text, "1.0.30")
 	assert.Contains(t, text, "Gol")
@@ -245,6 +252,26 @@ func TestRunWSStopsOnContextCancellation(t *testing.T) {
 	code := runWithContext(ctx, []string{"ws", "--base-url", srv.URL, "--token", "sim-token"}, &stdout, &stderr)
 
 	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+}
+
+func TestSplitPositionalExtractsTheFirstArgument(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	fs.String("base-url", "", "")
+	fs.Bool("json", false, "")
+
+	positional, rest := splitPositional(fs, []string{"iptvdev.tumejorcasa.xyz", "--base-url", "http://x", "--json"})
+	assert.Equal(t, "iptvdev.tumejorcasa.xyz", positional)
+	assert.Equal(t, []string{"--base-url", "http://x", "--json"}, rest)
+}
+
+func TestSplitPositionalIgnoresTheFlagValues(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	fs.String("base-url", "", "")
+	fs.Bool("json", false, "")
+
+	positional, rest := splitPositional(fs, []string{"--base-url", "http://x", "iptvdev.tumejorcasa.xyz"})
+	assert.Equal(t, "iptvdev.tumejorcasa.xyz", positional)
+	assert.Equal(t, []string{"--base-url", "http://x"}, rest)
 }
 
 func TestRunWSRespectsTheDurationFlag(t *testing.T) {

@@ -87,3 +87,40 @@ func TestRegisterDeviceSurfacesServerErrorMessage(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid device registration")
 	assert.Contains(t, err.Error(), "400")
 }
+
+func TestGetFileReturnsTheBodyAndTheMetadata(t *testing.T) {
+	payload := []byte("file-bytes")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/app/v1/apk/download/token-1", r.URL.Path)
+		assert.Equal(t, "sim-token", r.Header.Get("APP-XIPTV"))
+		w.Header().Set("Content-Type", "application/vnd.android.package-archive")
+		w.Header().Set("Content-Disposition", `attachment; filename="app-1.0.30.apk"`)
+		_, _ = w.Write(payload)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "sim-token")
+	file, err := c.GetFile(context.Background(), "/apk/download/token-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, payload, file.Body)
+	assert.Equal(t, "application/vnd.android.package-archive", file.ContentType)
+	assert.Equal(t, "app-1.0.30.apk", file.Filename)
+}
+
+func TestGetFileSurfacesTheServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"image not found"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "sim-token")
+	_, err := c.GetFile(context.Background(), "/teams/logo/123")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "image not found")
+	assert.Contains(t, err.Error(), "404")
+}
