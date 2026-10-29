@@ -536,7 +536,7 @@ func (o *options) cmdDownload(ctx context.Context, stdout, stderr io.Writer) int
 			name = "app.apk"
 		}
 	}
-	if err := o.writeFile(name, file); err != nil {
+	if err := writeFile(name, file); err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
 		return 1
 	}
@@ -558,9 +558,9 @@ func (o *options) cmdLogo(ctx context.Context, stdout, stderr io.Writer) int {
 
 	name := o.out
 	if name == "" {
-		name = "team-" + o.positional + extensionForContentType(file.ContentType)
+		name = "team-" + filepath.Base(o.positional) + extensionForContentType(file.ContentType)
 	}
-	if err := o.writeFile(name, file); err != nil {
+	if err := writeFile(name, file); err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
 		return 1
 	}
@@ -568,7 +568,7 @@ func (o *options) cmdLogo(ctx context.Context, stdout, stderr io.Writer) int {
 }
 
 // writeFile saves a downloaded file under the given path.
-func (o *options) writeFile(name string, file *FileResponse) error {
+func writeFile(name string, file *FileResponse) error {
 	if err := os.WriteFile(name, file.Body, 0o644); err != nil {
 		return fmt.Errorf("escribir %s: %w", name, err)
 	}
