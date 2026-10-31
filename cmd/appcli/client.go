@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -15,6 +16,14 @@ import (
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 	"google.golang.org/protobuf/proto"
 )
+
+// ErrNoData reports a successful response with an empty body, which the
+// Flutter client decodes as null.
+var ErrNoData = errors.New("sin respuesta del servidor")
+
+// dashboardTimeout is the per-request budget ProtoApi applies to every
+// dashboard call.
+const dashboardTimeout = 15 * time.Second
 
 // AppUserAgent is the User-Agent the Flutter clients send on every
 // request (lib/shared/constants/app.dart in flutter-apptv and
@@ -41,7 +50,7 @@ func NewClient(baseURL, token string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		token:   token,
-		http:    &http.Client{Timeout: 30 * time.Second},
+		http:    &http.Client{Timeout: dashboardTimeout},
 	}
 }
 
@@ -83,6 +92,9 @@ func (c *Client) CurrentEvents(ctx context.Context, limit int) (*pb.EventsList, 
 	if err != nil {
 		return nil, err
 	}
+	if len(raw) == 0 {
+		return nil, ErrNoData
+	}
 	list := &pb.EventsList{}
 	if err := proto.Unmarshal(raw, list); err != nil {
 		return nil, fmt.Errorf("decode current events: %w", err)
@@ -97,6 +109,9 @@ func (c *Client) CheckUpdate(ctx context.Context, version, pkg string) (*pb.ApkU
 	if err != nil {
 		return nil, err
 	}
+	if len(raw) == 0 {
+		return nil, ErrNoData
+	}
 	resp := &pb.ApkUpdateCheckResponse{}
 	if err := proto.Unmarshal(raw, resp); err != nil {
 		return nil, fmt.Errorf("decode update response: %w", err)
@@ -109,6 +124,9 @@ func (c *Client) DeviceURL(ctx context.Context, pkg string) (string, error) {
 	raw, err := c.do(ctx, http.MethodGet, "/devices/url/"+url.PathEscape(pkg), nil, nil)
 	if err != nil {
 		return "", err
+	}
+	if len(raw) == 0 {
+		return "", ErrNoData
 	}
 	devURL := &pb.DeviceUrl{}
 	if err := proto.Unmarshal(raw, devURL); err != nil {

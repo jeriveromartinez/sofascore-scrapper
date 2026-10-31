@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRenderEventsShowsTeamsScoresAndLeague(t *testing.T) {
+func TestRenderEventsMatchesDashboardSlider(t *testing.T) {
 	list := &pb.EventsList{Data: []*pb.ExternalEvent{
 		{
 			Id:              11,
@@ -21,28 +21,68 @@ func TestRenderEventsShowsTeamsScoresAndLeague(t *testing.T) {
 			AwayScore:       1,
 			StartTimestamp:  time.Date(2026, 10, 20, 19, 30, 0, 0, time.UTC).UnixMilli(),
 			StatusType:      "finished",
-			TeamHome:        &pb.Team{TeamId: 100, Name: "Local"},
-			TeamAway:        &pb.Team{TeamId: 200, Name: "Visitante"},
+			TeamHome:        &pb.Team{TeamId: 100, Name: "Local", PrimaryColor: "#123456", LogoUrl: "/api/app/v1/teams/logo/100"},
+			TeamAway:        &pb.Team{TeamId: 200, Name: "Visitante", PrimaryColor: "", LogoUrl: "/api/app/v1/teams/logo/200"},
 			League:          &pb.Tournament{Id: 900, Name: "Liga MX"},
 		},
 	}}
 
 	var out bytes.Buffer
-	require.NoError(t, RenderEvents(&out, list, time.UTC))
+	require.NoError(t, RenderEvents(&out, list, time.UTC, "https://panel.test"))
 
 	text := out.String()
+	assert.Contains(t, text, "[20/10 19:30] Local vs Visitante")
 	assert.Contains(t, text, "Liga MX")
-	assert.Contains(t, text, "Local")
-	assert.Contains(t, text, "Visitante")
+	assert.Contains(t, text, "color: 0xFF123456")
+	assert.Contains(t, text, "color: 0xFF888888")
+	assert.Contains(t, text, "https://panel.test/api/app/v1/teams/logo/100")
+	assert.Contains(t, text, "https://panel.test/api/app/v1/teams/logo/200")
 	assert.Contains(t, text, "2 - 1")
 	assert.Contains(t, text, "football")
-	assert.Contains(t, text, "19:30")
 	assert.Contains(t, text, "finished")
+}
+
+func TestRenderEventsLabelsToday(t *testing.T) {
+	now := time.Now().In(time.UTC)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 21, 5, 0, 0, time.UTC)
+	list := &pb.EventsList{Data: []*pb.ExternalEvent{{
+		StartTimestamp: start.UnixMilli(),
+		StatusType:     "inprogress",
+		TeamHome:       &pb.Team{Name: "Local"},
+		TeamAway:       &pb.Team{Name: "Visitante"},
+		League:         &pb.Tournament{Name: "Liga MX"},
+	}}}
+
+	var out bytes.Buffer
+	require.NoError(t, RenderEvents(&out, list, time.UTC, "http://localhost:8080"))
+	assert.Contains(t, out.String(), "[hoy 21:05] Local vs Visitante")
+}
+
+func TestRenderEventsUsesTheDeviceTimezone(t *testing.T) {
+	mx, err := time.LoadLocation("America/Mexico_City")
+	require.NoError(t, err)
+
+	list := &pb.EventsList{Data: []*pb.ExternalEvent{{
+		StartTimestamp: time.Date(2026, 10, 30, 20, 15, 0, 0, time.UTC).UnixMilli(),
+		TeamHome:       &pb.Team{Name: "Local"},
+		TeamAway:       &pb.Team{Name: "Visitante"},
+	}}}
+
+	var out bytes.Buffer
+	require.NoError(t, RenderEvents(&out, list, mx, "http://localhost:8080"))
+	assert.Contains(t, out.String(), "[30/10 14:15]")
+}
+
+func TestDashboardColorFallsBackToGray(t *testing.T) {
+	assert.Equal(t, "0xFF123456", dashboardColor("#123456"))
+	assert.Equal(t, "0xFF888888", dashboardColor(""))
+	assert.Equal(t, "0xFF888888", dashboardColor("#zzzzzz"))
+	assert.Equal(t, "0x00FFFFFF", dashboardColor("FFFFFF"))
 }
 
 func TestRenderEventsWithoutMatchesSaysSo(t *testing.T) {
 	var out bytes.Buffer
-	require.NoError(t, RenderEvents(&out, &pb.EventsList{}, time.UTC))
+	require.NoError(t, RenderEvents(&out, &pb.EventsList{}, time.UTC, "http://localhost:8080"))
 	assert.Contains(t, out.String(), "sin eventos")
 }
 

@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"text/tabwriter"
+	"strconv"
+	"strings"
 	"time"
 
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
@@ -13,10 +14,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// RenderEvents writes the events as a table. The clock is rendered in
-// the given location so the simulator can show the times the device
-// itself would display.
-func RenderEvents(w io.Writer, list *pb.EventsList, loc *time.Location) error {
+// defaultTeamColor is the grey the dashboard uses when a team has no
+// parseable primary colour.
+const defaultTeamColor = "0xFF888888"
+
+// RenderEvents writes the same fields the dashboard builds for its
+// slider: local day and time, "home vs away", league, team colours and
+// team logos. dashboardDomain is prepended to the logo paths the server
+// returns, exactly like EventsApi.listNext.
+func RenderEvents(w io.Writer, list *pb.EventsList, loc *time.Location, dashboardDomain string) error {
 	if loc == nil {
 		loc = time.Local
 	}
@@ -25,19 +31,23 @@ func RenderEvents(w io.Writer, list *pb.EventsList, loc *time.Location) error {
 		return err
 	}
 
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "HORA\tLIGA\tLOCAL\tVISITANTE\tSCORE\tESTADO\tDEPORTE"); err != nil {
-		return err
-	}
+	now := time.Now().In(loc)
 	for _, ev := range list.GetData() {
-		home := ""
-		if ev.GetTeamHome() != nil {
-			home = ev.GetTeamHome().GetName()
+		home := ev.GetTeamHome()
+		away := ev.GetTeamAway()
+
+		day := "-"
+		clock := "-"
+		if ev.GetStartTimestamp() != 0 {
+			start := time.UnixMilli(ev.GetStartTimestamp()).In(loc)
+			clock = start.Format("15:04")
+			if start.Day() == now.Day() && start.Month() == now.Month() && start.Year() == now.Year() {
+				day = "hoy"
+			} else {
+				day = fmt.Sprintf("%d/%d", start.Day(), int(start.Month()))
+			}
 		}
-		away := ""
-		if ev.GetTeamAway() != nil {
-			away = ev.GetTeamAway().GetName()
-		}
+
 		league := ""
 		if ev.GetLeague() != nil {
 			league = ev.GetLeague().GetName()
@@ -46,16 +56,42 @@ func RenderEvents(w io.Writer, list *pb.EventsList, loc *time.Location) error {
 		if ev.GetHomeScore() != 0 || ev.GetAwayScore() != 0 {
 			score = fmt.Sprintf("%d - %d", ev.GetHomeScore(), ev.GetAwayScore())
 		}
-		start := "-"
-		if ev.GetStartTimestamp() != 0 {
-			start = time.UnixMilli(ev.GetStartTimestamp()).In(loc).Format("15:04")
+
+		if _, err := fmt.Fprintf(w, "[%s %s] %s vs %s\n", day, clock, home.GetName(), away.GetName()); err != nil {
+			return err
 		}
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			start, league, home, away, score, ev.GetStatusType(), ev.GetSport()); err != nil {
+		if _, err := fmt.Fprintf(w, "  liga:      %s\n", league); err != nil {
+			return err
+		}
+		if err := renderTeamLine(w, "local:    ", home, dashboardDomain); err != nil {
+			return err
+		}
+		if err := renderTeamLine(w, "visitante:", away, dashboardDomain); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  estado:    %s  deporte: %s  score: %s\n\n",
+			ev.GetStatusType(), ev.GetSport(), score); err != nil {
 			return err
 		}
 	}
-	return tw.Flush()
+	return nil
+}
+
+func renderTeamLine(w io.Writer, label string, team *pb.Team, dashboardDomain string) error {
+	_, err := fmt.Fprintf(w, "  %s %s  color: %s  logo: %s%s\n",
+		label, team.GetName(), dashboardColor(team.GetPrimaryColor()), dashboardDomain, team.GetLogoUrl())
+	return err
+}
+
+// dashboardColor mirrors EventsApi.listNext: "#rrggbb" becomes the
+// 0xFFrrggbb integer the TV renders, anything unparseable is grey.
+func dashboardColor(primaryColor string) string {
+	raw := strings.Replace(primaryColor, "#", "ff", 1)
+	value, err := strconv.ParseUint(raw, 16, 32)
+	if err != nil {
+		return defaultTeamColor
+	}
+	return fmt.Sprintf("0x%08X", value)
 }
 
 // RenderPush writes one received notification.

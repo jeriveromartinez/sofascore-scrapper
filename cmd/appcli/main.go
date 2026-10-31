@@ -41,6 +41,9 @@ const (
 	// The real app sends the timezone of the device it runs on, and the
 	// scheduler needs it to fire the pushes at the device-local hour.
 	DefaultTimezone = "America/Mexico_City"
+	// DefaultPanelURL is the panel DeviceApi.iptvPanelUrl falls back to
+	// when the lookup fails or returns an empty body.
+	DefaultPanelURL = "http://5.mdtv.me"
 )
 
 func main() {
@@ -141,7 +144,7 @@ func parseOptions(command string, args []string, stderr io.Writer) (*options, er
 	fs.StringVar(&opts.version, "version", DefaultAppVersion, "app version")
 	fs.StringVar(&opts.name, "name", DefaultDeviceName, "device name")
 	fs.StringVar(&opts.timezone, "timezone", envOr("TZ", DefaultTimezone), "IANA timezone of the device")
-	fs.IntVar(&opts.limit, "limit", 6, "number of events to request (1-6)")
+	fs.IntVar(&opts.limit, "limit", 0, "number of events to request (0 = server default, max 6)")
 	fs.BoolVar(&opts.jsonOut, "json", false, "print the raw decoded payload as JSON")
 	fs.DurationVar(&opts.duration, "duration", 0, "stop listening after this duration (0 = until interrupted)")
 	fs.BoolVar(&opts.noAck, "no-ack", false, "do not acknowledge the pushes received")
@@ -316,6 +319,10 @@ func renderDevice(w io.Writer, dev *pb.Device, token string) {
 
 func (o *options) cmdUpdate(ctx context.Context, stdout, stderr io.Writer) int {
 	resp, err := o.client(o.token).CheckUpdate(ctx, o.version, o.pkg)
+	if errors.Is(err, ErrNoData) {
+		fmt.Fprintln(stdout, "sin informacion de actualizacion")
+		return 0
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
 		return 1
@@ -341,7 +348,9 @@ func (o *options) cmdUpdate(ctx context.Context, stdout, stderr io.Writer) int {
 
 func (o *options) cmdEvents(ctx context.Context, stdout, stderr io.Writer) int {
 	list, err := o.client(o.token).CurrentEvents(ctx, o.limit)
-	if err != nil {
+	if errors.Is(err, ErrNoData) {
+		list = &pb.EventsList{}
+	} else if err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
 		return 1
 	}
@@ -349,7 +358,7 @@ func (o *options) cmdEvents(ctx context.Context, stdout, stderr io.Writer) int {
 	if o.jsonOut {
 		return printJSON(stdout, stderr, list)
 	}
-	if err := RenderEvents(stdout, list, o.location()); err != nil {
+	if err := RenderEvents(stdout, list, o.location(), o.baseURL); err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
 		return 1
 	}
@@ -523,9 +532,11 @@ func printJSON(w io.Writer, stderr io.Writer, msg proto.Message) int {
 // cmdURL prints the panel URL the server publishes for the package.
 func (o *options) cmdURL(ctx context.Context, stdout, stderr io.Writer) int {
 	panelURL, err := o.client(o.token).DeviceURL(ctx, o.pkg)
-	if err != nil {
+	if errors.Is(err, ErrNoData) {
+		panelURL = DefaultPanelURL
+	} else if err != nil {
 		fmt.Fprintln(stderr, "appcli:", err)
-		return 1
+		panelURL = DefaultPanelURL
 	}
 
 	if o.jsonOut {

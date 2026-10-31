@@ -32,6 +32,50 @@ func TestRunURLPrintsThePanelURLOfThePackage(t *testing.T) {
 	assert.Contains(t, stdout.String(), "https://iptvdev.tumejorcasa.xyz")
 }
 
+// DeviceApi.iptvPanelUrl returns the default panel when the request or
+// the decode fails.
+func TestRunURLFallsBackToTheDefaultPanelWhenTheRequestFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"boom"}`, http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"url", "--base-url", srv.URL}, &stdout, &stderr)
+
+	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+	assert.Contains(t, stdout.String(), DefaultPanelURL)
+	assert.Contains(t, stderr.String(), "boom")
+}
+
+func TestRunURLFallsBackToTheDefaultPanelOnAnEmptyBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"url", "--base-url", srv.URL}, &stdout, &stderr)
+
+	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+	assert.Contains(t, stdout.String(), DefaultPanelURL)
+}
+
+// UpdateApi.checkForUpdate returns null when the call fails; the CLI
+// reports it without failing the whole session.
+func TestRunUpdateReportsNoDataWithoutFailing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"update", "--base-url", srv.URL}, &stdout, &stderr)
+
+	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+	assert.Contains(t, stdout.String(), "sin informacion de actualizacion")
+}
+
 func TestRunURLJSONModePrintsJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		out, err := proto.Marshal(&pb.DeviceUrl{Url: "https://iptvdev.tumejorcasa.xyz"})
