@@ -94,7 +94,7 @@ func TestTruncateTournamentIDsLogsThroughSlog(t *testing.T) {
 	records := captureSlog(t)
 	ids := make([]uint, maxTournamentIDs+1)
 
-	if got := truncateTournamentIDs(9, ids); len(got) != maxTournamentIDs {
+	if got := NewRepository(nil).truncateTournamentIDs(9, ids); len(got) != maxTournamentIDs {
 		t.Fatalf("len = %d, want %d", len(got), maxTournamentIDs)
 	}
 	assertStructuredWarn(t, records.find(t, "truncating"), "device_id")

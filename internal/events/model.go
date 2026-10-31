@@ -41,9 +41,7 @@ type Event struct {
 	//   constraint forces MySQL/MariaDB to create one.)
 	//
 	//   current_period_start_timestamp intentionally has no index:
-	//   it is the secondary sort on a result set already bounded by
-	//   status_type + LIMIT, so an extra index would only slow
-	//   writes down.
+	//   it is telemetry only, not part of any sort or filter.
 	StartTimestamp              int64                   `gorm:"column:start_timestamp;index:idx_events_start_timestamp"`
 	CurrentPeriodStartTimestamp int64                   `gorm:"column:current_period_start_timestamp"`
 	Slug                        string                  `gorm:"column:slug;type:longtext"`
