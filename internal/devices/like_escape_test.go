@@ -74,7 +74,7 @@ func TestRegisterUsesPortableLikeEscape(t *testing.T) {
 	}
 
 	rec.reset()
-	device, err := NewRepository(tracked).Register(context.Background(), nil, "itest-escape-device", "android", "Box", "1.0", "com.example.escape", "")
+	device, err := NewRepository(tracked).Register(context.Background(), nil, 0, "itest-escape-device", "android", "Box", "1.0", "com.example.escape", "")
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
