@@ -40,7 +40,11 @@ func createTestEvent(repo *Repository, sofaID int64, statusType string, startTs 
 		LeagueId:                    1,
 		StatusType:                  statusType,
 	}
-	batch := ScrapeBatch{Teams: []Team{tm}, Events: []Event{event}}
+	batch := ScrapeBatch{
+		Teams:       []Team{tm},
+		Tournaments: []tournaments.Tournament{{Model: gorm.Model{ID: 1}, Name: "Test League", Slug: "test-league"}},
+		Events:      []Event{event},
+	}
 	return repo.UpsertScrapeBatch(context.Background(), batch, 500)
 }
 

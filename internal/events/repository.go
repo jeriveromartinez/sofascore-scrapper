@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/tournaments"
@@ -64,6 +65,10 @@ type Repository struct {
 	// which would otherwise have to reach the live image CDNs to
 	// exercise the tail of the source chain.
 	idSourceURL func(int64) string
+	// truncationWarned records the devices already reported as having
+	// their tournament assignment truncated, so an oversized assignment
+	// does not warn on every request for the life of the process.
+	truncationWarned sync.Map
 }
 
 func NewRepository(db *gorm.DB) *Repository {
@@ -355,7 +360,9 @@ const maxTournamentIDs = 200
 
 func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]uint, error) {
 	var deviceTournaments []tournaments.DeviceTournament
-	if err := r.db.WithContext(ctx).Find(&deviceTournaments, "device_id = ?", devID).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Order("tournament_id ASC").
+		Find(&deviceTournaments, "device_id = ?", devID).Error; err != nil {
 		return nil, err
 	}
 
@@ -364,33 +371,39 @@ func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]ui
 		for i, dt := range deviceTournaments {
 			ids[i] = dt.TournamentID
 		}
-		return truncateTournamentIDs(devID, ids), nil
+		return r.truncateTournamentIDs(devID, ids), nil
 	}
 
 	var globalConfig []tournaments.GlobalTournamentConfig
-	if err := r.db.WithContext(ctx).Find(&globalConfig).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Order("tournament_id ASC").
+		Find(&globalConfig).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]uint, len(globalConfig))
 	for i, gc := range globalConfig {
 		ids[i] = gc.TournamentID
 	}
-	return truncateTournamentIDs(devID, ids), nil
+	return r.truncateTournamentIDs(devID, ids), nil
 }
 
 // truncateTournamentIDs caps the returned slice at maxTournamentIDs.
 // The caller (getCurrentAndUpcoming) treats a truncated list as
 // 'best-effort subset of the device's leagues' — the same behaviour
-// the user would get by manually trimming the assignment.
-func truncateTournamentIDs(devID uint, ids []uint) []uint {
+// the user would get by manually trimming the assignment. The ids are
+// ordered by the caller so truncation always keeps the same lowest
+// ids, and the warning is emitted once per device per process.
+func (r *Repository) truncateTournamentIDs(devID uint, ids []uint) []uint {
 	if len(ids) <= maxTournamentIDs {
 		return ids
 	}
-	slog.Default().Warn("events: truncating device tournament assignments to keep the IN-list query plan in index-scan range",
-		slog.Uint64("device_id", uint64(devID)),
-		slog.Int("assignments", len(ids)),
-		slog.Int("cap", maxTournamentIDs),
-	)
+	if _, alreadyWarned := r.truncationWarned.LoadOrStore(devID, struct{}{}); !alreadyWarned {
+		slog.Default().Warn("events: truncating device tournament assignments to keep the IN-list query plan in index-scan range",
+			slog.Uint64("device_id", uint64(devID)),
+			slog.Int("assignments", len(ids)),
+			slog.Int("cap", maxTournamentIDs),
+		)
+	}
 	return ids[:maxTournamentIDs]
 }
 
@@ -417,8 +430,15 @@ func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []
 
 	var events []Event
 
-	if err := r.db.WithContext(ctx).Where("status_type = ? AND league_id IN ?", "inprogress", tournamentIDs).
-		Order("current_period_start_timestamp DESC").
+	// The join drops events whose league was soft-deleted: Preload would
+	// otherwise return them with a nil League. Every column is qualified
+	// because tournaments has an id column too, which makes a bare id
+	// ambiguous in ORDER BY and in the id sub-filter below.
+	activeLeagueJoin := "JOIN tournaments ON tournaments.id = events.league_id AND tournaments.deleted_at IS NULL"
+
+	if err := r.db.WithContext(ctx).Joins(activeLeagueJoin).
+		Where("events.status_type = ? AND events.league_id IN ?", "inprogress", tournamentIDs).
+		Order("events.start_timestamp DESC, events.id DESC").
 		Limit(limit).
 		Preload("HomeTeamModel").
 		Preload("AwayTeamModel").
@@ -436,9 +456,11 @@ func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []
 		}
 
 		nowMs := time.Now().UnixMilli()
-		query := r.db.WithContext(ctx).Where("status_type = ? AND start_timestamp >= ? AND league_id IN ?", "notstarted", nowMs, tournamentIDs).Order("start_timestamp ASC")
+		query := r.db.WithContext(ctx).Joins(activeLeagueJoin).
+			Where("events.status_type = ? AND events.start_timestamp >= ? AND events.league_id IN ?", "notstarted", nowMs, tournamentIDs).
+			Order("events.start_timestamp ASC, events.id ASC")
 		if len(existingIDs) > 0 {
-			query = query.Where("id NOT IN ?", existingIDs)
+			query = query.Where("events.id NOT IN ?", existingIDs)
 		}
 
 		if err := query.Limit(remaining).

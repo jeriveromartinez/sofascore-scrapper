@@ -327,6 +327,9 @@ func TestService_GetCurrentAndUpcoming_CoalescesConcurrentCacheMisses(t *testing
 	if err := db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1}).Error; err != nil {
 		t.Fatalf("seed tournament selection: %v", err)
 	}
+	if err := db.Create(&tournaments.Tournament{Model: gorm.Model{ID: 1}, Name: "Test League", Slug: "test-league"}).Error; err != nil {
+		t.Fatalf("seed tournament: %v", err)
+	}
 	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
 		t.Fatalf("seed event: %v", err)
 	}
@@ -399,6 +402,9 @@ func TestService_GetCurrentAndUpcoming_CanceledCallerDoesNotCancelSharedLoad(t *
 	db := setupCacheTestDB(t)
 	if err := db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1}).Error; err != nil {
 		t.Fatalf("seed tournament selection: %v", err)
+	}
+	if err := db.Create(&tournaments.Tournament{Model: gorm.Model{ID: 1}, Name: "Test League", Slug: "test-league"}).Error; err != nil {
+		t.Fatalf("seed tournament: %v", err)
 	}
 	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
 		t.Fatalf("seed event: %v", err)
@@ -480,6 +486,12 @@ func createTestEventWithLeague(repo *Repository, sofaID int64, leagueID uint, st
 		LeagueId:                    leagueID,
 		StatusType:                  statusType,
 	}
-	batch := ScrapeBatch{Teams: []Team{tm}, Events: []Event{event}}
+	batch := ScrapeBatch{
+		Teams: []Team{tm},
+		Tournaments: []tournaments.Tournament{
+			{Model: gorm.Model{ID: leagueID}, Name: "Test League", Slug: "test-league"},
+		},
+		Events: []Event{event},
+	}
 	return repo.UpsertScrapeBatch(context.Background(), batch, 500)
 }
