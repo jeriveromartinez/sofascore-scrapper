@@ -29,17 +29,18 @@ type EventsPageFilter struct {
 	TeamName             string
 }
 
-// escapeLike escapes the three special characters recognised by SQL LIKE
-// (% multi-char wildcard, _ single-char wildcard, \ literal escape char) by
-// prefixing each with the LIKE escape character (backslash). This prevents a
-// caller from constructing a wildcard query from arbitrary user input, per
+// escapeLike escapes the characters special to SQL LIKE (% multi-char
+// wildcard, _ single-char wildcard, ! escape char) by prefixing each with
+// the escape character. Backslash is literal under ESCAPE '!', the clause
+// every query here uses so MariaDB and SQLite agree. This prevents a caller
+// from constructing a wildcard query from arbitrary user input, per
 // spec §6.1 / §10 (LIKE wildcard injection).
 func escapeLike(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
-		if r == '%' || r == '_' || r == '\\' {
-			b.WriteByte('\\')
+		if r == '!' || r == '%' || r == '_' {
+			b.WriteByte('!')
 		}
 		b.WriteRune(r)
 	}
@@ -498,14 +499,14 @@ func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event,
 	if f.LeagueName != "" {
 		query = query.
 			Joins("LEFT JOIN tournaments AS leagues ON leagues.id = events.league_id AND leagues.deleted_at IS NULL").
-			Where("leagues.name LIKE ? ESCAPE '\\'", "%"+escapeLike(f.LeagueName)+"%")
+			Where("leagues.name LIKE ? ESCAPE '!'", "%"+escapeLike(f.LeagueName)+"%")
 	}
 	if f.TeamName != "" {
 		query = query.
 			Joins("LEFT JOIN teams AS home_team_models ON home_team_models.team_id = events.home_team_id AND home_team_models.deleted_at IS NULL").
 			Joins("LEFT JOIN teams AS away_team_models ON away_team_models.team_id = events.away_team_id AND away_team_models.deleted_at IS NULL").
 			Where(
-				"(home_team_models.name LIKE ? ESCAPE '\\' OR away_team_models.name LIKE ? ESCAPE '\\')",
+				"(home_team_models.name LIKE ? ESCAPE '!' OR away_team_models.name LIKE ? ESCAPE '!')",
 				"%"+escapeLike(f.TeamName)+"%",
 				"%"+escapeLike(f.TeamName)+"%",
 			)

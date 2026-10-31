@@ -21,18 +21,19 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// escapeLike escapes the three special characters recognised by SQL LIKE
-// (% multi-char wildcard, _ single-char wildcard, \ literal escape char) by
-// prefixing each with the LIKE escape character (backslash). This prevents a
-// caller from constructing a wildcard query from arbitrary user input, per
-// the events package's LIKE wildcard-injection hardening (see internal/events
+// escapeLike escapes the characters special to SQL LIKE (% multi-char
+// wildcard, _ single-char wildcard, ! escape char) by prefixing each with
+// the escape character. Backslash is literal under ESCAPE '!', which is the
+// clause the query uses so MariaDB and SQLite agree. This prevents a caller
+// from constructing a wildcard query from arbitrary user input, per the
+// events package's LIKE wildcard-injection hardening (see internal/events
 // /repository.go).
 func escapeLike(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
-		if r == '%' || r == '_' || r == '\\' {
-			b.WriteByte('\\')
+		if r == '!' || r == '%' || r == '_' {
+			b.WriteByte('!')
 		}
 		b.WriteRune(r)
 	}
@@ -74,7 +75,7 @@ func (r *Repository) Register(ctx context.Context, userID *uint, token, platform
 	// the escape guards against is apkDev.IPTVUrl itself: an operator
 	// that registers a domain containing "_" or "%" would otherwise
 	// silently widen the match.
-	if err := db.Model(&domains.Domain{}).Where("domain LIKE ? ESCAPE '\\'", "%"+escapeLike(domainStr)).First(&domain).Error; err != nil {
+	if err := db.Model(&domains.Domain{}).Where("domain LIKE ? ESCAPE '!'", "%"+escapeLike(domainStr)).First(&domain).Error; err != nil {
 		return nil, invalidDataUnlessDBError(err)
 	}
 
