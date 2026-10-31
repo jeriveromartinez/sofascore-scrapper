@@ -26,7 +26,7 @@ func TestCurrentEventsSendsLimitAndDecodesList(t *testing.T) {
 				Sport:           "football",
 				HomeScore:       2,
 				AwayScore:       1,
-				StartTimestamp:  1750000000,
+				StartTimestamp:  1750000000000,
 				StatusType:      "finished",
 				TeamHome:        &pb.Team{Id: 1, TeamId: 100, Name: "Local"},
 				TeamAway:        &pb.Team{Id: 2, TeamId: 200, Name: "Visitante"},

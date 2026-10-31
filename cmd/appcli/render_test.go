@@ -19,7 +19,7 @@ func TestRenderEventsShowsTeamsScoresAndLeague(t *testing.T) {
 			Sport:           "football",
 			HomeScore:       2,
 			AwayScore:       1,
-			StartTimestamp:  time.Date(2026, 10, 20, 19, 30, 0, 0, time.UTC).Unix(),
+			StartTimestamp:  time.Date(2026, 10, 20, 19, 30, 0, 0, time.UTC).UnixMilli(),
 			StatusType:      "finished",
 			TeamHome:        &pb.Team{TeamId: 100, Name: "Local"},
 			TeamAway:        &pb.Team{TeamId: 200, Name: "Visitante"},

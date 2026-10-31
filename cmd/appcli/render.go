@@ -48,7 +48,7 @@ func RenderEvents(w io.Writer, list *pb.EventsList, loc *time.Location) error {
 		}
 		start := "-"
 		if ev.GetStartTimestamp() != 0 {
-			start = time.Unix(ev.GetStartTimestamp(), 0).In(loc).Format("15:04")
+			start = time.UnixMilli(ev.GetStartTimestamp()).In(loc).Format("15:04")
 		}
 		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			start, league, home, away, score, ev.GetStatusType(), ev.GetSport()); err != nil {
