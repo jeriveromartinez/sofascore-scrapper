@@ -44,11 +44,14 @@ type downloadCounter struct {
 	locker redisplatform.Locker
 }
 
-type downloadCounterFlush struct {
-	BatchID string `gorm:"column:batch_id;primaryKey"`
+// DownloadCounterFlush records a flushed counter batch so a retry or a
+// second replica cannot apply the same deltas twice.
+type DownloadCounterFlush struct {
+	BatchID   string `gorm:"column:batch_id;primaryKey"`
+	CreatedAt time.Time
 }
 
-func (downloadCounterFlush) TableName() string {
+func (DownloadCounterFlush) TableName() string {
 	return "download_counter_flushes"
 }
 
@@ -144,7 +147,7 @@ func (c *downloadCounter) processPending(ctx context.Context, batchID, pendingKe
 	}
 
 	err = c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&downloadCounterFlush{BatchID: batchID})
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&DownloadCounterFlush{BatchID: batchID})
 		if result.Error != nil {
 			return fmt.Errorf("insert batch %s: %w", batchID, result.Error)
 		}

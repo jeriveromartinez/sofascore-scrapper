@@ -19,7 +19,7 @@ func newMiniredisDownloadCounter(t *testing.T) (*downloadCounter, *dbRecorder) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	db := setupTestDB(t)
-	if err := db.AutoMigrate(&downloadCounterFlush{}); err != nil {
+	if err := db.AutoMigrate(&DownloadCounterFlush{}); err != nil {
 		t.Fatalf("migrate flushes: %v", err)
 	}
 	recorded, rec := recordDB(db)
