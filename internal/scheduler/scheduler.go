@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
+	"github.com/jeriveromartinez/scores365-scrapper/internal/events"
 	redisplatform "github.com/jeriveromartinez/scores365-scrapper/internal/platform/redis"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/push"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/reporting"
@@ -24,6 +25,7 @@ type Scheduler struct {
 	wg              sync.WaitGroup
 	db              *gorm.DB
 	scrapeSvc       *scraper.Service
+	eventsCloser    staleLiveCloser
 	aggRepo         *reporting.AggregationRepository
 	runner          *Runner
 	cleanupJob      *apk.CleanupJob
@@ -44,6 +46,9 @@ func (s *Scheduler) Init(db *gorm.DB, scrapeSvc *scraper.Service, aggRepo *repor
 	s.db = db
 	s.scrapeSvc = scrapeSvc
 	s.aggRepo = aggRepo
+	if db != nil {
+		s.eventsCloser = events.NewRepository(db)
+	}
 	s.runner = NewRunner(locker, s.logger)
 }
 
@@ -79,6 +84,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	s.cancel = cancel
 
 	startScrape(localCtx, s.scrapeSvc, s.runner, &s.wg, s.logger)
+	startEventReconcile(localCtx, s.eventsCloser, s.runner, &s.wg, s.logger)
 	startStats(localCtx, s.db, s.aggRepo, s.runner, s.cleanupJob, s.redisClient, s.downloadCounter, &s.wg, s.logger)
 	startTimersRunner(localCtx, s.pushService, s.tickInterval, s.batchLimit, s.pushLocker, s.logger, &s.wg)
 	startPushGauges(localCtx, s.pushService, pushGaugesInterval, s.logger, &s.wg)
