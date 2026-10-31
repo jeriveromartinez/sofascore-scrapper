@@ -35,9 +35,9 @@ The per-match fact table is **`events`** (`internal/events/model.go`):
 | `sport` | Canonical sport slug (matches `scraper_leagues.sport`). |
 | `league_id` | Foreign key into `tournaments.id` — the **namespaced** league id for 365scores rows, the natural upstream id for FotMob rows. |
 | `home_score`, `away_score` | Zero for fixtures that haven't kicked off yet, or that the upstream reports as finished with no scoring events. |
-| `start_timestamp` | Unix seconds. Zero if extraction failed. |
-| `scraped_at` | Unix milliseconds; the per-tick timestamp the scraper assigned. |
-| `status_type` | Coarse lifecycle bucket (`scheduled` / `live` / `finished` / `cancelled`). |
+| `start_timestamp` | Unix **milliseconds** (kickoff time). Zero if extraction failed. |
+| `scraped_at` | Unix **seconds**; the per-tick timestamp the scraper assigned. |
+| `status_type` | Coarse lifecycle bucket (`notstarted` / `inprogress` / `finished` / `cancelled`). |
 
 Use `events.source` and `events.sport` to trace which upstream and which
 sport produced each row. There is no `scraper_leagues` row materialized
