@@ -29,7 +29,7 @@ func (h *AppHandler) handleRegisterDevice(c *gin.Context) {
 		return
 	}
 
-	device, err := h.repo.Register(c.Request.Context(), nil, req.Token, req.Platform, req.Name, req.Version, req.PackageId, req.Timezone)
+	device, err := h.repo.Register(c.Request.Context(), nil, uint(req.DomainId), req.Token, req.Platform, req.Name, req.Version, req.PackageId, req.Timezone)
 	if errors.Is(err, gorm.ErrInvalidData) {
 		server.RespondError(c, http.StatusBadRequest, "invalid device registration")
 		return
