@@ -102,6 +102,39 @@ func TestGetCurrentAndUpcoming_LiveByStatusType(t *testing.T) {
 	}
 }
 
+// An event that dropped out of the feed keeps its last status. Once the
+// scraper has not refreshed it for longer than the freshness window it
+// must stop being served as live, otherwise the app shows a frozen match
+// from days ago.
+func TestGetCurrentAndUpcoming_ExcludesLiveEventsTheScraperStoppedRefreshing(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepository(db)
+
+	liveStart := time.Now().Add(-1 * time.Hour).UnixMilli()
+	createTestEvent(repo, 1, "inprogress", liveStart, liveStart)
+
+	staleStart := time.Now().Add(-48 * time.Hour).UnixMilli()
+	createTestEvent(repo, 2, "inprogress", staleStart, staleStart)
+	if err := db.Model(&Event{}).Where("external_match_id = ?", "2").
+		Update("scraped_at", time.Now().Add(-time.Hour).Unix()).Error; err != nil {
+		t.Fatalf("age the stale event: %v", err)
+	}
+
+	db.Create(&tournaments.GlobalTournamentConfig{TournamentID: 1})
+
+	events, err := repo.GetCurrentAndUpcoming(context.Background(), 0, 6)
+	if err != nil {
+		t.Fatalf("GetCurrentAndUpcoming failed: %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("expected only the freshly scraped event, got %d", len(events))
+	}
+	if events[0].ExternalMatchId != "1" {
+		t.Errorf("expected event 1, got %s", events[0].ExternalMatchId)
+	}
+}
+
 func TestGetCurrentAndUpcoming_UpcomingByStatusTypeAndStartTimestamp(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewRepository(db)

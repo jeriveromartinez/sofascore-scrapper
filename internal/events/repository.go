@@ -359,6 +359,13 @@ func (r *Repository) tryDownloadAndPersist(ctx context.Context, db *gorm.DB, tea
 // truncation is documented in the log so operators can spot it.
 const maxTournamentIDs = 200
 
+// liveEventFreshness is how long a live event may go without being
+// refreshed by the scraper before it stops being served. ScrapeToday
+// runs every minute, so a match that is still in the feed is refreshed
+// far more often; anything older silently left the feed and would
+// otherwise be shown as live forever with a frozen score.
+const liveEventFreshness = 30 * time.Minute
+
 func (r *Repository) ResolveTournamentIDs(ctx context.Context, devID uint) ([]uint, error) {
 	var deviceTournaments []tournaments.DeviceTournament
 	if err := r.db.WithContext(ctx).
@@ -438,7 +445,8 @@ func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []
 	activeLeagueJoin := "JOIN tournaments ON tournaments.id = events.league_id AND tournaments.deleted_at IS NULL"
 
 	if err := r.db.WithContext(ctx).Joins(activeLeagueJoin).
-		Where("events.status_type = ? AND events.league_id IN ?", "inprogress", tournamentIDs).
+		Where("events.status_type = ? AND events.league_id IN ? AND events.scraped_at >= ?",
+			"inprogress", tournamentIDs, time.Now().Add(-liveEventFreshness).Unix()).
 		Order("events.start_timestamp DESC, events.id DESC").
 		Limit(limit).
 		Preload("HomeTeamModel").

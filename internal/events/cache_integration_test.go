@@ -330,7 +330,7 @@ func TestService_GetCurrentAndUpcoming_CoalescesConcurrentCacheMisses(t *testing
 	if err := db.Create(&tournaments.Tournament{Model: gorm.Model{ID: 1}, Name: "Test League", Slug: "test-league"}).Error; err != nil {
 		t.Fatalf("seed tournament: %v", err)
 	}
-	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
+	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress", ScrapedAt: time.Now().Unix()}).Error; err != nil {
 		t.Fatalf("seed event: %v", err)
 	}
 
@@ -406,7 +406,7 @@ func TestService_GetCurrentAndUpcoming_CanceledCallerDoesNotCancelSharedLoad(t *
 	if err := db.Create(&tournaments.Tournament{Model: gorm.Model{ID: 1}, Name: "Test League", Slug: "test-league"}).Error; err != nil {
 		t.Fatalf("seed tournament: %v", err)
 	}
-	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress"}).Error; err != nil {
+	if err := db.Create(&Event{ExternalMatchId: "1", LeagueId: 1, StatusType: "inprogress", ScrapedAt: time.Now().Unix()}).Error; err != nil {
 		t.Fatalf("seed event: %v", err)
 	}
 
