@@ -77,13 +77,15 @@ func TestRegisterResolvesDomainAgainstMariaDB(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Unscoped().Delete(&apkRow) })
 
-	domainRow := domains.Domain{Domain: host, UserID: user.ID}
+	// A subdomain ensures the LIKE fallback runs: Register tries an exact
+	// domain match first.
+	domainRow := domains.Domain{Domain: "panel." + host, UserID: user.ID}
 	if err := db.Create(&domainRow).Error; err != nil {
 		t.Fatalf("seed domain: %v", err)
 	}
 	t.Cleanup(func() { db.Unscoped().Delete(&domainRow) })
 
-	device, err := NewRepository(db).Register(context.Background(), nil, token, "android", "Itest Box", "1.0", packageID, "")
+	device, err := NewRepository(db).Register(context.Background(), nil, 0, token, "android", "Itest Box", "1.0", packageID, "")
 	if err != nil {
 		t.Fatalf("Register against MariaDB: %v", err)
 	}
