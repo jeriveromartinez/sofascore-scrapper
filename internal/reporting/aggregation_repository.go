@@ -69,13 +69,15 @@ func (r *AggregationRepository) GenerateDaily(ctx context.Context) (err error) {
 		}
 	}()
 
+	// The sum stays in milliseconds: dividing in SQL turns it into a
+	// DECIMAL on MariaDB, which database/sql cannot scan into an int.
 	var stats []struct {
-		Content    string
-		TotalViews int
-		TimePlayed int
+		Content      string
+		TotalViews   int
+		TimePlayedMs int64
 	}
 	if err = tx.Table("playback_logs").
-		Select("content, COUNT(id) as total_views, COALESCE(SUM(ended_at - started_at) / 1000, 0) as time_played").
+		Select("content, COUNT(id) as total_views, COALESCE(SUM(ended_at - started_at), 0) as time_played_ms").
 		Group("content").
 		Where("ended_at < ? AND ended_at >= ? AND ended_at > 0", end.UnixMilli(), begin.UnixMilli()).
 		Find(&stats).Error; err != nil {
@@ -95,7 +97,7 @@ func (r *AggregationRepository) GenerateDaily(ctx context.Context) (err error) {
 			ContentHash: daily.Content,
 			PeriodType:  PeriodTypeDay,
 			PeriodStart: begin,
-			Seconds:     daily.TimePlayed,
+			Seconds:     int(daily.TimePlayedMs / 1000),
 			Views:       daily.TotalViews,
 		})
 	}
