@@ -45,8 +45,9 @@ func TestAutoMigrateAll_AllModelsRegistered(t *testing.T) {
 		"apk_upload_publications", "tournaments", "global_tournament_configs",
 		"content_stats", "playback_logs", "devices", "device_tournaments",
 		"teams", "events", "push_messages", "push_message_targets",
-		"scheduled_pushes", "scheduled_push_targets", "delivery_attempts",
-		"crash_reports",
+		"scheduled_pushes", "scheduled_push_targets", "scheduled_push_timers",
+		"delivery_attempts", "crash_reports", "download_counter_flushes",
+		"scraper_leagues",
 	}
 	db := newTestDB(t)
 	if err := database.AutoMigrateAll(db); err != nil {

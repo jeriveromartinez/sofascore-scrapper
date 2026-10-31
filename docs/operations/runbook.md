@@ -119,8 +119,8 @@ disk is full.
 ## Counter recovery
 
 APK download counters are flushed every 15 minutes. The flush is
-idempotent: `download_counter_flushes` holds only the `batch_id`
-primary key, and a batch that is already recorded is skipped
+idempotent: `download_counter_flushes` holds the `batch_id` primary
+key and `created_at`, and a batch that is already recorded is skipped
 (`ON CONFLICT DO NOTHING`). If the backend is killed mid-flush, the
 pending counter batch is still in Redis under
 `apk:downloads:pending:<batch_id>`; on the next start

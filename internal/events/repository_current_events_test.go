@@ -50,6 +50,9 @@ func seedCurrentEvent(t *testing.T, db *gorm.DB, externalID, status string, star
 		StatusType:      status,
 		StartTimestamp:  startTs,
 		LeagueId:        leagueID,
+		// The scraper stamps every upsert, so fixtures must too:
+		// an unwritten scraped_at would look stale to the live filter.
+		ScrapedAt: time.Now().Unix(),
 	}
 	mustCreate(t, db, &event)
 	return event.ID

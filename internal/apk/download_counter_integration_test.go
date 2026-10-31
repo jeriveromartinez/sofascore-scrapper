@@ -71,10 +71,10 @@ func setupCounterTestClients(t *testing.T) (*gorm.DB, *goredis.Client) {
 		t.Fatalf("gorm.Open: %v", err)
 	}
 	ensureIntegrationSchema(t, sqlDB, db)
-	if !db.Migrator().HasTable("download_counter_flushes") {
-		if err := db.Exec("CREATE TABLE IF NOT EXISTS download_counter_flushes (batch_id VARCHAR(64) NOT NULL PRIMARY KEY, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci").Error; err != nil {
-			t.Fatalf("create download_counter_flushes: %v", err)
-		}
+	// Register the flush marker through the same model AutoMigrateAll
+	// uses, so the test fails if the production schema drifts.
+	if err := db.AutoMigrate(&DownloadCounterFlush{}); err != nil {
+		t.Fatalf("migrate download_counter_flushes: %v", err)
 	}
 	return db, redisClient
 }
@@ -492,7 +492,7 @@ func TestDownloadCounter_SQLFailurePreservesPending(t *testing.T) {
 	}
 
 	var markerCount int64
-	if err := db.Model(&downloadCounterFlush{}).Where("batch_id = ?", batchID).Count(&markerCount).Error; err != nil {
+	if err := db.Model(&DownloadCounterFlush{}).Where("batch_id = ?", batchID).Count(&markerCount).Error; err != nil {
 		t.Fatalf("count rolled-back batch marker: %v", err)
 	}
 	if markerCount != 0 {

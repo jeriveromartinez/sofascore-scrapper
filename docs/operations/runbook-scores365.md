@@ -70,6 +70,13 @@ production:
    Expect HTTP 200 with team names populated. `limit` is capped at 6
    (`currentEventsMaxLimit` in `internal/events/app_handler.go`); a
    larger value is answered with `400 limit must be between 1 and 6`.
+   Live events are only served while the scraper keeps refreshing them:
+   a row whose `scraped_at` is older than 30 minutes
+   (`liveEventFreshness` in `internal/events/repository.go`) is treated
+   as no longer live and drops out of the carousel. The `reconcile live
+   events` scheduler job (every 10 minutes) also flips to `finished`
+   the stale live rows older than 6 hours, so the table does not
+   accumulate zombies.
 6. Verify a team logo URL serves correctly:
    ```bash
    TEAM_ID=$(docker exec docker-mariadb-1 mariadb -uroot -p"${DB_PASSWORD}" scores365 -Nse "SELECT team_id FROM teams ORDER BY team_id DESC LIMIT 1;")

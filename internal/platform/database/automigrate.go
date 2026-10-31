@@ -29,6 +29,7 @@ import (
 var automigrateModels = []any{
 	// Lote 0 — independent
 	&reporting.CrashReport{},
+	&apk.DownloadCounterFlush{},
 
 	// Lote 1 — depend on users
 	&users.User{},
