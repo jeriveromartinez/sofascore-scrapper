@@ -206,26 +206,18 @@ invitation.
 The Vue dashboard at `http://localhost:8080` speaks protobuf correctly
 through its generated `web/src/api` bindings.
 
-## Known limitation: push metrics on MariaDB
+## Push metrics on MariaDB
 
 `GET /api/web/v1/pushes/metrics/aggregate` (registered in
-`internal/push/handler.go`, under the `pushes` group) answers `200`,
-but two of its sub-queries use `strftime('%H', sent_at)` and
-`date('now')` — SQLite functions that MariaDB does not implement. See
-`internal/push/metrics_aggregator.go`.
+`internal/push/handler.go`, under the `pushes` group) runs the same SQL
+on SQLite and MariaDB. The only dialect-dependent expression is the
+hour extraction: `sentAtHourExpr` returns `strftime('%H', sent_at)` for
+SQLite and `HOUR(sent_at)` otherwise. The day bucketing is done with
+GORM comparisons on `created_at`, not with SQLite-only date functions.
 
-The aggregator ignores those two errors (`if err == nil`), so on
-MariaDB:
-
-- `audiencePeakToday` comes back `0`.
-- `hourlyHistogram30D` comes back empty.
-- `topPlatforms` and `topAppVersions` are unaffected — that query is
-  plain SQL and works.
-
-The endpoint never surfaces an error, so this shows up as "the chart is
-blank", not as a 500. Fixing it means swapping the date functions for
-their MariaDB equivalents (`HOUR(sent_at)`, `DATE(sent_at)`); that
-change is not in this repository yet.
+An earlier revision of this page claimed the endpoint silently returned
+`0` / empty charts on MariaDB because of `date('now')`; that function is
+not in the codebase.
 
 ## Troubleshooting
 
@@ -238,7 +230,7 @@ change is not in this repository yet.
 | Register returns `email and password are required` | JSON sent to a protobuf endpoint. See above. |
 | `users table is not empty, refusing to bootstrap invitation` | Someone already registered. Recreate the container for a clean slate, or use the existing credentials. |
 | Chain installs versions out of order | Filename glob order, not semver. See gotchas above. |
-| Metrics chart is empty on MariaDB | Known limitation, documented above. |
+| Metrics chart is empty on MariaDB | Check the push rows in the window first (`delivery_attempts.sent_at`); the aggregator is dialect-aware. See "Push metrics on MariaDB" above. |
 
 ## Where to escalate
 
