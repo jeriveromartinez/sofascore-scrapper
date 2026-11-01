@@ -1,3 +1,4 @@
+<script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import type { EventsPageFilters } from "../store/services/models/apiModels";
 
