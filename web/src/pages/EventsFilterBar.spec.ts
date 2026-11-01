@@ -83,4 +83,83 @@ describe("EventsFilterBar", () => {
       vi.useRealTimers();
     }
   });
+
+  it("offers every sport type the backend produces", () => {
+    const { wrapper } = mountBar({ direction: "asc" });
+    const values = wrapper
+      .findAll('select[name="sport"] option')
+      .map((option) => (option.element as HTMLOptionElement).value);
+
+    expect(values).toEqual([
+      "",
+      "football",
+      "basketball",
+      "tennis",
+      "ice-hockey",
+      "handball",
+      "american-football",
+      "baseball",
+      "volleyball",
+      "rugby",
+    ]);
+  });
+
+  it("does not offer the legacy hockey slug", () => {
+    const { wrapper } = mountBar({ direction: "asc" });
+    const values = wrapper
+      .findAll('select[name="sport"] option')
+      .map((option) => (option.element as HTMLOptionElement).value);
+
+    expect(values).not.toContain("hockey");
+    expect(values).toContain("ice-hockey");
+  });
+
+  it("emits the selected sport", async () => {
+    const { wrapper, onUpdate } = mountBar({ direction: "asc" });
+
+    await wrapper.find('select[name="sport"]').setValue("handball");
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ sport: "handball" }));
+  });
+
+  it("shows how many filters are active", () => {
+    const { wrapper } = mountBar({
+      direction: "asc",
+      sport: "football",
+      status: "inprogress",
+      league: "Premier",
+    });
+
+    expect(wrapper.find('[data-testid="active-filters"]').text()).toContain("3");
+  });
+
+  it("clears every filter but keeps the date, timezone and direction", async () => {
+    const { wrapper, onUpdate } = mountBar({
+      direction: "desc",
+      from: "2026-10-31",
+      tz: "Europe/Madrid",
+      sport: "football",
+      status: "finished",
+      league: "Premier",
+      team: "Arsenal",
+    });
+
+    await wrapper.find('[data-testid="clear-filters"]').trigger("click");
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      direction: "desc",
+      from: "2026-10-31",
+      tz: "Europe/Madrid",
+      sport: "",
+      status: "",
+      league: "",
+      team: "",
+    });
+  });
+
+  it("disables the clear button when no filter is active", () => {
+    const { wrapper } = mountBar({ direction: "asc", from: "2026-10-31", tz: "UTC" });
+
+    expect(wrapper.find('[data-testid="clear-filters"]').attributes("disabled")).toBeDefined();
+  });
 });
