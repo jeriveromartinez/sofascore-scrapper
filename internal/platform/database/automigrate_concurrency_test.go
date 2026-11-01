@@ -1,14 +1,42 @@
 package database
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"log/slog"
 	"testing"
+	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
-// TestIsConcurrentMigrationError covers the error texts a concurrent
-// migrator produces. The MySQL/MariaDB server numbers are the ones
-// the driver puts in the message; SQLite and PostgreSQL report the
-// same condition as "already exists".
+// fakeClock advances only when the retry sleeps, so the tests never
+// wait on the wall clock.
+type fakeClock struct {
+	now   time.Time
+	slept time.Duration
+}
+
+func newFakeClock() *fakeClock {
+	return &fakeClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+}
+
+func (c *fakeClock) Now() time.Time { return c.now }
+
+func (c *fakeClock) Sleep(d time.Duration) {
+	c.slept += d
+	c.now = c.now.Add(d)
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+}
+
+// TestIsConcurrentMigrationError covers the error shapes a concurrent
+// migrator produces. The MySQL driver exposes the server number, so
+// the check reads it from the typed error and falls back to the text
+// for dialects that only report "already exists".
 func TestIsConcurrentMigrationError(t *testing.T) {
 	cases := []struct {
 		name string
@@ -17,32 +45,52 @@ func TestIsConcurrentMigrationError(t *testing.T) {
 	}{
 		{
 			name: "duplicate key name",
-			err:  errors.New("Error 1061 (42000): Duplicate key name 'idx_playback_logs_ended_at'"),
+			err:  &mysql.MySQLError{Number: 1061, Message: "Duplicate key name 'idx_playback_logs_ended_at'"},
 			want: true,
 		},
 		{
 			name: "duplicate foreign key constraint name",
-			err:  errors.New("Error 1826 (42000): Duplicate foreign key constraint name 'fk_events'"),
+			err:  &mysql.MySQLError{Number: 1826, Message: "Duplicate foreign key constraint name 'fk_events'"},
 			want: true,
 		},
 		{
 			name: "missing index on drop",
-			err:  errors.New("Error 1091 (42000): Can't DROP 'idx_scraper_leagues_source_league_id'; check that column/key exists"),
+			err:  &mysql.MySQLError{Number: 1091, Message: "Can't DROP 'idx_scraper_leagues_source_league'"},
 			want: true,
 		},
 		{
 			name: "deadlock",
-			err:  errors.New("Error 1213 (40001): Deadlock found when trying to get lock; try restarting transaction"),
+			err:  &mysql.MySQLError{Number: 1213, Message: "Deadlock found when trying to get lock"},
 			want: true,
 		},
 		{
 			name: "lock wait timeout",
-			err:  errors.New("Error 1205 (HY000): Lock wait timeout exceeded; try restarting transaction"),
+			err:  &mysql.MySQLError{Number: 1205, Message: "Lock wait timeout exceeded"},
+			want: true,
+		},
+		{
+			name: "table already exists",
+			err:  &mysql.MySQLError{Number: 1050, Message: "Table 'events' already exists"},
 			want: true,
 		},
 		{
 			name: "duplicate column name",
-			err:  errors.New("Error 1060 (42S21): Duplicate column name 'external_match_id'"),
+			err:  &mysql.MySQLError{Number: 1060, Message: "Duplicate column name 'external_match_id'"},
+			want: true,
+		},
+		{
+			name: "duplicate entry",
+			err:  &mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'fotmob-47' for key 'idx_scraper_leagues_source_league'"},
+			want: true,
+		},
+		{
+			name: "duplicate index",
+			err:  &mysql.MySQLError{Number: 1831, Message: "Duplicate index 'idx_scraper_leagues_source_league'"},
+			want: true,
+		},
+		{
+			name: "wrapped driver error",
+			err:  fmt.Errorf("automigrate PlaybackLog (index 9): %w", &mysql.MySQLError{Number: 1061, Message: "Duplicate key name"}),
 			want: true,
 		},
 		{
@@ -57,7 +105,7 @@ func TestIsConcurrentMigrationError(t *testing.T) {
 		},
 		{
 			name: "syntax error",
-			err:  errors.New("Error 1064 (42000): You have an error in your SQL syntax"),
+			err:  &mysql.MySQLError{Number: 1064, Message: "You have an error in your SQL syntax"},
 			want: false,
 		},
 		{
@@ -80,14 +128,22 @@ func TestIsConcurrentMigrationError(t *testing.T) {
 	}
 }
 
-// TestRetryOnConcurrentMigration_RetriesConcurrentErrors makes sure a
-// statement that lost the race against another migrator is run again.
-func TestRetryOnConcurrentMigration_RetriesConcurrentErrors(t *testing.T) {
+// TestMigrationRetry_RetriesConcurrentErrors makes sure a statement
+// that lost the race against another migrator is run again.
+func TestMigrationRetry_RetriesConcurrentErrors(t *testing.T) {
+	clock := newFakeClock()
+	retry := migrationRetry{
+		deadline:  clock.Now().Add(time.Minute),
+		baseDelay: 10 * time.Millisecond,
+		sleep:     clock.Sleep,
+		now:       clock.Now,
+		log:       discardLogger(),
+	}
 	attempts := 0
-	err := retryOnConcurrentMigration(func() error {
+	err := retry.run(func() error {
 		attempts++
 		if attempts < 3 {
-			return errors.New("Error 1061 (42000): Duplicate key name 'idx_playback_logs_ended_at'")
+			return &mysql.MySQLError{Number: 1061, Message: "Duplicate key name"}
 		}
 		return nil
 	})
@@ -97,15 +153,25 @@ func TestRetryOnConcurrentMigration_RetriesConcurrentErrors(t *testing.T) {
 	if attempts != 3 {
 		t.Errorf("attempts = %d, want 3", attempts)
 	}
+	if clock.slept == 0 {
+		t.Error("the retry did not wait between attempts")
+	}
 }
 
-// TestRetryOnConcurrentMigration_GivesUpOnPermanentErrors makes sure a
-// real failure is reported instead of being retried until the attempts
-// run out.
-func TestRetryOnConcurrentMigration_GivesUpOnPermanentErrors(t *testing.T) {
+// TestMigrationRetry_GivesUpOnPermanentErrors makes sure a real failure
+// is reported instead of being retried.
+func TestMigrationRetry_GivesUpOnPermanentErrors(t *testing.T) {
+	clock := newFakeClock()
+	retry := migrationRetry{
+		deadline:  clock.Now().Add(time.Minute),
+		baseDelay: 10 * time.Millisecond,
+		sleep:     clock.Sleep,
+		now:       clock.Now,
+		log:       discardLogger(),
+	}
 	want := errors.New("table does not exist")
 	attempts := 0
-	err := retryOnConcurrentMigration(func() error {
+	err := retry.run(func() error {
 		attempts++
 		return want
 	})
@@ -115,20 +181,69 @@ func TestRetryOnConcurrentMigration_GivesUpOnPermanentErrors(t *testing.T) {
 	if attempts != 1 {
 		t.Errorf("attempts = %d, want 1 (a permanent error must not be retried)", attempts)
 	}
+	if clock.slept != 0 {
+		t.Errorf("slept = %s, want 0", clock.slept)
+	}
 }
 
-// TestRetryOnConcurrentMigration_GivesUpAfterTheAttempts makes sure a
-// race that never resolves is reported instead of hanging the boot.
-func TestRetryOnConcurrentMigration_GivesUpAfterTheAttempts(t *testing.T) {
-	attempts := 0
-	err := retryOnConcurrentMigration(func() error {
-		attempts++
-		return errors.New("Error 1061 (42000): Duplicate key name 'idx_playback_logs_ended_at'")
-	})
-	if err == nil {
-		t.Fatal("err = nil, want the duplicate key error")
+// TestMigrationRetry_StopsAtTheDeadline makes sure a race that never
+// resolves is reported instead of hanging the boot.
+func TestMigrationRetry_StopsAtTheDeadline(t *testing.T) {
+	clock := newFakeClock()
+	deadline := clock.Now().Add(500 * time.Millisecond)
+	retry := migrationRetry{
+		deadline:  deadline,
+		baseDelay: 100 * time.Millisecond,
+		sleep:     clock.Sleep,
+		now:       clock.Now,
+		log:       discardLogger(),
 	}
-	if attempts != migrateRetryAttempts {
-		t.Errorf("attempts = %d, want %d", attempts, migrateRetryAttempts)
+	want := &mysql.MySQLError{Number: 1061, Message: "Duplicate key name"}
+	attempts := 0
+	err := retry.run(func() error {
+		attempts++
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("err = %v, want %v", err, want)
+	}
+	if attempts < 2 {
+		t.Errorf("attempts = %d, want at least 2", attempts)
+	}
+	if clock.now.After(deadline) {
+		t.Errorf("the retry slept past the deadline: now = %s, deadline = %s", clock.now, deadline)
+	}
+}
+
+// TestMigrationRetry_LogsEachRetry keeps the operator able to tell a
+// clean boot from a race that backed off.
+func TestMigrationRetry_LogsEachRetry(t *testing.T) {
+	var logs bytes.Buffer
+	clock := newFakeClock()
+	retry := migrationRetry{
+		deadline:  clock.Now().Add(time.Minute),
+		baseDelay: time.Millisecond,
+		sleep:     clock.Sleep,
+		now:       clock.Now,
+		log:       slog.New(slog.NewTextHandler(&logs, nil)),
+	}
+	attempts := 0
+	if err := retry.run(func() error {
+		attempts++
+		if attempts < 2 {
+			return &mysql.MySQLError{Number: 1213, Message: "Deadlock found"}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if !bytes.Contains(logs.Bytes(), []byte("concurrent migration")) {
+		t.Errorf("the retry was not logged, got %q", logs.String())
+	}
+	if bytes.Contains(logs.Bytes(), []byte("Deadlock found")) {
+		t.Errorf("the log leaked the driver message, got %q", logs.String())
+	}
+	if !bytes.Contains(logs.Bytes(), []byte("code=1213")) {
+		t.Errorf("the log did not carry the server error number, got %q", logs.String())
 	}
 }

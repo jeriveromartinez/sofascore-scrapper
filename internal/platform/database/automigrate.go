@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/jeriveromartinez/scores365-scrapper/internal/apk"
 	"github.com/jeriveromartinez/scores365-scrapper/internal/auth"
@@ -73,18 +74,33 @@ var automigrateModels = []any{
 // external_match_id before the unique index is created. See that
 // helper's docstring for the rationale.
 //
-// Every step tolerates another backend migrating the same database at
-// the same time: the deployment runs one backend per instance and
-// they all boot against the same MariaDB. See
-// automigrate_concurrency.go for the details.
+// The deployment runs one backend per instance and they all boot
+// against the same MariaDB. AutoMigrateAll holds a cluster-wide lock
+// while it migrates, so the backends that boot together serialize
+// instead of racing; every step also retries when an older backend
+// that does not take the lock collides with it. See
+// automigrate_lock.go and automigrate_concurrency.go for the details.
 func AutoMigrateAll(db *gorm.DB) error {
-	if err := retryOnConcurrentMigration(func() error {
+	deadline := time.Now().Add(migrationBudget)
+	retry := migrationRetry{
+		deadline:  deadline,
+		baseDelay: migrationRetryBaseDelay,
+		sleep:     time.Sleep,
+		now:       time.Now,
+	}
+	return withMigrationLock(db, deadline, func(db *gorm.DB) error {
+		return autoMigrateAll(db, retry)
+	})
+}
+
+func autoMigrateAll(db *gorm.DB, retry migrationRetry) error {
+	if err := retry.run(func() error {
 		return PreMigrateLegacyEvents(db)
 	}); err != nil {
 		return fmt.Errorf("pre-migrate legacy events: %w", err)
 	}
 	for i, model := range automigrateModels {
-		if err := retryOnConcurrentMigration(func() error {
+		if err := retry.run(func() error {
 			return db.AutoMigrate(model)
 		}); err != nil {
 			return fmt.Errorf("automigrate %s (index %d): %w",
@@ -96,7 +112,7 @@ func AutoMigrateAll(db *gorm.DB) error {
 	// covering source_league_id alone, and AutoMigrate never replaces
 	// an index that exists. The migration swaps it for the composite
 	// one, so it has to run after the table exists.
-	if err := retryOnConcurrentMigration(func() error {
+	if err := retry.run(func() error {
 		return catalog.MigrateSourceLeagueIndex(db)
 	}); err != nil {
 		return fmt.Errorf("migrate catalog source league index: %w", err)
@@ -105,7 +121,7 @@ func AutoMigrateAll(db *gorm.DB) error {
 	// row per league the pre-shift code path had written. The repair
 	// needs the tournaments, events, device assignment and global
 	// config tables, so it runs after the AutoMigrate loop.
-	if err := retryOnConcurrentMigration(func() error {
+	if err := retry.run(func() error {
 		return MigrateFotMobTournamentDuplicates(db)
 	}); err != nil {
 		return fmt.Errorf("migrate fotmob tournament duplicates: %w", err)
