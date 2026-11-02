@@ -1,5 +1,7 @@
 import { BaseApiService } from "./BaseApiService";
 import { EventPage } from "../../proto/api";
+import { authJsonAxios } from "./axiosAuth";
+import { readAuthStorage } from "../authStorage";
 import type {
   EventPageResponse,
   EventsPageFilters,
@@ -8,6 +10,26 @@ import type {
 export class EventsApiService extends BaseApiService {
   constructor() {
     super("/events");
+  }
+
+  /**
+   * Fetch the sport categories the events table holds.
+   *
+   * The endpoint answers JSON, not protobuf: the category list is a
+   * plain string array and the catalog endpoints under /scraper-leagues
+   * follow the same convention.
+   */
+  async getSports(signal?: AbortSignal): Promise<string[]> {
+    const token = readAuthStorage().user?.token ?? "";
+    const res = await authJsonAxios.get<{ data?: unknown }>(`${this.pathApi}/sports`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+    const payload = res.data ?? {};
+    const list = Array.isArray(payload.data) ? payload.data : [];
+    return list.filter(
+      (value): value is string => typeof value === "string" && value !== "",
+    );
   }
 
   async getEventPage(

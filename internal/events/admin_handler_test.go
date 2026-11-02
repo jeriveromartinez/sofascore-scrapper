@@ -114,6 +114,75 @@ func TestAdminEventsInvalidDateMentionsUTC(t *testing.T) {
 	}
 }
 
+func TestAdminEventSportsReturnsEveryCategoryInTheDatabase(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	if err := db.Create(&[]Event{
+		{ExternalMatchId: "1", Sport: "football"},
+		{ExternalMatchId: "2", Sport: "cricket"},
+		{ExternalMatchId: "3", Sport: "football"},
+		{ExternalMatchId: "4", Sport: ""},
+	}).Error; err != nil {
+		t.Fatalf("seed events: %v", err)
+	}
+	deleted := Event{ExternalMatchId: "5", Sport: "chess"}
+	if err := db.Create(&deleted).Error; err != nil {
+		t.Fatalf("seed deleted event: %v", err)
+	}
+	if err := db.Delete(&deleted).Error; err != nil {
+		t.Fatalf("delete event: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/events/sports", nil)
+
+	NewAdminHandler(NewRepository(db)).handleGetEventSports(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want %d, got %d", http.StatusOK, recorder.Code)
+	}
+	var payload struct {
+		Data []string `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode sports response: %v", err)
+	}
+	want := []string{"cricket", "football"}
+	if len(payload.Data) != len(want) {
+		t.Fatalf("sports: want %v, got %v", want, payload.Data)
+	}
+	for i, sport := range want {
+		if payload.Data[i] != sport {
+			t.Fatalf("sports: want %v, got %v", want, payload.Data)
+		}
+	}
+}
+
+func TestAdminEventSportsAnswersAnEmptyListWhenThereAreNoEvents(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/events/sports", nil)
+
+	NewAdminHandler(NewRepository(db)).handleGetEventSports(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want %d, got %d", http.StatusOK, recorder.Code)
+	}
+	var payload struct {
+		Data []string `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode sports response: %v", err)
+	}
+	if len(payload.Data) != 0 {
+		t.Fatalf("sports: want an empty list, got %v", payload.Data)
+	}
+}
+
 func getAdminEventsPage(t *testing.T, handler *AdminHandler, target string) (*httptest.ResponseRecorder, *pb.EventPage) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

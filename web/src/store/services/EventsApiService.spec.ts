@@ -1,6 +1,41 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { EventsApiService } from "./EventsApiService";
+import { authJsonAxios } from "./axiosAuth";
 import type { EventsPageFilters } from "./models/apiModels";
+
+vi.mock("./axiosAuth", () => ({ authJsonAxios: { get: vi.fn() } }));
+
+vi.mock("../authStorage", () => ({
+  readAuthStorage: () => ({ user: { token: "tok" } }),
+  writeAuthStorage: vi.fn(),
+  clearAuthStorage: vi.fn(),
+}));
+
+describe("EventsApiService.getSports", () => {
+  it("asks the server for the categories and returns them", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["football", "cricket"] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getSports()).toEqual(["football", "cricket"]);
+    expect(get).toHaveBeenCalledWith(
+      "/events/sports",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer tok" },
+      }),
+    );
+  });
+
+  it("drops the entries that are not category names", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["football", 7, "", null] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getSports()).toEqual(["football"]);
+  });
+});
 
 describe("EventsApiService.getEventPage", () => {
   it("forwards direction=desc to the request URL when filters.direction=desc", async () => {

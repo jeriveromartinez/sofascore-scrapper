@@ -29,6 +29,7 @@ func NewAdminHandler(repo *Repository) *AdminHandler {
 func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerDeps) {
 	group.GET("/events", deps.AuthMiddleware, h.handleGetEvents)
 	group.GET("/events/page", deps.AuthMiddleware, h.handleGetEventsPage)
+	group.GET("/events/sports", deps.AuthMiddleware, h.handleGetEventSports)
 }
 
 const defaultPageLimit = 20
@@ -148,6 +149,26 @@ func (h *AdminHandler) handleGetEventsPage(c *gin.Context) {
 			HasMore:    hasMore,
 		},
 	})
+}
+
+// handleGetEventSports answers the sport categories the events table
+// holds so the dashboard filter can offer every category the database
+// has instead of a hardcoded list.
+//
+// The response is JSON on purpose: the catalog endpoints under
+// /scraper-leagues already answer JSON, and a category list is a plain
+// string array that needs no protobuf contract.
+func (h *AdminHandler) handleGetEventSports(c *gin.Context) {
+	sports, err := h.repo.DistinctSports(c.Request.Context())
+	if err != nil {
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if sports == nil {
+		sports = []string{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": sports})
 }
 
 func startOfTodayMs(tz string) (int64, error) {

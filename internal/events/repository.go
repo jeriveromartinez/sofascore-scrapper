@@ -486,6 +486,28 @@ func (r *Repository) getCurrentAndUpcoming(ctx context.Context, tournamentIDs []
 	return events, nil
 }
 
+// DistinctSports returns the sport categories the events table holds,
+// sorted alphabetically.
+//
+// The dashboard filter needs the categories the database actually has:
+// the sport of an event is copied from the league it was scraped for
+// (see scraper.leagueSport), and the catalog lets an operator type any
+// category there, so the canonical list of sports is only a subset of
+// what can end up in the table.
+func (r *Repository) DistinctSports(ctx context.Context) ([]string, error) {
+	var sports []string
+	err := r.db.WithContext(ctx).
+		Model(&Event{}).
+		Where("sport <> ''").
+		Distinct("sport").
+		Order("sport ASC").
+		Pluck("sport", &sports).Error
+	if err != nil {
+		return nil, err
+	}
+	return sports, nil
+}
+
 func (r *Repository) ListPage(ctx context.Context, f EventsPageFilter) ([]Event, bool, error) {
 	if f.Limit <= 0 {
 		f.Limit = 20
