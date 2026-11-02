@@ -6,6 +6,10 @@ import (
 	pb "github.com/jeriveromartinez/scores365-scrapper/internal/gen/api"
 )
 
+// DeviceToProto maps a device to its API representation. iptv_url carries
+// the panel URL the device is served, which only the registration resolves
+// (from the APK version published for the package); the list endpoints
+// leave it empty.
 func DeviceToProto(d Device) *pb.Device {
 	pb := &pb.Device{
 		Id:        uint32(d.ID),
@@ -18,6 +22,7 @@ func DeviceToProto(d Device) *pb.Device {
 		LastSeen:  d.LastSeen,
 		PackageId: d.PackageId,
 		Timezone:  d.Timezone,
+		IptvUrl:   d.PanelURL,
 	}
 	if d.DomainID != nil {
 		pb.DomainId = uint32(*d.DomainID)

@@ -21,4 +21,8 @@ type Device struct {
 	// device did not register a TZ; the scheduler treats it as UTC when
 	// computing per-device fire times for device-local scheduled pushes.
 	Timezone string `gorm:"column:timezone;size:64;not null;default:''"`
+	// PanelURL is the IPTV URL of the APK version currently published
+	// for the device's package. Registration resolves it from the same
+	// APK row the domain is derived from, so it is never stored.
+	PanelURL string `gorm:"-" json:"-"`
 }
