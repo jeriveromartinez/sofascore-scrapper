@@ -2,7 +2,7 @@
 # Persistent volumes — state survives `docker compose down`.
 #
 # Usage:
-#   cp .env.example .env       # set DB_PASSWORD, JWT_SECRET
+#   cp .env.example .env       # set DB_PASSWORD, JWT_SECRET, DEFAULT_ADMIN_PASSWORD
 #   docker compose -f deployments/docker/compose.dev.yml up --build
 #   # In another terminal:
 #   curl http://localhost:8080/health/live
