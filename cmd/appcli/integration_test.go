@@ -71,17 +71,21 @@ func TestSimulatorAgainstTheRealAPI(t *testing.T) {
 	require.NoError(t, db.Create(&away).Error)
 
 	require.NoError(t, db.Create(&events.Event{
-		ExternalMatchId:             "fotmob-4711",
-		Source:                      "fotmob",
-		Sport:                       "football",
-		HomeScore:                   2,
-		AwayScore:                   1,
-		HomeTeamId:                  100,
-		AwayTeamId:                  200,
-		LeagueId:                    league.ID,
-		StatusType:                  "inprogress",
-		StartTimestamp:              time.Now().Unix(),
-		CurrentPeriodStartTimestamp: time.Now().Unix(),
+		ExternalMatchId: "fotmob-4711",
+		Source:          "fotmob",
+		Sport:           "football",
+		HomeScore:       2,
+		AwayScore:       1,
+		HomeTeamId:      100,
+		AwayTeamId:      200,
+		LeagueId:        league.ID,
+		StatusType:      "inprogress",
+		// The live-event query only serves an event the scraper
+		// refreshed in the last 30 minutes, so the fixture has to
+		// carry a fresh scraped_at.
+		ScrapedAt:                   time.Now().Unix(),
+		StartTimestamp:              time.Now().UnixMilli(),
+		CurrentPeriodStartTimestamp: time.Now().UnixMilli(),
 	}).Error)
 
 	mr, err := miniredis.Run()
