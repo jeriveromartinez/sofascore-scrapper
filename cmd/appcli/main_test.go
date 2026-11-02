@@ -138,7 +138,6 @@ func TestRunCrashSendsTheAppNameOfTheRealClient(t *testing.T) {
 	code := run([]string{"crash", "--base-url", srv.URL}, &stdout, &stderr)
 
 	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
-	assert.Equal(t, DefaultAppName, gotApp)
 	assert.Equal(t, "QCho TV Entertaiment", gotApp)
 }
 

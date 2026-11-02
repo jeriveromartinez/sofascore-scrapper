@@ -32,8 +32,9 @@ const (
 	// (flutter-tv/pubspec.yaml).
 	DefaultAppVersion = "1.0.22"
 	// DefaultAppName is the app name the crash report carries. The real
-	// client sends the Android application label (flutter-tv/android/app/
-	// src/main/AndroidManifest.xml), so the simulator sends the same one.
+	// client sends the Android application label declared in the sibling
+	// flutter-tv repository (android/app/src/main/AndroidManifest.xml),
+	// so the simulator sends the same one — misspelling included.
 	DefaultAppName = "QCho TV Entertaiment"
 	// DefaultPlatform is the platform the Android build reports.
 	DefaultPlatform = "android"
