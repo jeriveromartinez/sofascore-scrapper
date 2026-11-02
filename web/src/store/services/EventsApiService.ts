@@ -20,16 +20,7 @@ export class EventsApiService extends BaseApiService {
    * follow the same convention.
    */
   async getSports(signal?: AbortSignal): Promise<string[]> {
-    const token = readAuthStorage().user?.token ?? "";
-    const res = await authJsonAxios.get<{ data?: unknown }>(`${this.pathApi}/sports`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal,
-    });
-    const payload = res.data ?? {};
-    const list = Array.isArray(payload.data) ? payload.data : [];
-    return list.filter(
-      (value): value is string => typeof value === "string" && value !== "",
-    );
+    return this.fetchStringList("/sports", signal);
   }
 
   /**
@@ -38,13 +29,33 @@ export class EventsApiService extends BaseApiService {
    * The endpoint answers JSON, like the category list above.
    */
   async getLeagues(signal?: AbortSignal): Promise<string[]> {
+    return this.fetchStringList("/leagues", signal);
+  }
+
+  /**
+   * Read a list of plain strings from a JSON endpoint of this service.
+   *
+   * The request accepts every status so the error body can be read: the
+   * server answers `{"error": "..."}`, and axios' own message would hide
+   * it behind a generic "Request failed with status code 500".
+   */
+  private async fetchStringList(
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
     const token = readAuthStorage().user?.token ?? "";
-    const res = await authJsonAxios.get<{ data?: unknown }>(`${this.pathApi}/leagues`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal,
-    });
-    const payload = res.data ?? {};
-    const list = Array.isArray(payload.data) ? payload.data : [];
+    const res = await authJsonAxios.get<{ data?: unknown; error?: string }>(
+      `${this.pathApi}${path}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+        validateStatus: () => true,
+      },
+    );
+    if (res.status >= 400) {
+      throw new Error(res.data?.error || `HTTP ${res.status}`);
+    }
+    const list = Array.isArray(res.data?.data) ? res.data.data : [];
     return list.filter(
       (value): value is string => typeof value === "string" && value !== "",
     );

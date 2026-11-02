@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount, flushPromises, type VueWrapper } from "@vue/test-utils";
+import { toast } from "vue3-toastify";
 import EventsFilterBar from "./EventsFilterBar.vue";
 import type { EventsPageFilters } from "../store/services/models/apiModels";
 
@@ -33,6 +34,7 @@ beforeEach(() => {
   getSports.mockResolvedValue([]);
   getLeagues.mockReset();
   getLeagues.mockResolvedValue([]);
+  vi.mocked(toast.error).mockReset();
 });
 
 describe("EventsFilterBar", () => {
@@ -154,6 +156,26 @@ describe("EventsFilterBar", () => {
     ]);
   });
 
+  it("falls back to the canonical categories when the request fails", async () => {
+    getSports.mockRejectedValue(new Error("no se pudieron cargar las categorías"));
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    expect(sportValues(wrapper)).toEqual([
+      "",
+      "football",
+      "basketball",
+      "tennis",
+      "ice-hockey",
+      "handball",
+      "american-football",
+      "baseball",
+      "volleyball",
+      "rugby",
+    ]);
+    expect(toast.error).toHaveBeenCalledWith("no se pudieron cargar las categorías");
+  });
+
   it("does not offer the legacy hockey slug", async () => {
     getSports.mockResolvedValue(["football", "ice-hockey"]);
     const { wrapper } = mountBar({ direction: "asc" });
@@ -186,6 +208,15 @@ describe("EventsFilterBar", () => {
     await flushPromises();
 
     expect(wrapper.findAll("#events-league-options option")).toHaveLength(0);
+  });
+
+  it("reports the failure and keeps the league suggestions empty", async () => {
+    getLeagues.mockRejectedValue(new Error("no se pudieron cargar las ligas"));
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    expect(wrapper.findAll("#events-league-options option")).toHaveLength(0);
+    expect(toast.error).toHaveBeenCalledWith("no se pudieron cargar las ligas");
   });
 
   it("emits the selected sport", async () => {

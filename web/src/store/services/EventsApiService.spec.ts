@@ -35,6 +35,15 @@ describe("EventsApiService.getSports", () => {
 
     expect(await svc.getSports()).toEqual(["football"]);
   });
+
+  it("raises the message the server sent when the request fails", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ status: 500, data: { error: "events unavailable" } });
+
+    const svc = new EventsApiService();
+
+    await expect(svc.getSports()).rejects.toThrow("events unavailable");
+  });
 });
 
 describe("EventsApiService.getLeagues", () => {
