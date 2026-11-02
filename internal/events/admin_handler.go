@@ -30,6 +30,7 @@ func (h *AdminHandler) RegisterRoutes(group *gin.RouterGroup, deps AdminHandlerD
 	group.GET("/events", deps.AuthMiddleware, h.handleGetEvents)
 	group.GET("/events/page", deps.AuthMiddleware, h.handleGetEventsPage)
 	group.GET("/events/sports", deps.AuthMiddleware, h.handleGetEventSports)
+	group.GET("/events/leagues", deps.AuthMiddleware, h.handleGetEventLeagues)
 }
 
 const defaultPageLimit = 20
@@ -169,6 +170,22 @@ func (h *AdminHandler) handleGetEventSports(c *gin.Context) {
 		sports = []string{}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": sports})
+}
+
+// handleGetEventLeagues answers the league names the events table
+// points at so the dashboard filter can offer the leagues the database
+// has instead of asking the operator to remember their names.
+func (h *AdminHandler) handleGetEventLeagues(c *gin.Context) {
+	leagues, err := h.repo.DistinctLeagueNames(c.Request.Context())
+	if err != nil {
+		slog.Default().ErrorContext(c.Request.Context(), "request failed", slog.String("path", c.FullPath()), slog.String("err", err.Error()))
+		server.RespondError(c, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if leagues == nil {
+		leagues = []string{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": leagues})
 }
 
 func startOfTodayMs(tz string) (int64, error) {

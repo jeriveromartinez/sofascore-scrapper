@@ -34,6 +34,7 @@ const STATUSES = [
 ] as const;
 
 const sports = ref<string[]>([]);
+const leagues = ref<string[]>([]);
 const leagueInput = ref(props.modelValue.league ?? "");
 const teamInput = ref(props.modelValue.team ?? "");
 const debounceTimers: Record<"league" | "team", number | null> = { league: null, team: null };
@@ -75,6 +76,16 @@ onMounted(async () => {
       err instanceof Error
         ? err.message
         : "No se pudieron cargar las categorías",
+    );
+  }
+  try {
+    const names = await eventsApiService.getLeagues();
+    if (names.length) leagues.value = names;
+  } catch (err) {
+    toast.error(
+      err instanceof Error
+        ? err.message
+        : "No se pudieron cargar las ligas",
     );
   }
 });
@@ -190,9 +201,13 @@ onBeforeUnmount(() => {
           name="league"
           class="form-control"
           placeholder="Liga (mín. 2)"
+          list="events-league-options"
           autocomplete="off"
           @input="debouncedText('league', leagueInput)"
         />
+        <datalist id="events-league-options">
+          <option v-for="league in leagues" :key="league" :value="league"></option>
+        </datalist>
       </div>
 
       <div class="col-12 col-sm-6 col-xl-2">

@@ -37,6 +37,32 @@ describe("EventsApiService.getSports", () => {
   });
 });
 
+describe("EventsApiService.getLeagues", () => {
+  it("asks the server for the league names and returns them", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["Premier League", "Liga MX"] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getLeagues()).toEqual(["Premier League", "Liga MX"]);
+    expect(get).toHaveBeenCalledWith(
+      "/events/leagues",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer tok" },
+      }),
+    );
+  });
+
+  it("drops the entries that are not league names", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["Liga MX", 7, "", null] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getLeagues()).toEqual(["Liga MX"]);
+  });
+});
+
 describe("EventsApiService.getEventPage", () => {
   it("forwards direction=desc to the request URL when filters.direction=desc", async () => {
     const captured: string[] = [];

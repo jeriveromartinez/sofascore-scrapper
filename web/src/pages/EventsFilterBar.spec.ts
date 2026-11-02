@@ -3,12 +3,13 @@ import { mount, flushPromises, type VueWrapper } from "@vue/test-utils";
 import EventsFilterBar from "./EventsFilterBar.vue";
 import type { EventsPageFilters } from "../store/services/models/apiModels";
 
-const { getSports } = vi.hoisted(() => ({
+const { getSports, getLeagues } = vi.hoisted(() => ({
   getSports: vi.fn<() => Promise<string[]>>(),
+  getLeagues: vi.fn<() => Promise<string[]>>(),
 }));
 
 vi.mock("../store/services", () => ({
-  eventsApiService: { getSports },
+  eventsApiService: { getSports, getLeagues },
 }));
 
 vi.mock("vue3-toastify", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -30,6 +31,8 @@ function sportValues(wrapper: VueWrapper): string[] {
 beforeEach(() => {
   getSports.mockReset();
   getSports.mockResolvedValue([]);
+  getLeagues.mockReset();
+  getLeagues.mockResolvedValue([]);
 });
 
 describe("EventsFilterBar", () => {
@@ -160,6 +163,29 @@ describe("EventsFilterBar", () => {
 
     expect(values).not.toContain("hockey");
     expect(values).toContain("ice-hockey");
+  });
+
+  it("suggests the leagues the database holds", async () => {
+    getLeagues.mockResolvedValue(["Premier League", "Liga MX"]);
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    const options = wrapper
+      .findAll("#events-league-options option")
+      .map((option) => (option.element as HTMLOptionElement).value);
+
+    expect(options).toEqual(["Premier League", "Liga MX"]);
+    expect(
+      wrapper.find('input[name="league"]').attributes("list"),
+    ).toBe("events-league-options");
+  });
+
+  it("leaves the league suggestions empty when the database lists none", async () => {
+    getLeagues.mockResolvedValue([]);
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    expect(wrapper.findAll("#events-league-options option")).toHaveLength(0);
   });
 
   it("emits the selected sport", async () => {

@@ -183,6 +183,80 @@ func TestAdminEventSportsAnswersAnEmptyListWhenThereAreNoEvents(t *testing.T) {
 	}
 }
 
+func TestAdminEventLeaguesReturnsEveryLeagueInTheDatabase(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+	leagues := []tournaments.Tournament{
+		{Model: gorm.Model{ID: 1}, Name: "Premier League", Slug: "premier-league"},
+		{Model: gorm.Model{ID: 2}, Name: "Liga MX", Slug: "liga-mx"},
+		{Model: gorm.Model{ID: 3}, Name: "Retired Cup", Slug: "retired-cup"},
+	}
+	if err := db.Create(&leagues).Error; err != nil {
+		t.Fatalf("seed tournaments: %v", err)
+	}
+	if err := db.Create(&[]Event{
+		{ExternalMatchId: "1", LeagueId: 1},
+		{ExternalMatchId: "2", LeagueId: 1},
+		{ExternalMatchId: "3", LeagueId: 2},
+		{ExternalMatchId: "4", LeagueId: 3},
+		{ExternalMatchId: "5"},
+	}).Error; err != nil {
+		t.Fatalf("seed events: %v", err)
+	}
+	if err := db.Delete(&leagues[2]).Error; err != nil {
+		t.Fatalf("delete tournament: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/events/leagues", nil)
+
+	NewAdminHandler(NewRepository(db)).handleGetEventLeagues(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want %d, got %d", http.StatusOK, recorder.Code)
+	}
+	var payload struct {
+		Data []string `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode leagues response: %v", err)
+	}
+	want := []string{"Liga MX", "Premier League"}
+	if len(payload.Data) != len(want) {
+		t.Fatalf("leagues: want %v, got %v", want, payload.Data)
+	}
+	for i, league := range want {
+		if payload.Data[i] != league {
+			t.Fatalf("leagues: want %v, got %v", want, payload.Data)
+		}
+	}
+}
+
+func TestAdminEventLeaguesAnswersAnEmptyListWhenThereAreNoEvents(t *testing.T) {
+	db := setupAdminHandlerTestDB(t)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/events/leagues", nil)
+
+	NewAdminHandler(NewRepository(db)).handleGetEventLeagues(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want %d, got %d", http.StatusOK, recorder.Code)
+	}
+	var payload struct {
+		Data []string `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode leagues response: %v", err)
+	}
+	if len(payload.Data) != 0 {
+		t.Fatalf("leagues: want an empty list, got %v", payload.Data)
+	}
+}
+
 func getAdminEventsPage(t *testing.T, handler *AdminHandler, target string) (*httptest.ResponseRecorder, *pb.EventPage) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

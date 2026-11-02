@@ -32,6 +32,24 @@ export class EventsApiService extends BaseApiService {
     );
   }
 
+  /**
+   * Fetch the league names the events table points at.
+   *
+   * The endpoint answers JSON, like the category list above.
+   */
+  async getLeagues(signal?: AbortSignal): Promise<string[]> {
+    const token = readAuthStorage().user?.token ?? "";
+    const res = await authJsonAxios.get<{ data?: unknown }>(`${this.pathApi}/leagues`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+    const payload = res.data ?? {};
+    const list = Array.isArray(payload.data) ? payload.data : [];
+    return list.filter(
+      (value): value is string => typeof value === "string" && value !== "",
+    );
+  }
+
   async getEventPage(
     cursor?: string,
     limit?: number,
