@@ -1,6 +1,76 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { EventsApiService } from "./EventsApiService";
+import { authJsonAxios } from "./axiosAuth";
 import type { EventsPageFilters } from "./models/apiModels";
+
+vi.mock("./axiosAuth", () => ({ authJsonAxios: { get: vi.fn() } }));
+
+vi.mock("../authStorage", () => ({
+  readAuthStorage: () => ({ user: { token: "tok" } }),
+  writeAuthStorage: vi.fn(),
+  clearAuthStorage: vi.fn(),
+}));
+
+describe("EventsApiService.getSports", () => {
+  it("asks the server for the categories and returns them", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["football", "cricket"] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getSports()).toEqual(["football", "cricket"]);
+    expect(get).toHaveBeenCalledWith(
+      "/events/sports",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer tok" },
+      }),
+    );
+  });
+
+  it("drops the entries that are not category names", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["football", 7, "", null] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getSports()).toEqual(["football"]);
+  });
+
+  it("raises the message the server sent when the request fails", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ status: 500, data: { error: "events unavailable" } });
+
+    const svc = new EventsApiService();
+
+    await expect(svc.getSports()).rejects.toThrow("events unavailable");
+  });
+});
+
+describe("EventsApiService.getLeagues", () => {
+  it("asks the server for the league names and returns them", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["Premier League", "Liga MX"] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getLeagues()).toEqual(["Premier League", "Liga MX"]);
+    expect(get).toHaveBeenCalledWith(
+      "/events/leagues",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer tok" },
+      }),
+    );
+  });
+
+  it("drops the entries that are not league names", async () => {
+    const get = authJsonAxios.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockResolvedValue({ data: { data: ["Liga MX", 7, "", null] } });
+
+    const svc = new EventsApiService();
+
+    expect(await svc.getLeagues()).toEqual(["Liga MX"]);
+  });
+});
 
 describe("EventsApiService.getEventPage", () => {
   it("forwards direction=desc to the request URL when filters.direction=desc", async () => {

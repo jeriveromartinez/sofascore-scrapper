@@ -192,6 +192,8 @@ func TestRouteCompatibility(t *testing.T) {
 		"DELETE /api/web/v1/users/:id",
 		"GET /api/web/v1/events",
 		"GET /api/web/v1/events/page",
+		"GET /api/web/v1/events/sports",
+		"GET /api/web/v1/events/leagues",
 		"GET /api/web/v1/devices",
 		"GET /api/web/v1/devices/page",
 		"GET /api/web/v1/devices/all",
@@ -243,7 +245,7 @@ func TestRouteCompatibility(t *testing.T) {
 			t.Errorf("missing route %s", want)
 		}
 	}
-	if len(got) != 73 {
-		t.Fatalf("got %d routes, want 73", len(got))
+	if len(got) != 75 {
+		t.Fatalf("got %d routes, want 75", len(got))
 	}
 }

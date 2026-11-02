@@ -1,23 +1,30 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { toast } from "vue3-toastify";
+import { eventsApiService } from "../store/services";
 import type { EventsPageFilters } from "../store/services/models/apiModels";
 
 const props = defineProps<{ modelValue: EventsPageFilters }>();
 const emit = defineEmits<{ (e: "update:modelValue", value: EventsPageFilters): void }>();
 
-// Canonical slugs of internal/scraper/scores365/feed.go (sportMap) and
-// internal/scraper/catalog/discovery.go. The API filters by exact match.
-const SPORTS = [
-  { value: "football", label: "Fútbol" },
-  { value: "basketball", label: "Baloncesto" },
-  { value: "tennis", label: "Tenis" },
-  { value: "ice-hockey", label: "Hockey hielo" },
-  { value: "handball", label: "Balonmano" },
-  { value: "american-football", label: "Fútbol americano" },
-  { value: "baseball", label: "Béisbol" },
-  { value: "volleyball", label: "Voleibol" },
-  { value: "rugby", label: "Rugby" },
-] as const;
+// Labels for the canonical slugs of internal/scraper/scores365/feed.go
+// (sportMap). The category list itself comes from the database: the
+// sport of an event is copied from the league it was scraped for and the
+// catalog lets an operator type any category there, so the canonical
+// slugs are only a subset of what the events table holds.
+const SPORT_LABELS: Record<string, string> = {
+  football: "Fútbol",
+  basketball: "Baloncesto",
+  tennis: "Tenis",
+  "ice-hockey": "Hockey hielo",
+  handball: "Balonmano",
+  "american-football": "Fútbol americano",
+  baseball: "Béisbol",
+  volleyball: "Voleibol",
+  rugby: "Rugby",
+};
+
+const CANONICAL_SPORTS = Object.keys(SPORT_LABELS);
 
 const STATUSES = [
   { value: "", label: "Todos" },
@@ -26,6 +33,8 @@ const STATUSES = [
   { value: "finished", label: "Finalizados" },
 ] as const;
 
+const sports = ref<string[]>([]);
+const leagues = ref<string[]>([]);
 const leagueInput = ref(props.modelValue.league ?? "");
 const teamInput = ref(props.modelValue.team ?? "");
 const debounceTimers: Record<"league" | "team", number | null> = { league: null, team: null };
@@ -34,6 +43,51 @@ const isAsc = computed(() => props.modelValue.direction !== "desc");
 const activeFilterCount = computed(() => {
   const { sport, status, league, team } = props.modelValue;
   return [sport, status, league, team].filter((value) => !!value).length;
+});
+
+// The options are the categories the database holds, with the selected
+// one always present so a filter kept in the URL never disappears.
+const sportOptions = computed(() => {
+  const values = new Set(sports.value.length ? sports.value : CANONICAL_SPORTS);
+  const selected = props.modelValue.sport;
+  if (selected) values.add(selected);
+  return [...values]
+    .sort(compareSports)
+    .map((value) => ({ value, label: SPORT_LABELS[value] ?? value }));
+});
+
+// Canonical categories first, in the order of the scraper's vocabulary,
+// then the ones the operator added, alphabetically.
+function compareSports(a: string, b: string): number {
+  const indexA = CANONICAL_SPORTS.indexOf(a);
+  const indexB = CANONICAL_SPORTS.indexOf(b);
+  if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+  if (indexA !== -1) return -1;
+  if (indexB !== -1) return 1;
+  return a.localeCompare(b);
+}
+
+onMounted(async () => {
+  try {
+    const categories = await eventsApiService.getSports();
+    if (categories.length) sports.value = categories;
+  } catch (err) {
+    toast.error(
+      err instanceof Error
+        ? err.message
+        : "No se pudieron cargar las categorías",
+    );
+  }
+  try {
+    const names = await eventsApiService.getLeagues();
+    if (names.length) leagues.value = names;
+  } catch (err) {
+    toast.error(
+      err instanceof Error
+        ? err.message
+        : "No se pudieron cargar las ligas",
+    );
+  }
 });
 
 function commit(patch: Partial<EventsPageFilters>): void {
@@ -117,7 +171,7 @@ onBeforeUnmount(() => {
           @change="commit({ sport: ($event.target as HTMLSelectElement).value })"
         >
           <option value="">Todos</option>
-          <option v-for="sport in SPORTS" :key="sport.value" :value="sport.value">
+          <option v-for="sport in sportOptions" :key="sport.value" :value="sport.value">
             {{ sport.label }}
           </option>
         </select>
@@ -147,9 +201,13 @@ onBeforeUnmount(() => {
           name="league"
           class="form-control"
           placeholder="Liga (mín. 2)"
+          list="events-league-options"
           autocomplete="off"
           @input="debouncedText('league', leagueInput)"
         />
+        <datalist id="events-league-options">
+          <option v-for="league in leagues" :key="league" :value="league"></option>
+        </datalist>
       </div>
 
       <div class="col-12 col-sm-6 col-xl-2">

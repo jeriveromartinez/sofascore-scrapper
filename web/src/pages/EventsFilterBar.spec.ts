@@ -1,7 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mount, flushPromises, type VueWrapper } from "@vue/test-utils";
+import { toast } from "vue3-toastify";
 import EventsFilterBar from "./EventsFilterBar.vue";
 import type { EventsPageFilters } from "../store/services/models/apiModels";
+
+const { getSports, getLeagues } = vi.hoisted(() => ({
+  getSports: vi.fn<() => Promise<string[]>>(),
+  getLeagues: vi.fn<() => Promise<string[]>>(),
+}));
+
+vi.mock("../store/services", () => ({
+  eventsApiService: { getSports, getLeagues },
+}));
+
+vi.mock("vue3-toastify", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 function mountBar(filters: EventsPageFilters) {
   const onUpdate = vi.fn();
@@ -10,6 +22,20 @@ function mountBar(filters: EventsPageFilters) {
   });
   return { wrapper, onUpdate };
 }
+
+function sportValues(wrapper: VueWrapper): string[] {
+  return wrapper
+    .findAll('select[name="sport"] option')
+    .map((option) => (option.element as HTMLOptionElement).value);
+}
+
+beforeEach(() => {
+  getSports.mockReset();
+  getSports.mockResolvedValue([]);
+  getLeagues.mockReset();
+  getLeagues.mockResolvedValue([]);
+  vi.mocked(toast.error).mockReset();
+});
 
 describe("EventsFilterBar", () => {
   it("renders ASC/DESC toggle bound to filters.direction", async () => {
@@ -84,13 +110,39 @@ describe("EventsFilterBar", () => {
     }
   });
 
-  it("offers every sport type the backend produces", () => {
+  it("offers every category the database holds", async () => {
+    getSports.mockResolvedValue(["football", "cricket"]);
     const { wrapper } = mountBar({ direction: "asc" });
-    const values = wrapper
-      .findAll('select[name="sport"] option')
-      .map((option) => (option.element as HTMLOptionElement).value);
+    await flushPromises();
 
-    expect(values).toEqual([
+    expect(sportValues(wrapper)).toEqual(["", "football", "cricket"]);
+  });
+
+  it("keeps the selected category even when the database does not list it", async () => {
+    getSports.mockResolvedValue(["cricket"]);
+    const { wrapper } = mountBar({ direction: "asc", sport: "chess" });
+    await flushPromises();
+
+    expect(sportValues(wrapper)).toEqual(["", "chess", "cricket"]);
+  });
+
+  it("labels an unknown category with its raw slug", async () => {
+    getSports.mockResolvedValue(["cricket"]);
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    const labels = wrapper
+      .findAll('select[name="sport"] option')
+      .map((option) => option.text());
+    expect(labels).toContain("cricket");
+  });
+
+  it("falls back to the canonical categories when the database lists none", async () => {
+    getSports.mockResolvedValue([]);
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    expect(sportValues(wrapper)).toEqual([
       "",
       "football",
       "basketball",
@@ -104,14 +156,67 @@ describe("EventsFilterBar", () => {
     ]);
   });
 
-  it("does not offer the legacy hockey slug", () => {
+  it("falls back to the canonical categories when the request fails", async () => {
+    getSports.mockRejectedValue(new Error("no se pudieron cargar las categorías"));
     const { wrapper } = mountBar({ direction: "asc" });
-    const values = wrapper
-      .findAll('select[name="sport"] option')
-      .map((option) => (option.element as HTMLOptionElement).value);
+    await flushPromises();
+
+    expect(sportValues(wrapper)).toEqual([
+      "",
+      "football",
+      "basketball",
+      "tennis",
+      "ice-hockey",
+      "handball",
+      "american-football",
+      "baseball",
+      "volleyball",
+      "rugby",
+    ]);
+    expect(toast.error).toHaveBeenCalledWith("no se pudieron cargar las categorías");
+  });
+
+  it("does not offer the legacy hockey slug", async () => {
+    getSports.mockResolvedValue(["football", "ice-hockey"]);
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    const values = sportValues(wrapper);
 
     expect(values).not.toContain("hockey");
     expect(values).toContain("ice-hockey");
+  });
+
+  it("suggests the leagues the database holds", async () => {
+    getLeagues.mockResolvedValue(["Premier League", "Liga MX"]);
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    const options = wrapper
+      .findAll("#events-league-options option")
+      .map((option) => (option.element as HTMLOptionElement).value);
+
+    expect(options).toEqual(["Premier League", "Liga MX"]);
+    expect(
+      wrapper.find('input[name="league"]').attributes("list"),
+    ).toBe("events-league-options");
+  });
+
+  it("leaves the league suggestions empty when the database lists none", async () => {
+    getLeagues.mockResolvedValue([]);
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    expect(wrapper.findAll("#events-league-options option")).toHaveLength(0);
+  });
+
+  it("reports the failure and keeps the league suggestions empty", async () => {
+    getLeagues.mockRejectedValue(new Error("no se pudieron cargar las ligas"));
+    const { wrapper } = mountBar({ direction: "asc" });
+    await flushPromises();
+
+    expect(wrapper.findAll("#events-league-options option")).toHaveLength(0);
+    expect(toast.error).toHaveBeenCalledWith("no se pudieron cargar las ligas");
   });
 
   it("emits the selected sport", async () => {
