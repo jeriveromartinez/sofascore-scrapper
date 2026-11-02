@@ -61,6 +61,7 @@ services:
       API_ADDR: "0.0.0.0:8080"
       APK_STORAGE_PATH: /data/apk
       IMAGE_STORAGE_PATH: /data/image
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:?DEFAULT_ADMIN_PASSWORD is required}
     volumes:
       - apk_data:/data/apk
       - image_data:/data/image
