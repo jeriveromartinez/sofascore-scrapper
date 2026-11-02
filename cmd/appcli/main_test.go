@@ -116,6 +116,56 @@ func TestRunRegisterGeneratesATokenWhenNoneIsGiven(t *testing.T) {
 	assert.Contains(t, stdout.String(), gotToken)
 }
 
+func TestRunCrashSendsTheAppNameOfTheRealClient(t *testing.T) {
+	var gotApp string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/app/v1/crash-report", r.URL.Path)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		var report struct {
+			App struct {
+				Name string `json:"name"`
+			} `json:"app"`
+		}
+		require.NoError(t, json.Unmarshal(body, &report))
+		gotApp = report.App.Name
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"crash", "--base-url", srv.URL}, &stdout, &stderr)
+
+	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+	assert.Equal(t, DefaultAppName, gotApp)
+	assert.Equal(t, "QCho TV Entertaiment", gotApp)
+}
+
+func TestRunCrashAcceptsAnAppNameFlag(t *testing.T) {
+	var gotApp string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		var report struct {
+			App struct {
+				Name string `json:"name"`
+			} `json:"app"`
+		}
+		require.NoError(t, json.Unmarshal(body, &report))
+		gotApp = report.App.Name
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"crash", "--base-url", srv.URL, "--app-name", "otra-app"}, &stdout, &stderr)
+
+	assert.Equal(t, 0, code, "stderr: %s", stderr.String())
+	assert.Equal(t, "otra-app", gotApp)
+}
+
 func TestRunWSPrintsReceivedPushes(t *testing.T) {
 	upgrader := websocket.Upgrader{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

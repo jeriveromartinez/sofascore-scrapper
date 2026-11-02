@@ -65,6 +65,17 @@ func (r *Repository) Register(ctx context.Context, userID *uint, domainID uint, 
 	return device, nil
 }
 
+// IPTVURLForPackage returns the panel URL the device is served: the IPTV
+// URL of the APK version currently published for the package. It is the
+// same value GET /devices/url/:packageName answers.
+func (r *Repository) IPTVURLForPackage(ctx context.Context, packageID string) (string, error) {
+	row, err := apk.NewRepository(r.db).GetLatest(ctx, packageID)
+	if err != nil {
+		return "", err
+	}
+	return row.IPTVUrl, nil
+}
+
 // resolveDomainID returns the domain the device will be pushed to: the
 // explicit domain_id sent by the app when it is non-zero, otherwise the
 // domain derived from the IPTV URL of the APK version currently served.

@@ -31,8 +31,10 @@ const (
 	// DefaultAppVersion is the version the real TV app publishes
 	// (flutter-tv/pubspec.yaml).
 	DefaultAppVersion = "1.0.22"
-	// DefaultAppName is the app name the crash report carries.
-	DefaultAppName = "tvapp"
+	// DefaultAppName is the app name the crash report carries. The real
+	// client sends the Android application label (flutter-tv/android/app/
+	// src/main/AndroidManifest.xml), so the simulator sends the same one.
+	DefaultAppName = "QCho TV Entertaiment"
 	// DefaultPlatform is the platform the Android build reports.
 	DefaultPlatform = "android"
 	// DefaultDeviceName is the name the simulator registers with.
@@ -68,6 +70,7 @@ type options struct {
 	build      string
 	device     string
 	locale     string
+	appName    string
 	contentNm  string
 	contentURL string
 	errMsg     string
@@ -151,6 +154,7 @@ func parseOptions(command string, args []string, stderr io.Writer) (*options, er
 	fs.StringVar(&opts.build, "build", "22", "build number used in the crash report")
 	fs.StringVar(&opts.device, "os-version", "Android 14", "OS version used in the crash report")
 	fs.StringVar(&opts.locale, "locale", "es_MX", "locale used in the crash report")
+	fs.StringVar(&opts.appName, "app-name", DefaultAppName, "app name used in the crash report")
 	fs.StringVar(&opts.contentNm, "content-name", "Canal 1", "name of the content that started playing")
 	fs.StringVar(&opts.contentURL, "content-url", "https://panel.example.com/stream.m3u8", "URL of the content that started playing")
 	fs.StringVar(&opts.errMsg, "error", "Null check operator used on a null value", "error message of the crash report")
@@ -388,7 +392,7 @@ func (o *options) cmdCrash(ctx context.Context, stdout, stderr io.Writer) int {
 		StackTrace: o.stack,
 		Context:    o.context,
 		App: AppReport{
-			Name:        DefaultAppName,
+			Name:        o.appName,
 			Version:     o.version,
 			Build:       o.build,
 			Environment: "debug",

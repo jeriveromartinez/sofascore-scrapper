@@ -2,6 +2,7 @@ package devices
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -38,5 +39,18 @@ func (h *AppHandler) handleRegisterDevice(c *gin.Context) {
 		respondInternalError(c, "register device failed", err)
 		return
 	}
-	server.RespondProto(c, http.StatusOK, DeviceToProto(*device))
+	registered := DeviceToProto(*device)
+	// The panel URL travels with the registration: the app resolves it
+	// through GET /devices/url/:packageName, and a simulator that only
+	// registers would otherwise never learn it.
+	if iptvURL, err := h.repo.IPTVURLForPackage(c.Request.Context(), req.PackageId); err != nil {
+		slog.Default().WarnContext(c.Request.Context(), "panel url unavailable for package",
+			slog.String("package_id", req.PackageId),
+			slog.String("err", err.Error()),
+		)
+	} else {
+		registered.IptvUrl = iptvURL
+	}
+
+	server.RespondProto(c, http.StatusOK, registered)
 }
