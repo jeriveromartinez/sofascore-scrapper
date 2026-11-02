@@ -15,6 +15,11 @@ type Repository struct {
 	db *gorm.DB
 }
 
+// ErrNoActiveVersion reports that a package has no published APK version.
+// Callers use it to tell an unpublished package apart from a lookup that
+// failed for another reason (a cancelled request, a lost connection).
+var ErrNoActiveVersion = errors.New("no active APK version found")
+
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -84,7 +89,7 @@ func (r *Repository) GetLatest(ctx context.Context, packageName string) (*ApkVer
 		First(&apk).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("no active APK version found")
+			return nil, fmt.Errorf("%w for package %q", ErrNoActiveVersion, packageName)
 		}
 		return nil, err
 	}

@@ -50,7 +50,7 @@ func (r *Repository) Register(ctx context.Context, userID *uint, domainID uint, 
 	}
 	db := r.db.WithContext(ctx)
 
-	assignedDomainID, err := r.resolveDomainID(db, packageId, domainID)
+	assignedDomainID, panelURL, err := r.resolveTarget(ctx, db, packageId, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -62,53 +62,57 @@ func (r *Repository) Register(ctx context.Context, userID *uint, domainID uint, 
 	if err := upsertDevice(db, device, assign); err != nil {
 		return nil, err
 	}
+	// upsertDevice replaces the device with the stored row, so the panel
+	// URL resolved during the registration is set afterwards.
+	device.PanelURL = panelURL
 	return device, nil
 }
 
-// IPTVURLForPackage returns the panel URL the device is served: the IPTV
-// URL of the APK version currently published for the package. It is the
-// same value GET /devices/url/:packageName answers.
-func (r *Repository) IPTVURLForPackage(ctx context.Context, packageID string) (string, error) {
-	row, err := apk.NewRepository(r.db).GetLatest(ctx, packageID)
-	if err != nil {
-		return "", err
+// resolveTarget returns the domain the device will be pushed to and the
+// panel URL it is served. Both come from the APK version currently
+// published for the package: the domain from the host of its IPTV URL,
+// the panel URL from the URL itself.
+func (r *Repository) resolveTarget(ctx context.Context, db *gorm.DB, packageID string, explicitID uint) (uint, string, error) {
+	// The APK version is read through apk.Repository.GetLatest: it matches
+	// the exact package_name (not LIKE) and only active rows. packageId
+	// comes from the public device-registration endpoint, so an attacker
+	// could otherwise send "%" and bind the device to whichever APK row
+	// the planner picks first — leaking the chosen domain as the device's
+	// future push audience.
+	apkVersion, err := apk.NewRepository(db).GetLatest(ctx, packageID)
+	switch {
+	case err == nil:
+	case errors.Is(err, apk.ErrNoActiveVersion):
+		// Without a published APK there is no panel URL and no domain to
+		// derive, so only an explicit domain can carry the registration.
+		if explicitID == 0 {
+			return 0, "", gorm.ErrInvalidData
+		}
+	default:
+		// A failed lookup is not an unpublished package: it must not be
+		// answered as if the package simply had no APK.
+		return 0, "", err
 	}
-	return row.IPTVUrl, nil
-}
 
-// resolveDomainID returns the domain the device will be pushed to: the
-// explicit domain_id sent by the app when it is non-zero, otherwise the
-// domain derived from the IPTV URL of the APK version currently served.
-func (r *Repository) resolveDomainID(db *gorm.DB, packageID string, explicitID uint) (uint, error) {
 	if explicitID != 0 {
 		var domain domains.Domain
 		if err := db.First(&domain, explicitID).Error; err != nil {
-			return 0, invalidDataUnlessDBError(err)
+			return 0, "", invalidDataUnlessDBError(err)
 		}
-		return domain.ID, nil
+		panel := ""
+		if apkVersion != nil {
+			panel = apkVersion.IPTVUrl
+		}
+		return domain.ID, panel, nil
 	}
 
-	var apkDev apk.ApkVersion
-	// Match APK by exact package_name (not LIKE). packageId comes from
-	// the public device-registration endpoint, so an attacker could
-	// otherwise send "%" and bind the device to whichever APK row the
-	// planner picks first — leaking the chosen domain as the device's
-	// future push audience. Only active rows are candidates, ordered
-	// like apk.Repository.GetLatest so the derived domain is the one the
-	// device is actually served.
-	if err := db.Where("package_name = ? AND is_active = ?", packageID, true).
-		Order("version_major DESC, version_minor DESC, version_patch DESC, id DESC").
-		Limit(1).
-		First(&apkDev).Error; err != nil {
-		return 0, invalidDataUnlessDBError(err)
-	}
-	host := hostFromIPTVURL(apkDev.IPTVUrl)
+	host := hostFromIPTVURL(apkVersion.IPTVUrl)
 	if host == "" {
-		return 0, gorm.ErrInvalidData
+		return 0, "", gorm.ErrInvalidData
 	}
 
 	var domain domains.Domain
-	err := db.Where("domain = ?", host).First(&domain).Error
+	err = db.Where("domain = ?", host).First(&domain).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// Fall back to domains registered below the APK host
 		// (panel.5.mdtv.me for host 5.mdtv.me). The leading dot keeps
@@ -116,9 +120,9 @@ func (r *Repository) resolveDomainID(db *gorm.DB, packageID string, explicitID u
 		err = db.Where("domain LIKE ? ESCAPE '!'", "%."+escapeLike(host)).First(&domain).Error
 	}
 	if err != nil {
-		return 0, invalidDataUnlessDBError(err)
+		return 0, "", invalidDataUnlessDBError(err)
 	}
-	return domain.ID, nil
+	return domain.ID, apkVersion.IPTVUrl, nil
 }
 
 // hostFromIPTVURL extracts the bare host (no port, no path) from an IPTV
